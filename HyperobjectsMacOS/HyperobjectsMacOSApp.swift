@@ -13,5 +13,9 @@ struct HyperobjectsMacOSApp: App {
         WindowGroup {
             ContentView()
         }
+        
+        Window(renderViewConfig.title, id: renderViewConfig.id) {
+            renderViewConfig.content
+        }
     }
 }
