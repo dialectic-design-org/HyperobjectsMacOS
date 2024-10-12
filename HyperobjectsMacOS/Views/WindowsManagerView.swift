@@ -11,7 +11,6 @@ struct WindowsManagerView: View {
     @Environment(\.openWindow) private var openWindow
     var body: some View {
         VStack {
-            Text("Windows")
             List(allWindows) { window in
                 HStack {
                     Text(window.title)

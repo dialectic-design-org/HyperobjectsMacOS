@@ -7,13 +7,21 @@
 
 import SwiftUI
 
-let renderViewConfig = WindowInfo(
+let renderWindowConfig = WindowInfo(
     id: "render_view",
     title: "Render View",
     showOnLoad: true,
-    content: AnyView(Text("Render view placeholder"))
+    content: AnyView(RenderView())
+)
+
+let sceneInputsWindowConfig = WindowInfo(
+    id: "scene_inputs",
+    title: "Scene Inputs",
+    showOnLoad: true,
+    content: AnyView(SceneInputsView())
 )
 
 let allWindows: [WindowInfo] = [
-    renderViewConfig
+    renderWindowConfig,
+    sceneInputsWindowConfig
 ]

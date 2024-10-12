@@ -8,13 +8,19 @@
 import SwiftUI
 
 struct ContentView: View {
+    @EnvironmentObject var currentScene: GeometriesSceneBase
     var body: some View {
         VStack {
-            Text("Hyperobjects MacOS")
+            HStack {
+                Text("Current scene:")
+                    .font(myFont)
+                Text("\(currentScene.name)")
+                    .font(myFont)
+                    .fontWeight(.bold)
+            }
             WindowsManagerView()
             Spacer()
         }
-        .padding()
     }
 }
 
