@@ -21,7 +21,32 @@ let sceneInputsWindowConfig = WindowInfo(
     content: AnyView(SceneInputsView())
 )
 
+let sceneGeometriesListWindowConfig = WindowInfo(
+    id: "scene_geometries_list",
+    title: "Scene Geometries List",
+    showOnLoad: true,
+    content: AnyView(GeometriesListView())
+)
+
+let viewportFrontViewWindowConfig = WindowInfo(
+    id: "viewport_front_view",
+    title: "Viewport Front View",
+    showOnLoad: true,
+    content: AnyView(ViewportView(direction: "z"))
+)
+
+let sceneSelectorViewWindowConfig = WindowInfo(
+    id: "scene_selector",
+    title: "Scene Selector",
+    showOnLoad: true,
+    content: AnyView(SceneSelectorView())
+)
+
+
 let allWindows: [WindowInfo] = [
     renderWindowConfig,
-    sceneInputsWindowConfig
+    sceneInputsWindowConfig,
+    sceneGeometriesListWindowConfig,
+    viewportFrontViewWindowConfig,
+    sceneSelectorViewWindowConfig
 ]

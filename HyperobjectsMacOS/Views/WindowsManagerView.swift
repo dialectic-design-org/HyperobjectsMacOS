@@ -13,16 +13,15 @@ struct WindowsManagerView: View {
         VStack {
             List(allWindows) { window in
                 HStack {
-                    Text(window.title)
+                    Text(window.title).font(myFont)
                     Spacer()
                     Button("Open") {
                         openWindow(id: window.id)
-                    }
+                    }.font(myFont)
                 }
             }
         }
         .onAppear() {
-            print("WindowsManagerView appeared")
             for window in allWindows {
                 if window.showOnLoad {
                     openWindow(id: window.id)
@@ -30,4 +29,8 @@ struct WindowsManagerView: View {
             }
         }
     }
+}
+
+#Preview {
+    WindowsManagerView()
 }

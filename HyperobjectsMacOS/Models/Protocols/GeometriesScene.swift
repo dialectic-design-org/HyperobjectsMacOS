@@ -13,6 +13,7 @@ protocol GeometriesScene: Identifiable, ObservableObject {
     var inputs: [SceneInput] { get set }
     var geometryGenerators: [any GeometryGenerator] { get set }
     var changedInputs: Set<String> { get set }
+    var cachedGeometries: [GeometryWrapped] { get set }
     
     func updateInput(name: String, value: Any)
     func updatePythonCode(for generatorId: UUID, newCode: String)

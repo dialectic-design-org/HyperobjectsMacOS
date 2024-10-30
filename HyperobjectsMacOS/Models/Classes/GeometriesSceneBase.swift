@@ -13,6 +13,7 @@ class GeometriesSceneBase: GeometriesScene {
     @Published var inputs: [SceneInput]
     @Published var geometryGenerators: [any GeometryGenerator]
     @Published var changedInputs: Set<String> = []
+    @Published var cachedGeometries: [GeometryWrapped] = []
     
     init(name: String, inputs: [SceneInput], geometryGenerators: [any GeometryGenerator]) {
         self.name = name
@@ -47,4 +48,9 @@ class GeometriesSceneBase: GeometriesScene {
             return []
         }
     }
+    
+    func setWrappedGeometries() {
+        self.cachedGeometries = self.generateAllGeometries().map { GeometryWrapped(geometry: $0) }
+    }
+    
 }

@@ -15,6 +15,6 @@ struct SceneInputsView: View {
             Text("Scene: \(currentScene.name)")
             Text("Inputs count: \(currentScene.inputs.count)")
             Text("TODO IMPLEMENT")
-        }
+        }.font(myFont)
     }
 }

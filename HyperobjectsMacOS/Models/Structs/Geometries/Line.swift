@@ -10,6 +10,11 @@ import simd
 
 struct Line: Geometry {
     let id = UUID()
+    let type: GeometryType = .line
     var startPoint: SIMD3<Float>
     var endPoint: SIMD3<Float>
+    
+    func getPoints() -> [SIMD3<Float>] {
+        return [startPoint, endPoint]
+    }
 }

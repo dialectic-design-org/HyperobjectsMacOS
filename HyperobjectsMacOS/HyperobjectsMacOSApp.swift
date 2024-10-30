@@ -10,10 +10,15 @@ import SwiftUI
 @main
 struct HyperobjectsMacOSApp: App {
     @StateObject private var currentScene = generateGeometrySceneCircle()
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(currentScene)
+                .onAppear {
+                    print("Content view appeared")
+                    currentScene.setWrappedGeometries()
+                }
         }
         
         Window(renderWindowConfig.title, id: renderWindowConfig.id) {
@@ -22,6 +27,18 @@ struct HyperobjectsMacOSApp: App {
         
         Window(sceneInputsWindowConfig.title, id: sceneInputsWindowConfig.id) {
             sceneInputsWindowConfig.content.environmentObject(currentScene)
+        }
+        
+        Window(sceneGeometriesListWindowConfig.title, id: sceneGeometriesListWindowConfig.id) {
+            sceneGeometriesListWindowConfig.content.environmentObject(currentScene)
+        }
+        
+        Window(viewportFrontViewWindowConfig.title, id: viewportFrontViewWindowConfig.id) {
+            viewportFrontViewWindowConfig.content.environmentObject(currentScene)
+        }
+        
+        Window(sceneSelectorViewWindowConfig.title, id: sceneSelectorViewWindowConfig.id) {
+            sceneSelectorViewWindowConfig.content.environmentObject(currentScene)
         }
     }
 }

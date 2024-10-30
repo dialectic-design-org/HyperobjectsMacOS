@@ -13,14 +13,12 @@ struct ContentView: View {
         VStack {
             HStack {
                 Text("Current scene:")
-                    .font(myFont)
                 Text("\(currentScene.name)")
-                    .font(myFont)
                     .fontWeight(.bold)
             }
             WindowsManagerView()
             Spacer()
-        }
+        }.font(myFont)
     }
 }
 

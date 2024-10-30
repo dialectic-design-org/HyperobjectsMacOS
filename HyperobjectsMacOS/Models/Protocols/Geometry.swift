@@ -9,4 +9,6 @@ import Foundation
 
 protocol Geometry: Identifiable {
     var id: UUID { get }
+    var type: GeometryType { get }
+    func getPoints() -> [SIMD3<Float>]
 }
