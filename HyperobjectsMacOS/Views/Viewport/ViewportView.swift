@@ -51,11 +51,11 @@ struct ViewportView: View {
                     GridView(scale: $scale, offset: $offset)
                     
                     Group {
-                        Rectangle()
-                            .stroke(.blue, lineWidth: 1.0 / scale)
-                            .frame(width: geometry.size.width - 50, height: geometry.size.height - 50)
-                            .position(x: (geometry.size.width - 50) / 2, y: (geometry.size.height - 50) / 2)
-                        
+//                        Rectangle()
+//                            .stroke(.blue, lineWidth: 1.0 / scale)
+//                            .frame(width: geometry.size.width - 50, height: geometry.size.height - 50)
+//                            .position(x: (geometry.size.width - 50) / 2, y: (geometry.size.height - 50) / 2)
+//                        
                         ForEach(currentScene.cachedGeometries) { wrapped in
                             GeometryElement(gWrapped: wrapped, direction: direction, scale: scale)
                         }

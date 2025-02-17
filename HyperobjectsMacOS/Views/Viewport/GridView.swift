@@ -22,12 +22,12 @@ struct GridView: View {
         Canvas { context, size in
             context.translateBy(x: offset.width, y: offset.height)
             context.scaleBy(x: scale, y: scale)
-            
-            let testPath = Path { path in
-                path.move(to: CGPoint(x: -1000, y: -1000))
-                path.addLine(to: CGPoint(x: 1000, y: 1000))
-            }
-            context.stroke(testPath, with: .color(.green), lineWidth: 1 / scale)
+//            
+//            let testPath = Path { path in
+//                path.move(to: CGPoint(x: -1000, y: -1000))
+//                path.addLine(to: CGPoint(x: 1000, y: 1000))
+//            }
+//            context.stroke(testPath, with: .color(.green), lineWidth: 1 / scale)
             
             let textColor = Color.white.opacity(0.6)
             let fontSize = 10

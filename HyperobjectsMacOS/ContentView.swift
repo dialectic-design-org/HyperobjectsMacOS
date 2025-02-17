@@ -9,16 +9,18 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
+    @Environment(\.openWindow) private var openWindow
     var body: some View {
         VStack {
-            HStack {
-                Text("Current scene:")
-                Text("\(currentScene.name)")
-                    .fontWeight(.bold)
-            }
-            WindowsManagerView()
-            Spacer()
+            RenderView()
         }.font(myFont)
+        .onAppear() {
+            for window in allWindows {
+                if window.showOnLoad {
+                    openWindow(id: window.id)
+                }
+            }
+        }
     }
 }
 

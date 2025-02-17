@@ -21,13 +21,7 @@ struct WindowsManagerView: View {
                 }
             }
         }
-        .onAppear() {
-            for window in allWindows {
-                if window.showOnLoad {
-                    openWindow(id: window.id)
-                }
-            }
-        }
+        
     }
 }
 

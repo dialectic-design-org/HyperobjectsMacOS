@@ -7,10 +7,17 @@
 
 import SwiftUI
 
-let renderWindowConfig = WindowInfo(
-    id: "render_view",
-    title: "Render View",
+let windowsManagerWindowConfig = WindowInfo(
+    id: "windows_manager",
+    title: "Windows Manager",
     showOnLoad: true,
+    content: AnyView(WindowsManagerView())
+)
+
+let secondaryRenderWindowConfig = WindowInfo(
+    id: "secondary_render_view",
+    title: "Secondary Render View",
+    showOnLoad: false,
     content: AnyView(RenderView())
 )
 
@@ -19,6 +26,13 @@ let sceneInputsWindowConfig = WindowInfo(
     title: "Scene Inputs",
     showOnLoad: true,
     content: AnyView(SceneInputsView())
+)
+
+let renderConfigurationsWindowConfig = WindowInfo(
+    id: "render_configurations",
+    title: "Render Configurations",
+    showOnLoad: false,
+    content: AnyView(RenderConfigurationsView())
 )
 
 let sceneGeometriesListWindowConfig = WindowInfo(
@@ -35,6 +49,20 @@ let viewportFrontViewWindowConfig = WindowInfo(
     content: AnyView(ViewportView(direction: "z"))
 )
 
+let viewportSideViewWindowConfig = WindowInfo(
+    id: "viewport_side_view",
+    title: "Viewport Side View",
+    showOnLoad: false,
+    content: AnyView(ViewportView(direction: "x"))
+)
+
+let viewportTopViewWindowConfig = WindowInfo(
+    id: "viewport_top_view",
+    title: "Viewport Top View",
+    showOnLoad: false,
+    content: AnyView(ViewportView(direction: "y"))
+)
+
 let sceneSelectorViewWindowConfig = WindowInfo(
     id: "scene_selector",
     title: "Scene Selector",
@@ -44,9 +72,13 @@ let sceneSelectorViewWindowConfig = WindowInfo(
 
 
 let allWindows: [WindowInfo] = [
-    renderWindowConfig,
+    windowsManagerWindowConfig,
+    secondaryRenderWindowConfig,
     sceneInputsWindowConfig,
+    renderConfigurationsWindowConfig,
     sceneGeometriesListWindowConfig,
     viewportFrontViewWindowConfig,
+    viewportSideViewWindowConfig,
+    viewportTopViewWindowConfig,
     sceneSelectorViewWindowConfig
 ]

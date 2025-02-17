@@ -15,6 +15,10 @@ struct SceneInputsView: View {
             Text("Scene: \(currentScene.name)")
             Text("Inputs count: \(currentScene.inputs.count)")
             Text("TODO IMPLEMENT")
+            List(currentScene.inputs) {
+                Text("\($0.name) (value: \($0.value))")
+                // Slider(value: $0.value, in: 0...1)
+            }
         }.font(myFont)
     }
 }

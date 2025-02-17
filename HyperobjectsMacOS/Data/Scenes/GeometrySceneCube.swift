@@ -1,21 +1,21 @@
 //
-//  GeometrySceneCross.swift
+//  GeometrySceneCube.swift
 //  HyperobjectsMacOS
 //
-//  Created by Erwin Hoogerwoord on 28/10/2024.
+//  Created by Erwin Hoogerwoord on 06/11/2024.
 //
 
 import Foundation
 
-func generateGeometrySceneCross() -> GeometriesSceneBase {
+func generateGeometrySceneCube() -> GeometriesSceneBase {
     return GeometriesSceneBase(
-        name: "Cross Scene",
+        name: "Cube Scene",
         inputs: [
             SceneInput(name: "Size", type: .float, value: 20.0),
             SceneInput(name: "Rotation", type: .float, value: 0.0)
         ],
         geometryGenerators: [
-            CrossGenerator()
+            CubeGenerator()
         ]
     )
 }

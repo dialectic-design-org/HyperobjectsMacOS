@@ -11,8 +11,8 @@ func generateGeometrySceneCircle() -> GeometriesSceneBase {
     return GeometriesSceneBase(
         name: "Circle Scene",
         inputs: [
-            SceneInput(name: "Radius", value: 100),
-            SceneInput(name: "Segments", value: 100)
+            SceneInput(name: "Radius", type: .float, value: 100),
+            SceneInput(name: "Segments", type: .float, value: 100)
         ],
         geometryGenerators: [
             CircleGenerator()
