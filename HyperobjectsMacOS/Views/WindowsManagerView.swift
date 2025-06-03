@@ -21,7 +21,6 @@ struct WindowsManagerView: View {
                 }
             }
         }
-        
     }
 }
 

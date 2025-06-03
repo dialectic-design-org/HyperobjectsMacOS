@@ -9,15 +9,23 @@ import SwiftUI
 
 struct RenderView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
+    @StateObject private var rendererState = RendererState()
     @State private var resolutionMode: ResolutionMode = .fixed
     @State private var resolution: CGSize = CGSize(width: 1000, height: 1000) // Default resolution
     @State private var renderPoints: Bool = false
     @State private var renderLines: Bool = false
     
+    @StateObject private var timingManager = FrameTimingManager()
+    
     var body: some View {
         let geometries = currentScene.generateAllGeometries()
         ZStack(alignment: .topLeading) {
-            MetalView(resolutionMode: $resolutionMode, resolution: $resolution)
+            MetalView(
+                rendererState: rendererState,
+                resolutionMode: $resolutionMode,
+                resolution: $resolution,
+                timingManager: timingManager
+            )
 
             VStack(alignment: .leading) {
                 Text("RENDER VIEW").fontWeight(.bold)
@@ -37,6 +45,14 @@ struct RenderView: View {
                     Text("2000 x 2000").tag(CGSize(width: 2000, height: 2000))
                     Text("1920 x 1080").tag(CGSize(width: 1920, height: 1080))
                 }.pickerStyle(SegmentedPickerStyle()).fixedSize()
+                
+                FrameTimeChart(data: timingManager.frameTimes)
+                Text("Frame Time average: \(timingManager.averageFrameTime, specifier: "%.2f") ms - Max: \(timingManager.frameTimes.max() ?? 0, specifier: "%.2f") ms  (over \(timingManager.frameTimes.count) frames)")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("FPS: \(1000 / max(0.1, timingManager.averageFrameTime), specifier: "%.1f")")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 
             }.padding(8)
         }.font(myFont)

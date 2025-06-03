@@ -6,10 +6,10 @@
 //
 
 enum InputType: String, CaseIterable, Identifiable {
-    case keyboard = "keyboard"
+    case string = "string"
     case float = "float"
     case integer = "integer"
-    case xy = "xy"
+    case vector2d = "vector2d"
     
     var id: String { self.rawValue }
 }

@@ -8,7 +8,7 @@
 import Foundation
 
 struct SceneInput: Identifiable {
-    let id = UUID()
+    var id: UUID = UUID()
     var name: String
     var type: InputType
     var value: Any

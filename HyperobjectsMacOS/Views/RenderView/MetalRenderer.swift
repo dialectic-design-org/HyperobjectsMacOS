@@ -28,7 +28,10 @@ class MetalRenderer: NSObject, MTKViewDelegate {
     var frameNumber: Int = 0
     var drawCounter: Int = 0
     
-    init(_ parent: MetalView, currentSceneFromParent: GeometriesSceneBase) {
+    weak var rendererState: RendererState?
+    
+    init(_ parent: MetalView, currentSceneFromParent: GeometriesSceneBase, rendererState: RendererState) {
+        self.rendererState = rendererState
         print("MetalRenderer init()")
         self.parent = parent
         self.currentScene = currentSceneFromParent
@@ -37,6 +40,7 @@ class MetalRenderer: NSObject, MTKViewDelegate {
     }
     
     func updateCurrentScene(_ newScene: GeometriesSceneBase) {
+        print("MetalRenderer.updateCurrentScene()")
         self.currentScene = newScene
     }
     
@@ -79,8 +83,15 @@ class MetalRenderer: NSObject, MTKViewDelegate {
         projectionMatrix = matrix_perspective(fovY: Float(fov), aspect: aspectRatio, nearZ: 0.1, farZ: 1000.0)
     }
     
+    func render(drawable: CAMetalDrawable) {
+        print("MetalRenderer.render()")
+    }
+    
     func draw(in view: MTKView) {
-        if (drawCounter % 120 == 0) {
+        
+        self.parent.timingManager.captureFrameTime()
+        
+        if (drawCounter % 1 == 0) {
             print("MetalRenderer draw() currentScene: \(currentScene.name) {drawCounter: \(drawCounter)}")
         }
         drawCounter += 1

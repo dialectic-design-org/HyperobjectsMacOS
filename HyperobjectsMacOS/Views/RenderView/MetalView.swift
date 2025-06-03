@@ -10,9 +10,11 @@ import SwiftUI
 import MetalKit
 
 struct MetalView: NSViewRepresentable {
+    @ObservedObject var rendererState: RendererState
     @EnvironmentObject var currentScene: GeometriesSceneBase
     @Binding var resolutionMode: ResolutionMode
     @Binding var resolution: CGSize // Bind the resolution to a parent view
+    @ObservedObject var timingManager: FrameTimingManager
 
     func makeNSView(context: Context) -> MTKView {
         print("MetalView makeNSView()")
@@ -38,14 +40,14 @@ struct MetalView: NSViewRepresentable {
     }
     
     func updateNSView(_ nsView: MTKView, context: Context) {
-        print("MetalView updateNSView()")
-        context.coordinator.updateCurrentScene(currentScene)
-        nsView.setNeedsDisplay(nsView.bounds)
+        // print("MetalView updateNSView()")
+        // context.coordinator.updateCurrentScene(currentScene)
+        // nsView.setNeedsDisplay(nsView.bounds)
     }
     
     func makeCoordinator() -> MetalRenderer {
         print("makeCoordinator calling")
-        let renderer = MetalRenderer(self, currentSceneFromParent: currentScene)
+        let renderer = MetalRenderer(self, currentSceneFromParent: currentScene, rendererState: rendererState)
         return renderer
     }
 }

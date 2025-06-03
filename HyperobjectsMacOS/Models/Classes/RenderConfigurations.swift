@@ -9,5 +9,9 @@ import Foundation
 
 class RenderConfigurations: ObservableObject {
     @Published var pipeline: String = "default"
+    
+    @Published var renderBoundingBoxes: Bool = false
+    
+    @Published var freeCameraControl: Bool = false
 }
 
