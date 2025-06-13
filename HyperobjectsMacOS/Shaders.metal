@@ -11,9 +11,12 @@
 using namespace metal;
 
 struct VertexUniforms {
-    float4x4 projectionMatrix;
-    float4x4 viewMatrix;
+    float4x4 projectionMatrix;  // 64 bytes
+    float4x4 viewMatrix;        // 64 bytes
+    float rotationAngle;        // 4 bytes
+    float3 _padding;            // 12 bytes to align to 16 bytes
 };
+
 
 
 struct VertexOut {
@@ -27,6 +30,16 @@ vertex VertexOut vertex_main(const device float3* vertices [[ buffer(0) ]],
                           uint vertexID [[ vertex_id ]]) {
     VertexOut out;
     out.position = float4(vertices[vertexID] * 0.1, 1.0);
+    float4 in = out.position;
+    float cosAngle = cos(uniforms.rotationAngle);
+    float sinAngle = sin(uniforms.rotationAngle);
+    float3 rotatedPosition = float3(
+        in.x * cosAngle - in.y * sinAngle,
+        in.x * sinAngle + in.y * cosAngle,
+        in.z
+                                    );
+    out.position = float4(rotatedPosition, 1.0);
+    
     out.pointsize = 10.0;
     
     return out;

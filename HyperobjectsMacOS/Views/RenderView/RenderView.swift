@@ -14,18 +14,14 @@ struct RenderView: View {
     @State private var resolution: CGSize = CGSize(width: 1000, height: 1000) // Default resolution
     @State private var renderPoints: Bool = false
     @State private var renderLines: Bool = false
-    
-    @StateObject private var timingManager = FrameTimingManager()
-    
     var body: some View {
         let geometries = currentScene.generateAllGeometries()
         ZStack(alignment: .topLeading) {
             MetalView(
                 rendererState: rendererState,
                 resolutionMode: $resolutionMode,
-                resolution: $resolution,
-                timingManager: timingManager
-            )
+                resolution: $resolution
+            ).frame(minWidth: 300, minHeight: 300)
 
             VStack(alignment: .leading) {
                 Text("RENDER VIEW").fontWeight(.bold)
@@ -46,13 +42,10 @@ struct RenderView: View {
                     Text("1920 x 1080").tag(CGSize(width: 1920, height: 1080))
                 }.pickerStyle(SegmentedPickerStyle()).fixedSize()
                 
-                FrameTimeChart(data: timingManager.frameTimes)
-                Text("Frame Time average: \(timingManager.averageFrameTime, specifier: "%.2f") ms - Max: \(timingManager.frameTimes.max() ?? 0, specifier: "%.2f") ms  (over \(timingManager.frameTimes.count) frames)")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("FPS: \(1000 / max(0.1, timingManager.averageFrameTime), specifier: "%.1f")")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                
+                FrameMetricsView(
+                    timingManager: rendererState.frameTimingManager
+                )
                 
             }.padding(8)
         }.font(myFont)

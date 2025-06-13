@@ -14,40 +14,37 @@ struct MetalView: NSViewRepresentable {
     @EnvironmentObject var currentScene: GeometriesSceneBase
     @Binding var resolutionMode: ResolutionMode
     @Binding var resolution: CGSize // Bind the resolution to a parent view
-    @ObservedObject var timingManager: FrameTimingManager
 
     func makeNSView(context: Context) -> MTKView {
-        print("MetalView makeNSView()")
-        let mtkView = MTKView()
-        mtkView.delegate = context.coordinator
-        mtkView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
-        if (resolutionMode == .dynamic) {
-            mtkView.drawableSize = mtkView.frame.size
-        } else if (resolutionMode == .fixed) {
-            mtkView.drawableSize = resolution
-        }
-        mtkView.enableSetNeedsDisplay = true
-        mtkView.framebufferOnly = false
+        let view = MTKView()
         
-        if let device = MTLCreateSystemDefaultDevice() {
-            mtkView.device = device
-            print("Calling context.coordinator.setup(device: device)")
-            context.coordinator.setup(device: device)
-            print("Finished calling context.coordinator.setup(device: device)")
+        guard let renderer = MetalRenderer(rendererState: rendererState) else {
+            fatalError("Failed to create Metal renderer")
         }
-        mtkView.isPaused = false
-        return mtkView
+        
+        view.device = renderer.device
+        view.colorPixelFormat = .bgra8Unorm
+        view.clearColor = MTLClearColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0)
+        view.enableSetNeedsDisplay = false
+        
+        let wrapper = MetalViewWrapper(metalView: view, renderer: renderer)
+        context.coordinator.wrapper = wrapper
+        
+        print("Start render loop")
+        wrapper.startRenderLoop()
+        
+        return view
     }
     
-    func updateNSView(_ nsView: MTKView, context: Context) {
-        // print("MetalView updateNSView()")
-        // context.coordinator.updateCurrentScene(currentScene)
-        // nsView.setNeedsDisplay(nsView.bounds)
+    func updateNSView(_ view: MTKView, context: Context) {
+        // print("metalView updateNSView")
     }
     
-    func makeCoordinator() -> MetalRenderer {
-        print("makeCoordinator calling")
-        let renderer = MetalRenderer(self, currentSceneFromParent: currentScene, rendererState: rendererState)
-        return renderer
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    class Coordinator {
+        var wrapper: MetalViewWrapper?
     }
 }

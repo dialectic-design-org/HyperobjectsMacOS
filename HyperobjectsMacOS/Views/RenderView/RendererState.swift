@@ -10,21 +10,31 @@ import SwiftUI
 import Combine
 
 class RendererState: ObservableObject {
-    @Published var someValue: Int = 0
+    @Published var rotationSpeed: Float = 1.0
+    @Published var showFrameMetrics: Bool = true
     
-    private let atomicSomeValue = Atomic<Int>(value: 0)
+    private let atomicRotationSpeed = Atomic<Float>(value: 1.0)
+    private let atomicShowFrameMetrics = Atomic<Bool>(value: true)
     
     let frameTimingManager = FrameTimingManager()
     
     private var cancellables = Set<AnyCancellable>()
     
     init() {
-        $someValue.sink { [weak self] newValue in
-            self?.atomicSomeValue.set(newValue)
+        $rotationSpeed.sink { [weak self] newValue in
+            self?.atomicRotationSpeed.set(newValue)
+        }.store(in: &cancellables)
+        
+        $showFrameMetrics.sink { [weak self] newValue in
+            self?.atomicShowFrameMetrics.set(newValue)
         }.store(in: &cancellables)
     }
     
-    func getSomeValue() -> Int {
-        return atomicSomeValue.get()
+    func getRotationSpeed() -> Float {
+        return atomicRotationSpeed.get()
+    }
+    
+    func shouldShowFrameMetrics() -> Bool {
+        return atomicShowFrameMetrics.get()
     }
 }
