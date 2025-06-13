@@ -13,6 +13,7 @@ class MetalViewWrapper: NSObject {
     let metalLayer: CAMetalLayer
     let displayLink: CAMetalDisplayLink?
     var displayLinkDelegate: MetalDisplayLinkDelegateHandler?
+    var preferredFPS: Float = 120
     
     init(metalView: MTKView, renderer: MetalRenderer) {
         self.metalView = metalView
@@ -27,11 +28,7 @@ class MetalViewWrapper: NSObject {
         super.init()
         
         if let displayLink = self.displayLink {
-            displayLink.preferredFrameRateRange = CAFrameRateRange(
-                minimum: 60,
-                maximum: 60,
-                preferred: 60
-            )
+            displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: self.preferredFPS, maximum: self.preferredFPS, preferred: self.preferredFPS)
             self.displayLinkDelegate = MetalDisplayLinkDelegateHandler(renderer: renderer, metalViewWrapper: self)
             displayLink.delegate = self.displayLinkDelegate
         }

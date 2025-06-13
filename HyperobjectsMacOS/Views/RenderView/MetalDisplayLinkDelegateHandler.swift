@@ -19,7 +19,7 @@ class MetalDisplayLinkDelegateHandler: NSObject, CAMetalDisplayLinkDelegate {
     }
     
     func metalDisplayLink(_ link: CAMetalDisplayLink, needsUpdate update: CAMetalDisplayLink.Update) {
-        // renderer.rendererState?.FrameTimingManager.captureFrameTime()
+        renderer.rendererState?.frameTimingManager.captureFrameTime()
         renderer.render(drawable: update.drawable)
     }
 }
