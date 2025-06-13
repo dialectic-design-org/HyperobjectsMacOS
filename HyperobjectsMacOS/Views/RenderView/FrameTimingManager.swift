@@ -68,6 +68,5 @@ class FrameTimingManager: ObservableObject {
         if averageFrameTime > 0 {
             framePerSecond = min(1000.0 / averageFrameTime, 999.0)
         }
-        print("Update frame times: \(framePerSecond)")
     }
 }

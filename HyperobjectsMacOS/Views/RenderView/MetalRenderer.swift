@@ -31,18 +31,20 @@ class MetalRenderer {
     let device: MTLDevice
     let commandQueue: MTLCommandQueue
     var renderPipelineState: MTLRenderPipelineState?
+    var currentScene: GeometriesSceneBase?
     var vertexBuffer: MTLBuffer?
     var indexBuffer: MTLBuffer?
     var uniformBuffer: MTLBuffer?
     
     var rotation: Float = 0.0
+    var drawCounter: Int = 0
     
     // Reference to the state
     weak var rendererState: RendererState?
     
-    init?(rendererState: RendererState) {
+    init?(rendererState: RendererState, currentScene: GeometriesSceneBase) {
         self.rendererState = rendererState
-        
+        self.currentScene = currentScene
         guard let device = MTLCreateSystemDefaultDevice() else {
             print("Metal is not supported on this device")
             return nil
@@ -57,6 +59,12 @@ class MetalRenderer {
         
         createBuffers()
         createRenderPipelineState()
+    }
+    
+    func updateCurrentScene(_ newScene: GeometriesSceneBase) {
+        currentScene = newScene
+        // createBuffers()
+        // createRenderPipelineState()
     }
     
     private func createBuffers() {
@@ -145,7 +153,8 @@ class MetalRenderer {
         guard let renderPipelineState = renderPipelineState,
               let vertexBuffer = vertexBuffer,
               let indexBuffer = indexBuffer,
-              let uniformBuffer = uniformBuffer else { return }
+              let uniformBuffer = uniformBuffer,
+              let scene = currentScene else { return }
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
         
@@ -157,12 +166,16 @@ class MetalRenderer {
         
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
         
+        renderEncoder.setRenderPipelineState(renderPipelineState)
+
         // Update rotation based on speed
         let rotationSpeed:Float = 0.5
         rotation += 0.01 * rotationSpeed
         if rotation > Float.pi * 2 {
             rotation -= Float.pi * 2
         }
+        
+        drawCounter += 1
         
         // Update uniform buffer with new rotation
         var uniforms = [VertexUniforms(
@@ -171,17 +184,69 @@ class MetalRenderer {
             rotationAngle: rotation
         )]
         
+        var testPoints: [SIMD3<Float>] = [
+            SIMD3<Float>(-1.0, -1.0, 0.0),  // Bottom left
+            SIMD3<Float>(1.0, -1.0, 0.0),   // Bottom right
+            SIMD3<Float>(-1.0, 1.0, 0.0),   // Top left
+            SIMD3<Float>(1.0, 1.0, 0.0),    // Top Right
+            SIMD3<Float>(0.0, 1.0, 0.0),    // Top center
+            SIMD3<Float>(0.0, 0.0, 0.0),    // Center
+        ]
+        
+        testPoints = []
+        
+        
+        
+        for gWrapped in scene.cachedGeometries {
+            let geometry = gWrapped.geometry
+            switch geometry.type {
+            case .line:
+                var scalingFactor:Float = 0.05;
+                var line = geometry.getPoints()
+                testPoints.append(line[0] * scalingFactor)
+                testPoints.append(line[1] * scalingFactor)
+            default:
+                let notImplementedError = "Not implemented yet"
+            }
+        }
+        
+        for (index, point) in testPoints.enumerated() {
+            // testPoints[index] = translateWaveEffect(vec: testPoints[index], index: index, drawCounter: drawCounter)
+            testPoints[index] = rotationEffect(vec: testPoints[index], drawCounter: drawCounter, rotationSpeed: 0.3, axis: 0)
+            testPoints[index] = rotationEffect(vec: testPoints[index], drawCounter: drawCounter, rotationSpeed: 0.5, axis: 1)
+            testPoints[index] = rotationEffect(vec: testPoints[index], drawCounter: drawCounter, rotationSpeed: 0.66, axis: 2)
+            testPoints[index].z += 10.0
+
+        }
+        
+        guard let vertexBuffer = device.makeBuffer(
+            bytes: testPoints,
+            length: testPoints.count * MemoryLayout<SIMD3<Float>>.stride,
+            options: []
+        ) else { return }
+        
+        
+        
         
         memcpy(uniformBuffer.contents(), uniforms, MemoryLayout<VertexUniforms>.size)
         
-        renderEncoder.setRenderPipelineState(renderPipelineState)
         renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+        
         renderEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
-        renderEncoder.drawIndexedPrimitives(type: .triangle,
-                                           indexCount: 3,
-                                           indexType: .uint16,
-                                           indexBuffer: indexBuffer,
-                                           indexBufferOffset: 0)
+//        renderEncoder.drawIndexedPrimitives(type: .triangle,
+//                                           indexCount: 3,
+//                                           indexType: .uint16,
+//                                           indexBuffer: indexBuffer,
+//                                           indexBufferOffset: 0)
+        
+        renderEncoder.drawPrimitives(type: .point,
+                                     vertexStart: 0,
+                                     vertexCount: testPoints.count)
+        renderEncoder.drawPrimitives(type: .line,
+                                     vertexStart: 0,
+                                     vertexCount: testPoints.count)
+        // renderEncoder.drawPrimitives(type: .lineStrip, vertexStart: 0, vertexCount: testPoints.count)
+
         
         renderEncoder.endEncoding()
         commandBuffer.present(drawable)

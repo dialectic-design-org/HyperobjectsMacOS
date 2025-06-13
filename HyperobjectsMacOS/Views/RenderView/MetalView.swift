@@ -14,11 +14,11 @@ struct MetalView: NSViewRepresentable {
     @EnvironmentObject var currentScene: GeometriesSceneBase
     @Binding var resolutionMode: ResolutionMode
     @Binding var resolution: CGSize // Bind the resolution to a parent view
-
+    
     func makeNSView(context: Context) -> MTKView {
         let view = MTKView()
         
-        guard let renderer = MetalRenderer(rendererState: rendererState) else {
+        guard let renderer = MetalRenderer(rendererState: rendererState, currentScene: currentScene) else {
             fatalError("Failed to create Metal renderer")
         }
         
@@ -29,6 +29,7 @@ struct MetalView: NSViewRepresentable {
         
         let wrapper = MetalViewWrapper(metalView: view, renderer: renderer)
         context.coordinator.wrapper = wrapper
+        context.coordinator.renderer = renderer
         
         print("Start render loop")
         wrapper.startRenderLoop()
@@ -37,7 +38,8 @@ struct MetalView: NSViewRepresentable {
     }
     
     func updateNSView(_ view: MTKView, context: Context) {
-        // print("metalView updateNSView")
+        print("metalView updateNSView current scene: \(currentScene.name)")
+        context.coordinator.renderer?.updateCurrentScene(currentScene)
     }
     
     func makeCoordinator() -> Coordinator {
@@ -46,5 +48,6 @@ struct MetalView: NSViewRepresentable {
     
     class Coordinator {
         var wrapper: MetalViewWrapper?
+        var renderer: MetalRenderer?
     }
 }

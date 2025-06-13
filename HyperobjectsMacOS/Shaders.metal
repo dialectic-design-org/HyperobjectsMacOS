@@ -29,17 +29,7 @@ vertex VertexOut vertex_main(const device float3* vertices [[ buffer(0) ]],
                           constant VertexUniforms& uniforms [[ buffer(1) ]],
                           uint vertexID [[ vertex_id ]]) {
     VertexOut out;
-    out.position = float4(vertices[vertexID] * 0.1, 1.0);
-    float4 in = out.position;
-    float cosAngle = cos(uniforms.rotationAngle);
-    float sinAngle = sin(uniforms.rotationAngle);
-    float3 rotatedPosition = float3(
-        in.x * cosAngle - in.y * sinAngle,
-        in.x * sinAngle + in.y * cosAngle,
-        in.z
-                                    );
-    out.position = float4(rotatedPosition, 1.0);
-    
+    out.position = float4(vertices[vertexID] * 1.0, 20.0);
     out.pointsize = 10.0;
     
     return out;
