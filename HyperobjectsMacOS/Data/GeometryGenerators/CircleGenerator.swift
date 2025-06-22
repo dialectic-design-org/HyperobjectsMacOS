@@ -17,13 +17,21 @@ class CircleGenerator: CachedGeometryGenerator {
         var lines: [Line] = []
         
         let segmentsCount: Int = 16
+        
+        
+        
+        var radius: Float = 100.0
+        if let radiusValue: Double = inputs["Radius"] as? Double {
+            radius = Float(radiusValue)
+        } else if let radiusValue: Float = inputs["Radius"] as? Float {
+            radius = radiusValue
+        }
+        
+        
         for i in 0..<segmentsCount {
             let angle: Float = Float(i) / Float(segmentsCount) * 2.0 * .pi
             
-            guard let radiusValue = inputs["Radius"],
-                  let radius = (radiusValue as? Float) ?? (radiusValue as? Int).map(Float.init) else {
-                fatalError("Radius must be a number")
-            }
+            
             
             let x: Float = radius * cos(angle)
             let y: Float = radius * sin(angle)

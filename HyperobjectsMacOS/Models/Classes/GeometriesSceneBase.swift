@@ -38,16 +38,31 @@ class GeometriesSceneBase: GeometriesScene {
     }
     
     func generateAllGeometries() -> [any Geometry] {
-        let inputDict = Dictionary(uniqueKeysWithValues: inputs.map { ($0.name, $0.value) })
+        let inputDict: [String: Any] = Dictionary(uniqueKeysWithValues: inputs.map { input in
+            if input.type == .float, let floatValue = input.value as? Float {
+                return (input.name, floatValue + input.audioSignal * input.audioAmplification as Any)
+            } else {
+                return (input.name, input.value)
+            }
+        })
+        
         return geometryGenerators.flatMap { generator in
             if generator.needsRecalculation(changedInputs: changedInputs) {
-                return generator.generateGeometries(inputs: inputDict)
+                return generator.generateGeometries(inputs: inputDict, overrideCache: true)
             } else if let cachedGenerator = generator as? CachedGeometryGenerator {
-                return cachedGenerator.generateGeometries(inputs: inputDict)
+                return cachedGenerator.generateGeometries(inputs: inputDict, overrideCache: false)
             }
             return []
         }
     }
+    
+    func setChangedInput(name: String) {
+        // Add changed input to changedInputs if not in array already
+        if !changedInputs.contains(name) {
+            changedInputs.insert(name)
+        }
+    }
+    
     
     func setWrappedGeometries() {
         self.cachedGeometries = self.generateAllGeometries().map { GeometryWrapped(geometry: $0) }

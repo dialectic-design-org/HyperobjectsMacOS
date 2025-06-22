@@ -14,15 +14,18 @@ struct ContentView: View {
         VStack {
             RenderView()
         }.font(myFont)
-        .onAppear() {
-            for window in allWindows {
-                if window.showOnLoad {
-                    openWindow(id: window.id)
-                }
-            }
-        }
+        
     }
 }
+//
+//    .onAppear() {
+//        for window in allWindows {
+//            if window.showOnLoad {
+//                openWindow(id: window.id)
+//            }
+//        }
+//    }
+
 
 #Preview {
     ContentView()

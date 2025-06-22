@@ -76,7 +76,7 @@ class MetalRenderer {
              0.5, -0.5, 0.0,            0.0, 0.0, 1.0, 1.0
         ]
         // Apply scaling to the vertices with a factor variable
-        var scalingFactor = 10.0
+        var scalingFactor = 1.0
         for i in stride(from: 0, to: vertices.count, by: 3) {
             vertices[i] *= Float(scalingFactor)
             vertices[i+1] *= Float(scalingFactor)
@@ -161,7 +161,7 @@ class MetalRenderer {
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.texture
         renderPassDescriptor.colorAttachments[0].loadAction = .clear
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0)
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.01, alpha: 1.0)
         renderPassDescriptor.colorAttachments[0].storeAction = .store
         
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
@@ -195,13 +195,11 @@ class MetalRenderer {
         
         testPoints = []
         
-        
-        
         for gWrapped in scene.cachedGeometries {
             let geometry = gWrapped.geometry
             switch geometry.type {
             case .line:
-                var scalingFactor:Float = 0.05;
+                var scalingFactor:Float = 1.0;
                 var line = geometry.getPoints()
                 testPoints.append(line[0] * scalingFactor)
                 testPoints.append(line[1] * scalingFactor)
@@ -210,14 +208,29 @@ class MetalRenderer {
             }
         }
         
-        for (index, point) in testPoints.enumerated() {
-            // testPoints[index] = translateWaveEffect(vec: testPoints[index], index: index, drawCounter: drawCounter)
-            testPoints[index] = rotationEffect(vec: testPoints[index], drawCounter: drawCounter, rotationSpeed: 0.3, axis: 0)
-            testPoints[index] = rotationEffect(vec: testPoints[index], drawCounter: drawCounter, rotationSpeed: 0.5, axis: 1)
-            testPoints[index] = rotationEffect(vec: testPoints[index], drawCounter: drawCounter, rotationSpeed: 0.66, axis: 2)
-            testPoints[index].z += 10.0
-
+        let applyRotationEffect = false
+        
+        
+        if applyRotationEffect {
+            for (index, point) in testPoints.enumerated() {
+                // testPoints[index] = translateWaveEffect(vec: testPoints[index], index: index, drawCounter: drawCounter)
+                testPoints[index] = rotationEffect(vec: testPoints[index], drawCounter: drawCounter, rotationSpeed: 0.3, axis: 0)
+                testPoints[index] = rotationEffect(vec: testPoints[index], drawCounter: drawCounter, rotationSpeed: 0.5, axis: 1)
+                testPoints[index] = rotationEffect(vec: testPoints[index], drawCounter: drawCounter, rotationSpeed: 0.66, axis: 2)
+                testPoints[index].z += 10.0
+            }
         }
+        
+        let rescaleToAspectRatio:Bool = true
+        
+        if rescaleToAspectRatio {
+            let aspectRatio:Float = Float(drawable.texture.width) / Float(drawable.texture.height)
+            for (index, point) in testPoints.enumerated() {
+                testPoints[index].x /= aspectRatio
+                
+            }
+        }
+        
         
         guard let vertexBuffer = device.makeBuffer(
             bytes: testPoints,

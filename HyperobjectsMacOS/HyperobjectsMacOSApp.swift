@@ -17,7 +17,6 @@ struct HyperobjectsMacOSApp: App {
             ContentView()
                 .environmentObject(sceneManager.currentScene)
                 .onAppear {
-                    print("Content view appeared")
                     sceneManager.currentScene.setWrappedGeometries()
                 }
         }

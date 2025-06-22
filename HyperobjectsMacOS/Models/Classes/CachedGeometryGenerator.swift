@@ -22,9 +22,12 @@ class CachedGeometryGenerator: GeometryGenerator {
         self.pythonCode = pythonCode
     }
     
-    func generateGeometries(inputs: [String: Any]) -> [any Geometry] {
+    func generateGeometries(inputs: [String: Any], overrideCache: Bool = false) -> [any Geometry] {
         if let cached = cachedGeometries {
-            return cached
+            if overrideCache == false {
+                return cached
+            } else {
+            }
         }
         cachedGeometries = generateGeometriesFromInputs(inputs: inputs)
         return cachedGeometries ?? []
@@ -35,7 +38,8 @@ class CachedGeometryGenerator: GeometryGenerator {
     }
     
     func needsRecalculation(changedInputs: Set<String>) -> Bool {
-        !Set(inputDependencies).isDisjoint(with: changedInputs)
+        // Check if there are matching elements in changedInputs and in inputDependencies
+        return !Set(changedInputs).intersection(Set(inputDependencies)).isEmpty
     }
     
     func invalidateCache() {

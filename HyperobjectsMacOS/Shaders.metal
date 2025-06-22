@@ -29,8 +29,13 @@ vertex VertexOut vertex_main(const device float3* vertices [[ buffer(0) ]],
                           constant VertexUniforms& uniforms [[ buffer(1) ]],
                           uint vertexID [[ vertex_id ]]) {
     VertexOut out;
-    out.position = float4(vertices[vertexID] * 1.0, 20.0);
-    out.pointsize = 10.0;
+    // Mapping to clip space
+    out.position = float4(
+                          vertices[vertexID].x * 1.0,
+                          vertices[vertexID].y * 1.0,
+                          vertices[vertexID].z * 0.01 + 0.5,
+                          1.0);
+    out.pointsize = 5.0;
     
     return out;
 }
@@ -39,6 +44,6 @@ vertex VertexOut vertex_main(const device float3* vertices [[ buffer(0) ]],
 fragment float4 fragment_main(const device float4* color [[ buffer(0) ]]) {
     
     Shader_Triangle test;
-    return float4(0, 1, 1, 1);
+    return float4(1, 1, 1, 0.8);
     return *color;
 }

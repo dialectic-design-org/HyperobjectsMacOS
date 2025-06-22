@@ -25,14 +25,23 @@ struct FrameTimeChart: View {
             ForEach(data.indices, id: \.self) { index in
                 let value = data[index]
                 let maxValue = data.max() ?? 1
-                let height = CGFloat(value / maxValue) * maxBarHeight
-                
+                let height = calculateHeight(value: value, maxValue: maxValue)
                 Rectangle()
                     .fill(frameTimeColor(value))
                     .stroke(Color.clear, lineWidth: 0.0)
                     .frame(width: barWidth, height: height)
             }
-        }
+        }.frame(
+            width: CGFloat(data.count) * (barWidth + spacing),
+            height: maxBarHeight
+        )
+    }
+    
+    func calculateHeight(value: Double, maxValue: Double) -> CGFloat {
+        var height = CGFloat(value / maxValue) * maxBarHeight
+        // Protect for invalid frame dimension, negative or non-finite
+        height = max(0, height.isFinite ? height: 0)
+        return height
     }
     
     private func frameTimeColor(_ frameTime: Double) -> Color {

@@ -13,5 +13,10 @@ class RenderConfigurations: ObservableObject {
     @Published var renderBoundingBoxes: Bool = false
     
     @Published var freeCameraControl: Bool = false
+    
+    @Published var renderPoints: Bool = false
+    @Published var renderLines: Bool = true
+    
+    
 }
 

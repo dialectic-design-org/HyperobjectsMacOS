@@ -16,19 +16,26 @@ class CrossGenerator: CachedGeometryGenerator {
     override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
         var lines: [Line] = []
         
-        lines.append(
-            Line(
-                startPoint: SIMD3<Float>(x: -20.0, y: -20.0, z: 0.0),
-                endPoint: SIMD3<Float>(x: 20.0, y: 20.0, z: 0.0)
-            )
+        let size = floatFromInputs(inputs, name: "Size")
+        let rotation = floatFromInputs(inputs, name: "Rotation")
+        
+        let rotationMatrix = matrix_rotation(angle: rotation, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
+        
+        var lineOne = Line(
+            startPoint: SIMD3<Float>(x: -1.0, y: -1.0, z: 0.0) * size,
+            endPoint: SIMD3<Float>(x: 1.0, y: 1.0, z: 0.0) * size
         )
         
-        lines.append(
-            Line(
-                startPoint: SIMD3<Float>(x: -20.0, y: 20.0, z: 0.0),
-                endPoint: SIMD3<Float>(x: 20.0, y: -20.0, z: 0.0)
-            )
+        var lineTwo = Line(
+            startPoint: SIMD3<Float>(x: -1.0, y: 1.0, z: 0.0) * size,
+            endPoint: SIMD3<Float>(x: 1.0, y: -1.0, z: 0.0) * size
         )
+        
+        lineOne = lineOne.applyMatrix(rotationMatrix)
+        lineTwo = lineTwo.applyMatrix(rotationMatrix)
+        
+        lines.append(lineOne)
+        lines.append(lineTwo)
         
         return lines
     }

@@ -20,4 +20,12 @@ struct Line: Geometry {
     func getPoints() -> [SIMD3<Float>] {
         return [startPoint, endPoint]
     }
+    
+    mutating func applyMatrix(_ matrix: matrix_float4x4) -> Line {
+        let vecStartRotated = matrix * SIMD4<Float>(startPoint.x, startPoint.y, startPoint.z, 1.0)
+        let vecEndRotated = matrix * SIMD4<Float>(endPoint.x, endPoint.y, endPoint.z, 1.0)
+        startPoint = SIMD3<Float>(vecStartRotated.x, vecStartRotated.y, vecStartRotated.z)
+        endPoint = SIMD3<Float>(vecEndRotated.x, vecEndRotated.y, vecEndRotated.z)
+        return self
+    }
 }

@@ -24,7 +24,7 @@ let secondaryRenderWindowConfig = WindowInfo(
 let sceneInputsWindowConfig = WindowInfo(
     id: "scene_inputs",
     title: "Scene Inputs",
-    showOnLoad: true,
+    showOnLoad: false,
     content: AnyView(SceneInputsView())
 )
 
@@ -38,14 +38,14 @@ let renderConfigurationsWindowConfig = WindowInfo(
 let sceneGeometriesListWindowConfig = WindowInfo(
     id: "scene_geometries_list",
     title: "Scene Geometries List",
-    showOnLoad: true,
+    showOnLoad: false,
     content: AnyView(GeometriesListView())
 )
 
 let viewportFrontViewWindowConfig = WindowInfo(
     id: "viewport_front_view",
     title: "Viewport Front View",
-    showOnLoad: true,
+    showOnLoad: false,
     content: AnyView(ViewportView(direction: "z"))
 )
 
@@ -66,7 +66,7 @@ let viewportTopViewWindowConfig = WindowInfo(
 let sceneSelectorViewWindowConfig = WindowInfo(
     id: "scene_selector",
     title: "Scene Selector",
-    showOnLoad: true,
+    showOnLoad: false,
     content: AnyView(SceneSelectorView())
 )
 

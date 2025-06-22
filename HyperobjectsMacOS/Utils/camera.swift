@@ -7,6 +7,23 @@
 
 import simd
 
+
+func matrix_rotation(angle: Float, axis: SIMD3<Float>) -> matrix_float4x4 {
+    let s = sin(angle)
+    let c = cos(angle)
+    let t = 1.0 - c
+    let x = axis.x
+    let y = axis.y
+    let z = axis.z
+
+    return matrix_float4x4(
+        SIMD4<Float>(t*x*x + c,     t*x*y - s*z,   t*x*z + s*y,   0),
+        SIMD4<Float>(t*x*y + s*z,   t*y*y + c,     t*y*z - s*x,   0),
+        SIMD4<Float>(t*x*z - s*y,   t*y*z + s*x,   t*z*z + c,     0),
+        SIMD4<Float>(0,             0,             0,             1)
+    )
+}
+
 func matrix_lookAt(eye: SIMD3<Float>, target: SIMD3<Float>, up: SIMD3<Float>) -> matrix_float4x4 {
     let zAxis = normalize(target - eye)
     let xAxis = normalize(cross(up, zAxis))

@@ -11,8 +11,8 @@ func generateGeometrySceneCross() -> GeometriesSceneBase {
     return GeometriesSceneBase(
         name: "Cross Scene",
         inputs: [
-            SceneInput(name: "Size", type: .float, value: 20.0),
-            SceneInput(name: "Rotation", type: .float, value: 0.0)
+            SceneInput(name: "Size", type: .float, value: 0.5, range: 0...2),
+            SceneInput(name: "Rotation", type: .float, value: 0.0, range: 0...4 * .pi)
         ],
         geometryGenerators: [
             CrossGenerator()

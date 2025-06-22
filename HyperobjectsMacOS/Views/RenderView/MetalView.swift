@@ -38,7 +38,7 @@ struct MetalView: NSViewRepresentable {
     }
     
     func updateNSView(_ view: MTKView, context: Context) {
-        print("metalView updateNSView current scene: \(currentScene.name)")
+        // print("metalView updateNSView current scene: \(currentScene.name)")
         context.coordinator.renderer?.updateCurrentScene(currentScene)
     }
     
