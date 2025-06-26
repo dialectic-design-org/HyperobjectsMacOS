@@ -6,14 +6,19 @@
 //
 
 import Foundation
+import os
 
-class GeometriesSceneBase: GeometriesScene {
+let geometryGenerationLog = OSLog(subsystem: "com.yourapp.geometry", category: .pointsOfInterest)
+
+
+class GeometriesSceneBase: ObservableObject, GeometriesScene {
     let id = UUID()
     let name: String
     @Published var inputs: [SceneInput]
     @Published var geometryGenerators: [any GeometryGenerator]
     @Published var changedInputs: Set<String> = []
     @Published var cachedGeometries: [GeometryWrapped] = []
+    @Published var audioSignal: Float = 0.0
     
     init(name: String, inputs: [SceneInput], geometryGenerators: [any GeometryGenerator]) {
         self.name = name
@@ -38,15 +43,18 @@ class GeometriesSceneBase: GeometriesScene {
     }
     
     func generateAllGeometries() -> [any Geometry] {
+        let startTime = DispatchTime.now()
+        os_signpost(.begin, log: geometryGenerationLog, name: "generateAllGeometries")
+
         let inputDict: [String: Any] = Dictionary(uniqueKeysWithValues: inputs.map { input in
-            if input.type == .float, let floatValue = input.value as? Float {
-                return (input.name, floatValue + input.audioSignal * input.audioAmplification as Any)
+            if input.type == .float {
+                return (input.name, input.combinedValueAsFloat(audioSignal: audioSignal))
             } else {
                 return (input.name, input.value)
             }
         })
-        
-        return geometryGenerators.flatMap { generator in
+
+        let geometries = geometryGenerators.flatMap { generator in
             if generator.needsRecalculation(changedInputs: changedInputs) {
                 return generator.generateGeometries(inputs: inputDict, overrideCache: true)
             } else if let cachedGenerator = generator as? CachedGeometryGenerator {
@@ -54,7 +62,37 @@ class GeometriesSceneBase: GeometriesScene {
             }
             return []
         }
+
+        os_signpost(.end, log: geometryGenerationLog, name: "generateAllGeometries")
+        let endTime = DispatchTime.now()
+
+        let durationNano = endTime.uptimeNanoseconds - startTime.uptimeNanoseconds
+        let durationMillis = Double(durationNano) / 1_000_000
+        // print("Geometry generation took \(durationMillis) ms")
+
+        return geometries
     }
+    
+    func updateFloatInputsWithAudio(_ audioValue: Float) {
+        var changedInputNames: [String] = []
+        
+        for (index, input) in inputs.enumerated() where input.type == .float {
+            // Only update if the value actually changed significantly
+            if abs(input.valueAsFloat() - audioValue) > 0.001 {
+                changedInputNames.append(input.name)
+            }
+        }
+        
+        // Batch notify all changes at once
+        if !changedInputNames.isEmpty {
+            setChangedInputs(names: changedInputNames) // New batched method
+        }
+    }
+    
+    func setChangedInputs(names: [String]) {
+        changedInputs.formUnion(names)
+    }
+    
     
     func setChangedInput(name: String) {
         // Add changed input to changedInputs if not in array already

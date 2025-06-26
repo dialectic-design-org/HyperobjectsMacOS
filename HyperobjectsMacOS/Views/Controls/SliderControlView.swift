@@ -7,22 +7,79 @@
 
 import SwiftUI
 
-
 struct SliderControlView: View {
-    var input: SceneInput
-    @EnvironmentObject var currentScene: GeometriesSceneBase
+    @ObservedObject var input: SceneInput
     
+    // Local state mirrors
+    @State private var userValue: Float = 0.0
+    @State private var add: Float = 0.0
+    @State private var mul: Float = 1.0
+    @State private var offset: Float = 0.0
+
     var body: some View {
-        let floatValue = input.valueAsFloat()
-        Slider(value: Binding(
-            get: { floatValue },
-            set: { newValue in
-                if let index = currentScene.inputs.firstIndex(where: { $0.id == input.id }) {
-                    currentScene.inputs[index].value = newValue // Update the value in the array
+        VStack {
+            Slider(value: $userValue, in: input.range)
+                .onChange(of: userValue) { oldValue, newValue in
+                    input.value = newValue
                 }
-                currentScene.setChangedInput(name: input.name)
-                currentScene.setWrappedGeometries()
+
+            HStack {
+                VStack {
+                    Text("+")
+                    Slider(value: $add, in: input.audioAmplificationAdditionRange)
+                        .onChange(of: add) { oldValue, newValue in
+                            input.audioAmplificationAddition = newValue
+                        }
+                }
+                
+                VStack {
+                    Text("x")
+                    Slider(value: $mul, in: input.audioAmplificationMultiplicationRange)
+                        .controlSize(.mini)
+                        .onChange(of: mul) { oldValue, newValue in
+                            input.audioAmplificationMultiplication = newValue
+                        }
+                }
+                
+                VStack {
+                    Text("offset")
+                    Slider(value: $offset, in: input.audioAmplificationMultiplicationOffsetRange)
+                        .controlSize(.mini)
+                        .onChange(of: offset) { oldValue, newValue in
+                            input.audioAmplificationMultiplicationOffset = newValue
+                        }
+                }
             }
-        ), in: input.range)
+        }
+        .onAppear {
+            // Initialize local state once
+            userValue = input.value as? Float ?? 0.0
+            add = input.audioAmplificationAddition
+            mul = input.audioAmplificationMultiplication
+            offset = input.audioAmplificationMultiplicationOffset
+        }
     }
 }
+
+
+struct InstrumentedSlider: View {
+    @Binding var value: Float
+    var range: ClosedRange<Float>
+    var onUpdateDuration: ((Double) -> Void)?
+
+    var body: some View {
+        Slider(value: Binding<Float>(
+            get: { value },
+            set: { newValue in
+                let startTime = DispatchTime.now()
+                value = newValue
+                DispatchQueue.main.async {
+                    let endTime = DispatchTime.now()
+                    let duration = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000
+                    onUpdateDuration?(duration)
+                }
+            }
+        ), in: range)
+    }
+}
+
