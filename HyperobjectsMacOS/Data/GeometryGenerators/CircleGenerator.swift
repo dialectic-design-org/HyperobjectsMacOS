@@ -27,6 +27,10 @@ class CircleGenerator: CachedGeometryGenerator {
             radius = radiusValue
         }
         
+        let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
+        let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
+        let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
+        
         
         for i in 0..<segmentsCount {
             let angle: Float = Float(i) / Float(segmentsCount) * 2.0 * .pi
@@ -43,6 +47,29 @@ class CircleGenerator: CachedGeometryGenerator {
                 endPoint: SIMD3<Float>(x: nextX, y: nextY, z: 0)
                 ))
         }
+        
+        if statefulRotationX != 0 {
+            let rotationMatrix = matrix_rotation(angle: statefulRotationX, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
+            for i in 0..<lines.count {
+                lines[i] = lines[i].applyMatrix(rotationMatrix)
+            }
+        }
+        
+        if statefulRotationY != 0 {
+            let rotationMatrix = matrix_rotation(angle: statefulRotationY, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
+            for i in 0..<lines.count {
+                lines[i] = lines[i].applyMatrix(rotationMatrix)
+            }
+        }
+        
+        if statefulRotationZ != 0 {
+            let rotationMatrix = matrix_rotation(angle: statefulRotationZ, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
+            for i in 0..<lines.count {
+                lines[i] = lines[i].applyMatrix(rotationMatrix)
+            }
+        }
+        
+        
         return lines
     }
 }

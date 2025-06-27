@@ -8,6 +8,8 @@
 enum InputType: String, CaseIterable, Identifiable {
     case string = "string"
     case float = "float"
+    case statefulFloat = "statefulFloat"
+    case oscilationFloat = "oscilationFloat"
     case integer = "integer"
     case vector2d = "vector2d"
     

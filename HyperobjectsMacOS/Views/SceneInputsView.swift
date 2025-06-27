@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+var lastTickTime: Float = 0
 
 struct SceneInputsView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
@@ -44,6 +45,10 @@ struct SceneInputsView: View {
                             HStack {
                                 SliderControlView(input: input)
                             }.frame(maxWidth:.infinity, alignment: .leading)
+                        case .statefulFloat:
+                            HStack {
+                                StatefulFloatControlView(input: input)
+                            }.frame(maxWidth:.infinity, alignment: .leading)
                         default:
                             Text("Default")
                         }
@@ -62,7 +67,24 @@ struct SceneInputsView: View {
             // This block runs every time smoothedVolume changes
             // You can update your inputs here if needed
             let startTime = DispatchTime.now()
+            var tickDuration = 0.0
+            if (lastTickTime > 0) {
+                tickDuration = Double(startTime.rawValue) / 1_000_000 - Double(lastTickTime) / 1_000_000
+            }
+            lastTickTime = Float(startTime.rawValue)
+            // print("startTime: \(startTime) Tick duration: \(tickDuration)")
             currentScene.audioSignal = newValue
+            for i in 0..<currentScene.inputs.count {
+                if currentScene.inputs[i].type == .statefulFloat {
+                    if let floatValue = currentScene.inputs[i].value as? Double {
+                        currentScene.inputs[i].value = floatValue + currentScene.inputs[i].tickValueAdjustment +
+                        currentScene.inputs[i].tickValueAudioAdjustment * (Double(newValue) + currentScene.inputs[i].tickValueAudioAdjustmentOffset)
+                    } else {
+                        print("Could not cast value to Float for \(currentScene.inputs[i].value), actual type: \(type(of: currentScene.inputs[i].value))")
+                    }
+                }
+            }
+            
             currentScene.updateFloatInputsWithAudio(newValue)
             currentScene.setWrappedGeometries()
             let endTime = DispatchTime.now()

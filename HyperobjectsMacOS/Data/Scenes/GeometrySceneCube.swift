@@ -16,10 +16,18 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             SceneInput(name: "Height", type: .float, value: 0.5, range: 0.0...3.0),
             SceneInput(name: "Depth", type: .float, value: 0.5, range: 0.0...3.0),
             
+            SceneInput(name:"Stateful Width", type: .statefulFloat),
+            SceneInput(name:"Stateful Height", type: .statefulFloat),
+            SceneInput(name:"Stateful Depth", type: .statefulFloat),
+            
             
             SceneInput(name: "Rotation X", type: .float, value: 0.0, range: 0.0...2 * .pi),
             SceneInput(name: "Rotation Y", type: .float, value: 0.0, range: 0.0...2 * .pi),
             SceneInput(name: "Rotation Z", type: .float, value: 0.0, range: 0.0...2 * .pi),
+            
+            SceneInput(name:"Stateful Rotation X", type: .statefulFloat, tickValueAdjustmentRange: 0.0...0.1),
+            SceneInput(name:"Stateful Rotation Y", type: .statefulFloat, tickValueAdjustmentRange: 0.0...0.1),
+            SceneInput(name:"Stateful Rotation Z", type: .statefulFloat, tickValueAdjustmentRange: 0.0...0.1)
         ],
         geometryGenerators: [
             CubeGenerator()

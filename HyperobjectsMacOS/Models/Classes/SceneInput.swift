@@ -21,6 +21,13 @@ class SceneInput: ObservableObject, Identifiable {
     var audioAmplificationMultiplicationOffset: Float = 1.0
     var audioAmplificationMultiplicationOffsetRange: ClosedRange<Float> = -1...1
     
+    var tickValueAdjustment: Double = 0.0
+    var tickValueAdjustmentRange: ClosedRange<Double> = 0...1
+    var tickValueAudioAdjustment: Double = 0.0
+    var tickValueAudioAdjustmentRange: ClosedRange<Double> = 0...1
+    var tickValueAudioAdjustmentOffset: Double = 0.0
+    var tickValueAudioAdjustmentOffsetRange: ClosedRange<Double> = -1...1
+    
     init(name: String,
          type: InputType,
          value: Any = 0.0,
@@ -31,7 +38,12 @@ class SceneInput: ObservableObject, Identifiable {
          audioAmplificationMultiplication: Float = 0.0,
          audioAmplificationMultiplicationRange: ClosedRange<Float> = 0...1,
          audioAmplificationMultiplicationOffset: Float = 1.0,
-         audioAmplificationMultiplicationOffsetRange: ClosedRange<Float> = -1...1
+         audioAmplificationMultiplicationOffsetRange: ClosedRange<Float> = -1...1,
+         tickValueAdjustment: Double = 0.0,
+         tickValueAdjustmentRange: ClosedRange<Double> = 0...1,
+         tickValueAudioAdjustment: Double = 0.0,
+         tickValueAudioAdjustmentRange: ClosedRange<Double> = 0...1,
+         tickValueAudioAdjustmentOffset: Double = 0.0
     ) {
         self.name = name
         self.type = type
@@ -44,6 +56,12 @@ class SceneInput: ObservableObject, Identifiable {
         self.audioAmplificationMultiplicationRange = audioAmplificationMultiplicationRange
         self.audioAmplificationMultiplicationOffset = audioAmplificationMultiplicationOffset
         self.audioAmplificationMultiplicationOffsetRange = audioAmplificationMultiplicationOffsetRange
+        
+        self.tickValueAdjustment = tickValueAdjustment
+        self.tickValueAdjustmentRange = tickValueAdjustmentRange
+        self.tickValueAudioAdjustment = tickValueAudioAdjustment
+        self.tickValueAudioAdjustmentRange = tickValueAudioAdjustmentRange
+        self.tickValueAudioAdjustmentOffset = tickValueAudioAdjustmentOffset
     }
     
     func valueAsFloat() -> Float {

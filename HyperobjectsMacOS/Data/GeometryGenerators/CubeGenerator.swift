@@ -25,6 +25,10 @@ class CubeGenerator: CachedGeometryGenerator {
         let rotationY = floatFromInputs(inputs, name: "Rotation Y")
         let rotationZ = floatFromInputs(inputs, name: "Rotation Z")
         
+        let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
+        let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
+        let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
+        
         // Front
         lines.append(
             Line(
@@ -124,25 +128,20 @@ class CubeGenerator: CachedGeometryGenerator {
                 endPoint: line.endPoint * size
             )
         }
-        if rotationX != 0 {
-            let rotationMatrix = matrix_rotation(angle: rotationX, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
-            for i in 0..<lines.count {
-                lines[i] = lines[i].applyMatrix(rotationMatrix)
-            }
+        
+        let rotationMatrixX = matrix_rotation(angle: rotationX + statefulRotationX, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
+        for i in 0..<lines.count {
+            lines[i] = lines[i].applyMatrix(rotationMatrixX)
         }
 
-        if rotationY != 0 {
-            let rotationMatrix = matrix_rotation(angle: rotationY, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
-            for i in 0..<lines.count {
-                lines[i] = lines[i].applyMatrix(rotationMatrix)
-            }
+        let rotationMatrixY = matrix_rotation(angle: rotationY + statefulRotationY, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
+        for i in 0..<lines.count {
+            lines[i] = lines[i].applyMatrix(rotationMatrixY)
         }
 
-        if rotationZ != 0 {
-            let rotationMatrix = matrix_rotation(angle: rotationZ, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
-            for i in 0..<lines.count {
-                lines[i] = lines[i].applyMatrix(rotationMatrix)
-            }
+        let rotationMatrixZ = matrix_rotation(angle: rotationZ + statefulRotationZ, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
+        for i in 0..<lines.count {
+            lines[i] = lines[i].applyMatrix(rotationMatrixZ)
         }
         
         return lines
