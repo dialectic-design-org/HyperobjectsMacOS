@@ -246,6 +246,7 @@ class MetalRenderer {
         renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
         
         renderEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
+        
 //        renderEncoder.drawIndexedPrimitives(type: .triangle,
 //                                           indexCount: 3,
 //                                           indexType: .uint16,

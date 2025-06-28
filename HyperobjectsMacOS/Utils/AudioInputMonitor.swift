@@ -4,95 +4,104 @@
 //
 //  Created by Erwin Hoogerwoord on 22/06/2025.
 //
-
-
 import Foundation
 import AVFoundation
 import Accelerate
 
 class AudioInputMonitor: ObservableObject {
-    private var audioEngine: AVAudioEngine?
-    private var inputNode: AVAudioInputNode?
-    private var inputFormat: AVAudioFormat?
+    private var audioEngine: AVAudioEngine
+    private var sinkNode: AVAudioSinkNode?
+
     @Published var volume: Float = 0.0
     @Published var smoothedVolume: Float = 0.0
-    
-    @Published var lowBandVolume: Float = 0.0
-    @Published var midBandVolume: Float = 0.0
-    @Published var highBandVolume: Float = 0.0
-    
-    private let fftSetup: vDSP_DFT_Setup
-    private let fftSize = vDSP_Length(1024)
-    private var window: [Float]
-    
+    @Published var lowpassVolume: Double = 0.0
+    @Published var lowpassVolumeSmoothed: Double = 0.0
+
+    @Published var smoothingSampleCount: Int = 10 {
+        didSet {
+            recentVolumes = []
+        }
+    }
+
+    @Published var lowpassCutoffFrequency: Float = 200.0 // in Hz
+
+    private var recentVolumes: [Float] = []
+    private var lastLowpass: Double = 0.0
+    private var sampleRate: Float = 44100.0
+
     init() {
-        window = vDSP.window(ofType: Float.self, usingSequence: .hanningDenormalized, count: Int(fftSize), isHalfWindow: false)
-        fftSetup = vDSP_DFT_zop_CreateSetup(nil, fftSize, .FORWARD)!
-        setupAudio()
-    }
-    
-    deinit {
-        vDSP_DFT_DestroySetup(fftSetup)
-    }
-    
-    func setupAudio() {
-        print("Setting up audio engine")
         audioEngine = AVAudioEngine()
-        inputNode = audioEngine?.inputNode
-        inputFormat = inputNode?.outputFormat(forBus: 0)
-        
-        let recordingFormat = inputFormat
-        inputNode?.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] (buffer, _) in
-            self?.updateVolume(from: buffer)
-        }
-//
-//        try? AVAudioSession.sharedInstance().setCategory(.record)
-//        try? AVAudioSession.sharedInstance().setActive(true)
+        setupAudioSinkNode()
     }
-    
-    func updateVolume(from buffer: AVAudioPCMBuffer) {
-        guard let channelData = buffer.floatChannelData else { return }
-        let channelDataValue = channelData.pointee
-        let channelDataValues = stride(from: 0,
-                                       to: Int(buffer.frameLength),
-                                       by: buffer.stride).map { channelDataValue[$0] }
-        let rms = sqrt(channelDataValues.map { $0 * $0 }.reduce(0, +) / Float(buffer.frameLength))
-        let avgPower = 20 * log10(rms)
-        let normalizedValue = min(max((avgPower + 80) / 80, 0), 1)
-        DispatchQueue.main.async { [weak self] in
-            // print("Setting new volume value: \(normalizedValue)")
-            self?.volume = normalizedValue
-        }
-        
-        let currentVolume = self.volume
-        let smoothingSize = 10
-        let volumeStep = (normalizedValue - currentVolume) / Float(smoothingSize)
-        for step in 1...smoothingSize {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(step) * 0.01) {
-                self.smoothedVolume = currentVolume + volumeStep * Float(step)
+
+    private func setupAudioSinkNode() {
+        let inputNode = audioEngine.inputNode
+        let format = inputNode.outputFormat(forBus: 0)
+        sampleRate = Float(format.sampleRate)
+
+        sinkNode = AVAudioSinkNode { [weak self] (_, frameCount, audioBufferListPointer) -> OSStatus in
+            guard let self = self else { return noErr }
+
+            let mutableABLPointer = UnsafeMutablePointer(mutating: audioBufferListPointer)
+            let ablPointer = UnsafeMutableAudioBufferListPointer(mutableABLPointer)
+
+            guard let firstBuffer = ablPointer.first,
+                  let dataPtr = firstBuffer.mData?.assumingMemoryBound(to: Float.self) else {
+                return noErr
             }
+
+            let count = Int(frameCount)
+            let samples = Array(UnsafeBufferPointer(start: dataPtr, count: count))
+
+            var sum: Float = 0.0
+            vDSP_measqv(samples, 1, &sum, vDSP_Length(count))
+            let rms = sqrt(sum)
+            let avgPower = 20 * log10(rms)
+            let normalizedVolume = min(max((avgPower + 80) / 80, 0), 1)
+
+            // --- Lowpass filter as one-pole IIR ---
+            let cutoff = max(self.lowpassCutoffFrequency, 1.0)
+            let dt = 1.0 / self.sampleRate
+            let rc = 1.0 / (2 * Float.pi * cutoff)
+            let alpha = dt / (rc + dt)
+
+            // For metering, lowpass the normalizedVolume, or you could filter the RMS directly.
+            let filtered: Double = self.lastLowpass + Double(alpha) * (Double(normalizedVolume) - self.lastLowpass)
+            self.lastLowpass = filtered
+
+            DispatchQueue.main.async {
+                self.volume = normalizedVolume
+                self.lowpassVolume = filtered
+                self.updateSmoothedVolume(newVolume: normalizedVolume)
+            }
+
+            return noErr
         }
-        
-        // Further fourier transform frequency band analysis
-        guard let channelData = buffer.floatChannelData?[0] else { return }
-        
+
+        if let sinkNode = sinkNode {
+            audioEngine.attach(sinkNode)
+            audioEngine.connect(inputNode, to: sinkNode, format: format)
+        }
     }
-    
+
+    private func updateSmoothedVolume(newVolume: Float) {
+        recentVolumes.append(newVolume)
+        if recentVolumes.count > smoothingSampleCount {
+            recentVolumes.removeFirst()
+        }
+        let total = recentVolumes.reduce(0, +)
+        smoothedVolume = total / Float(recentVolumes.count)
+    }
+
     func startMonitoring() {
         do {
-            try print("Starting monitoring audio engine")
-            try audioEngine?.start()
+            try audioEngine.start()
         } catch {
             print("Error starting audio engine: \(error)")
         }
-        
-        print("Started monitoring audio engine")
     }
-    
-    func stopMonitoring() {
-        audioEngine?.stop()
-        inputNode?.removeTap(onBus: 0)
-    }
-    
 
+    func stopMonitoring() {
+        audioEngine.stop()
+    }
 }

@@ -19,6 +19,17 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     @Published var changedInputs: Set<String> = []
     @Published var cachedGeometries: [GeometryWrapped] = []
     @Published var audioSignal: Float = 0.0
+    @Published var audioSignalRaw: Float = 0.0
+    @Published var audioSignalProcessed: Double = 0.0
+    
+    @Published var audioSignalLowpassRaw: Double = 0.0
+    @Published var audioSignalLowpassSmoothed: Double = 0.0
+    @Published var audioSignalLowpassProcessed: Double = 0.0
+    
+    
+    @Published var historyData: [AudioDataPoint] = []
+    
+    private let maxAudioHistoryDuration: TimeInterval = 30.0
     
     init(name: String, inputs: [SceneInput], geometryGenerators: [any GeometryGenerator]) {
         self.name = name
@@ -48,7 +59,7 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
 
         let inputDict: [String: Any] = Dictionary(uniqueKeysWithValues: inputs.map { input in
             if input.type == .float {
-                return (input.name, input.combinedValueAsFloat(audioSignal: audioSignal))
+                return (input.name, input.combinedValueAsFloat(audioSignal: Float(audioSignalProcessed)))
             } else {
                 return (input.name, input.value)
             }
@@ -87,6 +98,19 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         if !changedInputNames.isEmpty {
             setChangedInputs(names: changedInputNames) // New batched method
         }
+        
+        
+        let currentTime = Date().timeIntervalSince1970
+        let dataPoint = AudioDataPoint(
+            timestamp: currentTime,
+            rawVolume: Double(self.audioSignalRaw),
+            smoothedVolume: Double(self.audioSignal),
+            processedVolume: Double(self.audioSignalProcessed)
+        )
+        self.historyData.append(dataPoint)
+        
+        let cutoffTime = currentTime - self.maxAudioHistoryDuration
+        self.historyData.removeAll { $0.timestamp < cutoffTime }
     }
     
     func setChangedInputs(names: [String]) {

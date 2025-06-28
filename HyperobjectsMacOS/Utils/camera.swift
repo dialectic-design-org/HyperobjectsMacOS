@@ -24,6 +24,16 @@ func matrix_rotation(angle: Float, axis: SIMD3<Float>) -> matrix_float4x4 {
     )
 }
 
+func matrix_translation(translation: SIMD3<Float>) -> matrix_float4x4 {
+    return matrix_float4x4(
+        SIMD4<Float>(1, 0, 0, 0),
+        SIMD4<Float>(0, 1, 0, 0),
+        SIMD4<Float>(0, 0, 1, 0),
+        SIMD4<Float>(translation.x, translation.y, translation.z, 1)
+    )
+}
+
+
 func matrix_lookAt(eye: SIMD3<Float>, target: SIMD3<Float>, up: SIMD3<Float>) -> matrix_float4x4 {
     let zAxis = normalize(target - eye)
     let xAxis = normalize(cross(up, zAxis))

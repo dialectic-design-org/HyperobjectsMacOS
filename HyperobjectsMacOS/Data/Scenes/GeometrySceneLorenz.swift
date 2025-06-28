@@ -24,9 +24,26 @@ func generateGeometrySceneLorenz() -> GeometriesSceneBase {
                        audioAmplificationAddition: 0.0,
                        audioAmplificationAdditionRange: 0.0...0.1),
             
+            
+            SceneInput(name: "Translation X", type: .float, value: 0.0, range: -10...10),
+            SceneInput(name: "Translation Y", type: .float, value: 0.0, range: -10...10),
+            SceneInput(name: "Translation Z", type: .float, value: 0.0, range: -10...10),
+            
             SceneInput(name: "Rotation X", type: .float, value: 0.0, range: 0...2 * .pi),
             SceneInput(name: "Rotation Y", type: .float, value: 0.0, range: 0...2 * .pi),
-            SceneInput(name: "Rotation Z", type: .float, value: 0.0, range: 0...2 * .pi)
+            SceneInput(name: "Rotation Z", type: .float, value: 0.0, range: 0...2 * .pi),
+            
+            SceneInput(name:"Stateful Rotation X", type: .statefulFloat,
+                       tickValueAdjustmentRange: 0.0...0.1,
+                       tickValueAudioAdjustmentRange: 0.0...0.1),
+            SceneInput(name:"Stateful Rotation Y", type: .statefulFloat,
+                       tickValueAdjustmentRange: 0.0...0.1,
+                       tickValueAudioAdjustmentRange: 0.0...0.1),
+            SceneInput(name:"Stateful Rotation Z", type: .statefulFloat,
+                       tickValueAdjustmentRange: 0.0...0.1,
+                       tickValueAudioAdjustmentRange: 0.0...0.1)
+            
+            
         ],
         geometryGenerators: [
             LorenzGenerator()

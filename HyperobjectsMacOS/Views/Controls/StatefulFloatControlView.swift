@@ -32,6 +32,9 @@ struct StatefulFloatControlView: View {
                 .onChange(of: tickValueAudioAdjustmentOffset) { oldValue, newValue in
                     input.tickValueAudioAdjustmentOffset = newValue
                 }
+            Button("Reset offset to 0") {
+                input.tickValueAudioAdjustmentOffset = 0
+            }
         }
     }
 }
