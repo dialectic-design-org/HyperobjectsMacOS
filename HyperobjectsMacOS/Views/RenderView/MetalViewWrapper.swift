@@ -13,7 +13,7 @@ class MetalViewWrapper: NSObject {
     let metalLayer: CAMetalLayer
     let displayLink: CAMetalDisplayLink?
     var displayLinkDelegate: MetalDisplayLinkDelegateHandler?
-    var preferredFPS: Float = 120
+    var preferredFPS: Float = 240
     
     init(metalView: MTKView, renderer: MetalRenderer) {
         self.metalView = metalView

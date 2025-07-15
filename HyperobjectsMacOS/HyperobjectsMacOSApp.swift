@@ -16,7 +16,9 @@ struct HyperobjectsMacOSApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(sceneManager.currentScene)
+                .environmentObject(renderConfigurations)
                 .onAppear {
+                    print("Main content view onappear")
                     sceneManager.currentScene.setWrappedGeometries()
                 }
         }
@@ -27,6 +29,7 @@ struct HyperobjectsMacOSApp: App {
         
         Window("\(secondaryRenderWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: secondaryRenderWindowConfig.id) {
             secondaryRenderWindowConfig.content.environmentObject(sceneManager.currentScene)
+                                               .environmentObject(renderConfigurations)
         }
         
         Window("\(sceneInputsWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: sceneInputsWindowConfig.id) {

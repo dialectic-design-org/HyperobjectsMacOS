@@ -26,15 +26,29 @@ func identity_matrix_float4x4() -> matrix_float4x4 {
     )
 }
 
+private let BIN_POW: UInt32 = 4
+private let BIN_SIZE: UInt32 = 1 << BIN_POW
+private let lineCount: UInt32 = 1000
+
 
 class MetalRenderer {
     let device: MTLDevice
     let commandQueue: MTLCommandQueue
+    var transformPSO: MTLComputePipelineState?
+    var renderPSO: MTLComputePipelineState?
     var renderPipelineState: MTLRenderPipelineState?
+    var computeToRenderPipelineState: MTLRenderPipelineState?
     var currentScene: GeometriesSceneBase?
+    var renderConfigs: RenderConfigurations?
     var vertexBuffer: MTLBuffer?
     var indexBuffer: MTLBuffer?
     var uniformBuffer: MTLBuffer?
+    var lineRenderTexture: MTLTexture!
+    
+    private var linesBuffer: MTLBuffer!
+    private var binCounts: MTLBuffer!
+    private var binOffsets: MTLBuffer!
+    private var binList: MTLBuffer!
     
     var rotation: Float = 0.0
     var drawCounter: Int = 0
@@ -42,9 +56,10 @@ class MetalRenderer {
     // Reference to the state
     weak var rendererState: RendererState?
     
-    init?(rendererState: RendererState, currentScene: GeometriesSceneBase) {
+    init?(rendererState: RendererState, currentScene: GeometriesSceneBase, renderConfigs: RenderConfigurations) {
         self.rendererState = rendererState
         self.currentScene = currentScene
+        self.renderConfigs = renderConfigs
         guard let device = MTLCreateSystemDefaultDevice() else {
             print("Metal is not supported on this device")
             return nil
@@ -100,9 +115,37 @@ class MetalRenderer {
             viewMatrix: identity_matrix_float4x4(),
             rotationAngle: 0.0
         )] // Initial rotation angle
+        
         uniformBuffer = device.makeBuffer(bytes: uniforms,
                                          length: MemoryLayout<VertexUniforms>.size,
                                          options: .storageModeShared)
+        
+        let maxViewSize = 4096
+        let binCols = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
+        let binRows = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
+        let totalBins = binCols * binRows
+        
+        
+        linesBuffer = device.makeBuffer(length: MemoryLayout<Shader_Line>.stride * Int(lineCount), options: .storageModeShared)!
+        binCounts = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
+        binOffsets = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
+        binList = device.makeBuffer(length: MemoryLayout<UInt32>.stride * Int(lineCount) * totalBins, options: .storageModeShared)!
+        
+        let linesPtr = linesBuffer.contents().bindMemory(to: Shader_Line.self, capacity: Int(lineCount))
+        
+        linesPtr[0] = Shader_Line(
+            p0_world: SIMD3<Float>(-1.0, 0.0, 0.0),
+            p1_world: SIMD3<Float>(1.0, 0.0, 0.0),
+            p0_screen: SIMD2<Float>(0.0, 0.0),
+            p1_screen: SIMD2<Float>(0.0, 0.0),
+            halfWidth0: 1.0,
+            halfWidth1: 1.0,
+            antiAlias: 0.01,
+            depth: 0.0,
+            _pad0: 0.0,
+            colorPremul0: SIMD4<Float>(repeating: 1.0),
+            colorPremul1: SIMD4<Float>(repeating: 1.0)
+        )
     }
     
     func createRenderPipelineState() {
@@ -142,15 +185,62 @@ class MetalRenderer {
         pipelineDescriptor.vertexDescriptor = vertexDescriptor
         pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
         
+        
+        
+        // Create compute to render pipeline state
+        guard let computeVertexFunction = library?.makeFunction(name: "compute_vertex"),
+              let computeFragmentFunction = library?.makeFunction(name: "compute_fragment") else {
+            print("Failed to create shader functions")
+            return
+        }
+        
+        let computeRenderPipelineDescriptor = MTLRenderPipelineDescriptor()
+        computeRenderPipelineDescriptor.vertexFunction = computeVertexFunction
+        computeRenderPipelineDescriptor.fragmentFunction = computeFragmentFunction
+        // computeRenderPipelineDescriptor.vertexDescriptor = vertexDescriptor
+        computeRenderPipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        
+        
         do {
             renderPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         } catch {
             print("Error creating render pipeline state: \(error)")
         }
+        
+        do {
+            computeToRenderPipelineState = try device.makeRenderPipelineState(descriptor: computeRenderPipelineDescriptor)
+        } catch {
+            print("Error creating render pipeline state: \(error)")
+        }
+        
+        do {
+            self.transformPSO = try device.makeComputePipelineState(function: library!.makeFunction(name: "transformAndBin")!)
+        } catch {
+            fatalError("Failed to create transformAndBin pipeline state: \(error)")
+        }
+        do {
+            self.renderPSO = try device.makeComputePipelineState(function: library!.makeFunction(name: "drawLines")!)
+        } catch {
+            fatalError("Failed to create drawLines pipeline state: \(error)")
+        }
+        
+    }
+    
+    func createLineRenderTexture(width: Int, height: Int) {
+        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        textureDescriptor.usage = [.shaderWrite, .shaderRead, .renderTarget]
+        textureDescriptor.storageMode = .private
+        lineRenderTexture = device.makeTexture(descriptor: textureDescriptor)
     }
     
     func render(drawable: CAMetalDrawable) {
         guard let renderPipelineState = renderPipelineState,
+              let computeToRenderPipelineState = computeToRenderPipelineState,
               let vertexBuffer = vertexBuffer,
               let indexBuffer = indexBuffer,
               let uniformBuffer = uniformBuffer,
@@ -158,11 +248,197 @@ class MetalRenderer {
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
         
+        var testPoints: [SIMD3<Float>] = [
+            SIMD3<Float>(-1.0, -1.0, 0.0),  // Bottom left
+            SIMD3<Float>(1.0, -1.0, 0.0),   // Bottom right
+            SIMD3<Float>(-1.0, 1.0, 0.0),   // Top left
+            SIMD3<Float>(1.0, 1.0, 0.0),    // Top Right
+            SIMD3<Float>(0.0, 1.0, 0.0),    // Top center
+            SIMD3<Float>(0.0, 0.0, 0.0),    // Center
+        ]
+        
+        testPoints = []
+        
+        let linesPtr = linesBuffer.contents().bindMemory(to: Shader_Line.self, capacity: Int(lineCount))
+        // Wipe all lines in the buffer so new ones can be set.
+        let byteCount = linesBuffer.length
+        memset(linesBuffer.contents(), 0, byteCount)
+        
+        var gIndex: Int = 0
+        
+        var geometriesTime: Float = 0.0
+        for gWrapped in scene.cachedGeometries {
+            let geometry = gWrapped.geometry
+            geometriesTime = Float(gIndex) / Float(scene.cachedGeometries.count)
+            switch geometry.type {
+            case .line:
+                var scalingFactor:Float = 1.0;
+                var line = geometry.getPoints()
+                testPoints.append(line[0] * scalingFactor)
+                testPoints.append(line[1] * scalingFactor)
+                
+                let color = SIMD4<Float>(0.0, 1.0 - geometriesTime, geometriesTime, 1.0)
+                linesPtr[gIndex] = Shader_Line(
+                    p0_world: line[0],
+                    p1_world: line[1],
+                    p0_screen: SIMD2<Float>(0.0, 0.0),
+                    p1_screen: SIMD2<Float>(0.0, 0.0),
+                    halfWidth0: 10.0,
+                    halfWidth1: 10.0,
+                    antiAlias: 10.0,
+                    depth: 0.0,
+                    _pad0: 0.0,
+                    colorPremul0: color,
+                    colorPremul1: color
+                )
+            default:
+                let notImplementedError = "Not implemented yet"
+            }
+            gIndex += 1
+        }
+        
+        
+        
+        
+        
+        
+        let viewW = Int(drawable.texture.width)
+        let viewH = Int(drawable.texture.height)
+        createLineRenderTexture(width: viewW, height: viewH)
+        
+        
+        // Clear binning data
+        let binCols = (viewW + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
+        let binRows = (viewH + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
+        let totalBins = binCols * binRows
+        
+        let maxViewSize = 4096
+        let maxBinCols = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
+        let maxBinRows = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
+        let maxTotalBins = maxBinCols * maxBinRows
+        
+        if totalBins > maxTotalBins {
+            print("ERROR: totalBins (\(totalBins)) exceeds maxTotalBins (\(maxTotalBins))")
+            print("View size: \(viewW)x\(viewH), Bin grid: \(binCols)x\(binRows)")
+        }
+        
+        let binCountsPtr = binCounts.contents().bindMemory(to: UInt32.self, capacity: totalBins)
+        let binOffsetsPtr = binOffsets.contents().bindMemory(to: UInt32.self, capacity: totalBins)
+        var offset: UInt32 = 0
+        for i in 0..<totalBins {
+            binCountsPtr[i] = 0
+            binOffsetsPtr[i] = offset
+            offset += lineCount // Each bin can potentially hold all lines
+        }
+        
+        var transformUniforms: TransformUniforms = TransformUniforms(
+            viewWidth: Int32(viewW), viewHeight: Int32(viewH)
+        )
+        
+        // Create MVP matrix (identity for this example)
+        var MVP = matrix_identity_float4x4
+            
+        let viewWidth = drawable.texture.width
+        let viewHeight = drawable.texture.height
+        let aspectRatio:Float = Float(drawable.texture.width) / Float(drawable.texture.height)
+        
+        let fieldOfView = Float.pi / 3
+        let nearClippingPlane: Float = 0.1
+        let farCplippingPlane: Float = 100.0
+        
+        let perspectiveMatrix = matrix_perspective(fovY: fieldOfView, aspect: aspectRatio, nearZ: nearClippingPlane, farZ: farCplippingPlane)
+        // 1. Define the camera's properties
+        
+        let time = CACurrentMediaTime()
+        var transitionFactor = Float(0.5 + 0.5 * sin(time))
+        transitionFactor = 1.0
+        
+        let cameraPosition = simd_float3(x: 0.0, y: 0.0, z: 5.0)
+        let targetPosition = simd_float3(x: 0.0, y: 0.0, z: 0.0) // Look at the object
+        let upDirection = simd_float3(x: 0.0, y: 1.0, z: 0.0) // World's "up" is Y
+
+        // 2. Create the view matrix
+        let viewMatrix = matrix_lookAt(eye: cameraPosition, target: targetPosition, up: upDirection)
+        
+        let focalDistance: Float = 1.0
+        let orthoHeight: Float = 2.0 // * focalDistance * tan((Float.pi / 3) / 2.0)
+        let orthoWidth = orthoHeight * aspectRatio
+        
+        let orthographicMatrix = matrix_orthographic(left: -orthoWidth / 2.0,
+                                                  right: orthoWidth / 2.0,
+                                                  bottom: -orthoHeight / 2.0,
+                                                  top: orthoHeight / 2.0,
+                                                  nearZ: 0.1,
+                                                  farZ: 100.0)
+        
+        let projectionMatrix = (1.0 - transitionFactor) * orthographicMatrix + transitionFactor * perspectiveMatrix
+        
+        MVP = projectionMatrix * viewMatrix
+        
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.texture
-        renderPassDescriptor.colorAttachments[0].loadAction = .clear
-        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.01, alpha: 1.0)
+        renderPassDescriptor.colorAttachments[0].loadAction = .load
+        renderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
         renderPassDescriptor.colorAttachments[0].storeAction = .store
+        
+        
+        let renderSDFLines = renderConfigs?.renderSDFLines ?? false
+        
+        if renderSDFLines {
+            if let transformEncoder = commandBuffer.makeComputeCommandEncoder() {
+                transformEncoder.setComputePipelineState(transformPSO!)
+                transformEncoder.setBuffer(linesBuffer,      offset:0, index:0)
+                transformEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
+                transformEncoder.setBytes(&transformUniforms,      length:MemoryLayout<TransformUniforms>.stride, index:2)
+                transformEncoder.setBuffer(binCounts,     offset:0, index:3)
+                transformEncoder.setBuffer(binOffsets,    offset:0, index:4)
+                transformEncoder.setBuffer(binList,       offset:0, index:5)
+                let tg = MTLSize(width: transformPSO!.threadExecutionWidth,
+                                 height: 1,
+                                 depth: 1)
+                transformEncoder.dispatchThreads(MTLSize(width: Int(lineCount), height: 1, depth: 1),
+                                                 threadsPerThreadgroup: tg)
+                transformEncoder.endEncoding()          // ← guarantees completion before the next encoder
+            }
+            
+            if let drawLinesEncoder = commandBuffer.makeComputeCommandEncoder() {
+                drawLinesEncoder.setComputePipelineState(renderPSO!)
+                drawLinesEncoder.setTexture(lineRenderTexture, index: 0)
+                drawLinesEncoder.setBuffer(linesBuffer,      offset:0, index:0)
+                drawLinesEncoder.setBuffer(binCounts,     offset:0, index:1)
+                drawLinesEncoder.setBuffer(binOffsets,    offset:0, index:2)
+                drawLinesEncoder.setBuffer(binList,       offset:0, index:3)
+                drawLinesEncoder.setBytes(&transformUniforms,      length:MemoryLayout<TransformUniforms>.stride, index:4)
+                
+                let w  = renderPSO!.threadExecutionWidth
+                let h  = renderPSO!.maxTotalThreadsPerThreadgroup / w
+                let tg2 = MTLSize(width: w, height: h, depth: 1)
+                drawLinesEncoder.dispatchThreads(MTLSize(width: viewW, height: viewH, depth: 1),
+                                                 threadsPerThreadgroup: tg2)
+                drawLinesEncoder.endEncoding()
+            }
+        }
+        
+        
+        
+        // FURTHER RENDER PASS
+        let computeToRenderRenderPassDescriptor = MTLRenderPassDescriptor()
+        computeToRenderRenderPassDescriptor.colorAttachments[0].texture = drawable.texture
+        computeToRenderRenderPassDescriptor.colorAttachments[0].loadAction = .clear
+        computeToRenderRenderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
+        // computeToRenderRenderPassDescriptor.colorAttachments[0].storeAction = .store
+        
+        guard let computeToRenderRenderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: computeToRenderRenderPassDescriptor) else { return }
+        
+        computeToRenderRenderEncoder.setRenderPipelineState(computeToRenderPipelineState)
+        computeToRenderRenderEncoder.setFragmentTexture(lineRenderTexture, index: 0)
+        
+        computeToRenderRenderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+
+        
+        computeToRenderRenderEncoder.endEncoding()
+        
+        
         
         guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
         
@@ -184,29 +460,7 @@ class MetalRenderer {
             rotationAngle: rotation
         )]
         
-        var testPoints: [SIMD3<Float>] = [
-            SIMD3<Float>(-1.0, -1.0, 0.0),  // Bottom left
-            SIMD3<Float>(1.0, -1.0, 0.0),   // Bottom right
-            SIMD3<Float>(-1.0, 1.0, 0.0),   // Top left
-            SIMD3<Float>(1.0, 1.0, 0.0),    // Top Right
-            SIMD3<Float>(0.0, 1.0, 0.0),    // Top center
-            SIMD3<Float>(0.0, 0.0, 0.0),    // Center
-        ]
         
-        testPoints = []
-        
-        for gWrapped in scene.cachedGeometries {
-            let geometry = gWrapped.geometry
-            switch geometry.type {
-            case .line:
-                var scalingFactor:Float = 1.0;
-                var line = geometry.getPoints()
-                testPoints.append(line[0] * scalingFactor)
-                testPoints.append(line[1] * scalingFactor)
-            default:
-                let notImplementedError = "Not implemented yet"
-            }
-        }
         
         let applyRotationEffect = false
         
@@ -224,7 +478,8 @@ class MetalRenderer {
         let rescaleToAspectRatio:Bool = true
         
         if rescaleToAspectRatio {
-            let aspectRatio:Float = Float(drawable.texture.width) / Float(drawable.texture.height)
+            
+            print(aspectRatio)
             for (index, point) in testPoints.enumerated() {
                 testPoints[index].x /= aspectRatio
                 
@@ -246,19 +501,30 @@ class MetalRenderer {
         renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
         
         renderEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
-        
+//        
 //        renderEncoder.drawIndexedPrimitives(type: .triangle,
 //                                           indexCount: 3,
 //                                           indexType: .uint16,
 //                                           indexBuffer: indexBuffer,
 //                                           indexBufferOffset: 0)
         
-        renderEncoder.drawPrimitives(type: .point,
-                                     vertexStart: 0,
-                                     vertexCount: testPoints.count)
-        renderEncoder.drawPrimitives(type: .line,
-                                     vertexStart: 0,
-                                     vertexCount: testPoints.count)
+        
+        
+        let renderPoints = renderConfigs?.renderPoints ?? false
+        if renderPoints {
+            renderEncoder.drawPrimitives(type: .point,
+                                         vertexStart: 0,
+                                         vertexCount: testPoints.count)
+        }
+        
+        let renderLinesOverlay = renderConfigs?.renderLinesOverlay ?? false
+        
+        if renderLinesOverlay {
+            renderEncoder.drawPrimitives(type: .line,
+                                         vertexStart: 0,
+                                         vertexCount: testPoints.count)
+        }
+        
         // renderEncoder.drawPrimitives(type: .lineStrip, vertexStart: 0, vertexCount: testPoints.count)
 
         

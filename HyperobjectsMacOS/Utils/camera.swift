@@ -62,3 +62,22 @@ func matrix_perspective(fovY: Float, aspect: Float, nearZ: Float, farZ: Float) -
         SIMD4<Float>(0, 0, wzScale, 0)
     )
 }
+
+func matrix_orthographic(left: Float, right: Float, bottom: Float, top: Float, nearZ: Float, farZ: Float) -> simd_float4x4 {
+    let sx = 2.0 / (right - left)
+    let sy = 2.0 / (top - bottom)
+    let sz = -2.0 / (farZ - nearZ)
+    
+    let tx = -(right + left) / (right - left)
+    let ty = -(top + bottom) / (top - bottom)
+    let tz = -(farZ + nearZ) / (farZ - nearZ)
+    
+    return simd_float4x4(
+        columns: (
+            simd_float4(sx, 0, 0, 0),
+            simd_float4(0, sy, 0, 0),
+            simd_float4(0, 0, sz, 0),
+            simd_float4(tx, ty, tz, 1)
+        )
+    )
+}

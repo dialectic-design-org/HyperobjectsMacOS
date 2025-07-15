@@ -12,11 +12,26 @@ struct RenderConfigurationsView: View {
     @EnvironmentObject var renderConfigurations: RenderConfigurations
     
     var body: some View {
-        VStack {
+        VStack(alignment: .leading) {
             Text("Render Configurations view")
             Toggle(
                 "Render Points",
                 isOn: $renderConfigurations.renderPoints
+            )
+            
+            Toggle(
+                "Render SDF Lines",
+                isOn: $renderConfigurations.renderSDFLines
+            )
+            
+            Toggle(
+                "Render Lines Overlay",
+                isOn: $renderConfigurations.renderLinesOverlay
+            )
+            
+            Toggle(
+                "Show overlay",
+                isOn: $renderConfigurations.showOverlay
             )
         }
     }

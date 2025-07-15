@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
+    @EnvironmentObject var renderConfigs: RenderConfigurations
     @Environment(\.openWindow) private var openWindow
     var body: some View {
         VStack {

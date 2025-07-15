@@ -15,8 +15,11 @@ class RenderConfigurations: ObservableObject {
     @Published var freeCameraControl: Bool = false
     
     @Published var renderPoints: Bool = false
-    @Published var renderLines: Bool = true
     
+    @Published var renderSDFLines: Bool = true
     
+    @Published var renderLinesOverlay: Bool = true
+    
+    @Published var showOverlay: Bool = true
 }
 

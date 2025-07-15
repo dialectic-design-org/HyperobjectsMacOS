@@ -9,6 +9,7 @@ import SwiftUI
 
 struct RenderView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
+    @EnvironmentObject var renderConfigs: RenderConfigurations
     @StateObject private var rendererState = RendererState()
     @State private var resolutionMode: ResolutionMode = .fixed
     @State private var resolution: CGSize = CGSize(width: 1000, height: 1000) // Default resolution
@@ -22,32 +23,33 @@ struct RenderView: View {
                 resolutionMode: $resolutionMode,
                 resolution: $resolution
             ).frame(minWidth: 300, minHeight: 300)
-
-            VStack(alignment: .leading) {
-                Text("RENDER VIEW").fontWeight(.bold)
-                HStack {
-                    Text("Current scene:")
-                    Text("\(currentScene.name)").fontWeight(.bold)
-                }
-                Text("geometries count: \(geometries.count)")
-                
-                Picker("Resolution mode", selection: $resolutionMode) {
-                    Text("Fixed").tag(ResolutionMode.fixed)
-                    Text("Dynamic").tag(ResolutionMode.dynamic)
-                }.pickerStyle(SegmentedPickerStyle()).fixedSize()
-                
-                Picker("Resolution", selection: $resolution) {
-                    Text("1000 x 1000").tag(CGSize(width: 1000, height: 1000))
-                    Text("2000 x 2000").tag(CGSize(width: 2000, height: 2000))
-                    Text("1920 x 1080").tag(CGSize(width: 1920, height: 1080))
-                }.pickerStyle(SegmentedPickerStyle()).fixedSize()
-                
-                
-                FrameMetricsView(
-                    timingManager: rendererState.frameTimingManager
-                )
-                
-            }.padding(8)
+            if renderConfigs.showOverlay {
+                VStack(alignment: .leading) {
+                    Text("RENDER VIEW").fontWeight(.bold)
+                    HStack {
+                        Text("Current scene:")
+                        Text("\(currentScene.name)").fontWeight(.bold)
+                    }
+                    Text("geometries count: \(geometries.count)")
+                    
+                    Picker("Resolution mode", selection: $resolutionMode) {
+                        Text("Fixed").tag(ResolutionMode.fixed)
+                        Text("Dynamic").tag(ResolutionMode.dynamic)
+                    }.pickerStyle(SegmentedPickerStyle()).fixedSize()
+                    
+                    Picker("Resolution", selection: $resolution) {
+                        Text("1000 x 1000").tag(CGSize(width: 1000, height: 1000))
+                        Text("2000 x 2000").tag(CGSize(width: 2000, height: 2000))
+                        Text("1920 x 1080").tag(CGSize(width: 1920, height: 1080))
+                    }.pickerStyle(SegmentedPickerStyle()).fixedSize()
+                    
+                    
+                    FrameMetricsView(
+                        timingManager: rendererState.frameTimingManager
+                    )
+                    
+                }.padding(8)
+            }
         }.font(myFont)
     }
 }

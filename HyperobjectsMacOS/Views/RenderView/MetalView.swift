@@ -12,13 +12,17 @@ import MetalKit
 struct MetalView: NSViewRepresentable {
     @ObservedObject var rendererState: RendererState
     @EnvironmentObject var currentScene: GeometriesSceneBase
+    @EnvironmentObject var renderConfigs: RenderConfigurations
     @Binding var resolutionMode: ResolutionMode
     @Binding var resolution: CGSize // Bind the resolution to a parent view
     
     func makeNSView(context: Context) -> MTKView {
         let view = MTKView()
         
-        guard let renderer = MetalRenderer(rendererState: rendererState, currentScene: currentScene) else {
+        guard let renderer = MetalRenderer(
+            rendererState: rendererState,
+            currentScene: currentScene,
+            renderConfigs: renderConfigs) else {
             fatalError("Failed to create Metal renderer")
         }
         
