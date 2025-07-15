@@ -31,6 +31,9 @@ struct Shader_Line {
     float antiAlias;
     float depth;
     
+    float p0_depth;
+    float p1_depth;
+    
     float _pad0;
     vector_float4 colorPremul0;
     vector_float4 colorPremul1;
@@ -40,6 +43,7 @@ struct Shader_Line {
 struct TransformUniforms {
     int viewWidth;
     int viewHeight;
+    vector_float3 cameraPosition;
 };
 
 #endif /* definitions_h */

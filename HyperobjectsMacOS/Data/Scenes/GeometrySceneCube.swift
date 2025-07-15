@@ -11,6 +11,8 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
     return GeometriesSceneBase(
         name: "Cube Scene",
         inputs: [
+            SceneInput(name: "LineWidth", type: .float, value: 1.0, range: 0.0...40.0),
+            
             SceneInput(name: "Size", type: .float, value: 0.5, range: 0.0...2.0),
             SceneInput(name: "Width", type: .float, value: 0.5, range: 0.0...3.0),
             SceneInput(name: "Height", type: .float, value: 0.5, range: 0.0...3.0),

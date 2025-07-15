@@ -43,6 +43,12 @@ kernel void transformAndBin(
     float4 p0_clip = MVP * float4(L.p0_world, 1);
     float4 p1_clip = MVP * float4(L.p1_world, 1);
     
+    // L.p0_depth = p0_clip.z / max(p0_clip.w, 1e-6);
+    // L.p1_depth = p1_clip.z / max(p1_clip.w, 1e-6);
+    
+    L.p0_depth = length(L.p0_world - U.cameraPosition);
+    L.p1_depth = length(L.p1_world - U.cameraPosition);
+    
     // 2. Perform the perspective divide to get NDC
     float2 p0 = p0_clip.xy / p0_clip.w;
     float2 p1 = p1_clip.xy / p1_clip.w;
@@ -54,6 +60,8 @@ kernel void transformAndBin(
     
     lines[gid].p0_screen = p0;
     lines[gid].p1_screen = p1;
+    lines[gid].p0_depth = L.p0_depth;
+    lines[gid].p1_depth = L.p1_depth;
     
     uint BIN_COLS = (viewSize.x + BIN_SIZE - 1) / BIN_SIZE;
     
@@ -90,69 +98,107 @@ kernel void drawLines(
     const uint  bin = (pix.y >> BIN_POW) * BIN_COLS + (pix.x >> BIN_POW);
     const uint  count = atomic_load_explicit(&binCounts[bin], memory_order_relaxed);
     const uint  base  = binOffsets[bin];
-    float3 rgb = 0.0;
-    float  a   = 0.0;
+    
     
     const uint MAX_LINES_PER_BIN = min(count, 32u);
     // const uint MAX_LINES_PER_BIN = count;
     
-    float minDepth = 1000.0;
-    float maxDepth = -1000.0;
+    constexpr uint MAX_PER_BIN = 32u;
     
-    for (uint i = 0; i < MAX_LINES_PER_BIN; ++i) {
-        float depth = lines[binList[base + i]].depth;
-        minDepth = min(minDepth, depth);
-        maxDepth = max(maxDepth, depth);
+    uint localIdx [MAX_PER_BIN];
+    float localZ [MAX_PER_BIN];
+    
+    for (uint i = 0; i < MAX_PER_BIN; ++i) {
+        localZ[i] = 1.0e9f;
+        localIdx[i] = 0;
     }
     
-    const uint NUM_SLICES = 4;
-    float depthStep = (maxDepth - minDepth) / float(NUM_SLICES);
-    
-    for (uint slice = 0; slice < NUM_SLICES && a < 0.98; ++slice) {
-        float sliceMaxDepth = maxDepth - depthStep * float(slice);
-        float sliceMinDepth = maxDepth - depthStep * float(slice + 1);
+    for (uint i = 0; i < count; ++i) {
+        const uint line_idx = binList[base + i];
+        const Shader_Line L = lines[line_idx];
         
-        for (uint i = 0; i < MAX_LINES_PER_BIN && a < 0.98; ++i) {
-            const Shader_Line L = lines[binList[base + i]];
-            
-            if (L.depth > sliceMaxDepth || L.depth < sliceMinDepth) {
-                continue;
+        // Calculate interpolated depth for the current pixel
+        float2 pa = p - L.p0_screen;
+        float2 ba = L.p1_screen - L.p0_screen;
+        float ba_len2 = dot(ba, ba);
+        float t = 0.0;
+        if (ba_len2 > 1e-8) {
+            t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
+        }
+        float depth = mix(L.p0_depth, L.p1_depth, t);
+        
+        // 3. If this line is closer than the farthest one in our list, insert it
+        if (depth < localZ[MAX_PER_BIN - 1]) {
+            uint j = MAX_PER_BIN - 1;
+            while (j > 0 && depth < localZ[j - 1]) {
+                localZ[j] = localZ[j-1];
+                localIdx[j] = localIdx[j-1];
+                --j;
             }
-            
-            float2 pa = p - L.p0_screen;
-            float2 ba = L.p1_screen - L.p0_screen;
-            
-            float ba_length_sq = dot(ba, ba);
-            
-            if (ba_length_sq < 1e-6) {
-                float d = length(pa);
-                float alpha = smoothstep(L.halfWidth0 + L.antiAlias, L.halfWidth0 - L.antiAlias, d);
-                float newA = alpha * L.colorPremul0.w * (1.0 - a);
-                rgb += L.colorPremul0.xyz * newA;
-                a += newA;
-                // rgb = float3(0.0, 1.0, 0.0);
-                // a = 1.0;
-                
-            } else {
-                float t = clamp(dot(pa, ba) / ba_length_sq, 0.0, 1.0);
-                
-                float halfWidth = mix(L.halfWidth0, L.halfWidth1, t);
-                float4 colorPremul = mix(L.colorPremul0, L.colorPremul1, t);
-                
-                // Calculate distance from pixel to line segment
-                float2 closest = L.p0_screen + ba * t;
-                float d = length(p - closest);
-                
-                float alpha = smoothstep(halfWidth + L.antiAlias, halfWidth - L.antiAlias, d);
-                float newA = alpha * colorPremul.w * (1.0 - a);
-                rgb += colorPremul.xyz * newA;
-                a += newA;
-                
+            localZ[j] = depth;
+            localIdx[j] = line_idx;
+        }
+    }
+    
+    // reverse localIdx
+
+    uint localCnt = 0;
+    while(localCnt < MAX_PER_BIN && localZ[localCnt] < 1.0e9f) {
+        localCnt++;
+    }
+    
+    float3 rgb = 0.0;
+    float  a   = 0.0;
+    float prevDepth = 1000000.0;
+    
+    for (uint i = 0; i < localCnt && a < 0.99; ++i) {
+        const Shader_Line L = lines[localIdx[i]];
+        
+        float2 pa = p - L.p0_screen;
+        float2 ba = L.p1_screen - L.p0_screen;
+        float ba_len2 = dot(ba, ba);
+        float t, d;
+        
+        if (ba_len2 < 1e-8) {
+            d = length(pa);
+            t = 0;
+        } else {
+            t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
+            float2 closest = L.p0_screen + ba * t;
+            d = length(p - closest);
+        }
+        
+        float depth = mix(L.p0_depth, L.p1_depth, t);
+        
+        
+        float halfWidth = mix(L.halfWidth0, L.halfWidth1, t);
+        float aa = max(L.antiAlias, 0.0);
+        float alphaEdge = smoothstep(halfWidth + aa, halfWidth - aa, d);
+        float4 color = mix(L.colorPremul0, L.colorPremul1, t);
+        
+        // The alpha of the current line fragment considering its geometry
+        float src_alpha = alphaEdge * color.w;
+        
+        // The accumulated alpha of everything drawn so far
+        float occlusion = 1.0 - a;
+        
+        if (alphaEdge > 0.001) {
+            if(depth < prevDepth) {
+                // rgb = float3(L.p0_depth, 0.1, 0.1);
+                rgb = color.xyz;
+                a = 1.0;
+                prevDepth = depth;
             }
         }
-        if (a > 0.98) break;
+        
+        
+        // Blend the new line on top
+//        rgb += color.xyz * alphaEdge * occlusion; // Correct: Apply only geometric alpha
+//        a   += src_alpha * occlusion;
     }
-    outTex.write(float4(rgb / max(a, 1e-4), a), pix);
+    a = clamp(a, 0.0, 1.0);
+    
+    outTex.write(float4(rgb, a), pix);
 }
 
 

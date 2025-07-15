@@ -15,7 +15,9 @@ class CubeGenerator: CachedGeometryGenerator {
     
     override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
         var lines: [Line] = []
-
+        
+        
+        let lineWidth = floatFromInputs(inputs, name: "LineWidth")
         let size = floatFromInputs(inputs, name: "Size")
         let width = floatFromInputs(inputs, name: "Width")
         let height = floatFromInputs(inputs, name: "Height")
@@ -142,6 +144,10 @@ class CubeGenerator: CachedGeometryGenerator {
         let rotationMatrixZ = matrix_rotation(angle: rotationZ + statefulRotationZ, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
         for i in 0..<lines.count {
             lines[i] = lines[i].applyMatrix(rotationMatrixZ)
+        }
+        
+        for i in 0..<lines.count {
+            lines[i].lineWidth = lineWidth
         }
         
         return lines

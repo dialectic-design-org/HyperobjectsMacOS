@@ -43,12 +43,16 @@ class MetalRenderer {
     var vertexBuffer: MTLBuffer?
     var indexBuffer: MTLBuffer?
     var uniformBuffer: MTLBuffer?
-    var lineRenderTexture: MTLTexture!
+    var lineRenderTextureA: MTLTexture!
+    var lineRenderTextureB: MTLTexture!
     
     private var linesBuffer: MTLBuffer!
     private var binCounts: MTLBuffer!
     private var binOffsets: MTLBuffer!
     private var binList: MTLBuffer!
+    
+    private var currentTextureWidth: Int = 0
+    private var currentTextureHeight: Int = 0
     
     var rotation: Float = 0.0
     var drawCounter: Int = 0
@@ -142,6 +146,8 @@ class MetalRenderer {
             halfWidth1: 1.0,
             antiAlias: 0.01,
             depth: 0.0,
+            p0_depth: 0.0,
+            p1_depth: 0.0,
             _pad0: 0.0,
             colorPremul0: SIMD4<Float>(repeating: 1.0),
             colorPremul1: SIMD4<Float>(repeating: 1.0)
@@ -227,15 +233,25 @@ class MetalRenderer {
     }
     
     func createLineRenderTexture(width: Int, height: Int) {
-        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+        let textureDescriptorA = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .bgra8Unorm,
             width: width,
             height: height,
             mipmapped: false
         )
-        textureDescriptor.usage = [.shaderWrite, .shaderRead, .renderTarget]
-        textureDescriptor.storageMode = .private
-        lineRenderTexture = device.makeTexture(descriptor: textureDescriptor)
+        textureDescriptorA.usage = [.shaderWrite, .shaderRead, .renderTarget]
+        textureDescriptorA.storageMode = .private
+        lineRenderTextureA = device.makeTexture(descriptor: textureDescriptorA)
+        
+        let textureDescriptorB = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        textureDescriptorB.usage = [.shaderWrite, .shaderRead, .renderTarget]
+        textureDescriptorB.storageMode = .private
+        lineRenderTextureB = device.makeTexture(descriptor: textureDescriptorB)
     }
     
     func render(drawable: CAMetalDrawable) {
@@ -248,16 +264,20 @@ class MetalRenderer {
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
         
-        var testPoints: [SIMD3<Float>] = [
-            SIMD3<Float>(-1.0, -1.0, 0.0),  // Bottom left
-            SIMD3<Float>(1.0, -1.0, 0.0),   // Bottom right
-            SIMD3<Float>(-1.0, 1.0, 0.0),   // Top left
-            SIMD3<Float>(1.0, 1.0, 0.0),    // Top Right
-            SIMD3<Float>(0.0, 1.0, 0.0),    // Top center
-            SIMD3<Float>(0.0, 0.0, 0.0),    // Center
-        ]
+        drawCounter += 1
         
-        testPoints = []
+        var writeTexture: MTLTexture?
+        var readTexture: MTLTexture?
+        
+        if drawCounter.isMultiple(of: 2) {
+            writeTexture = lineRenderTextureA
+            readTexture = lineRenderTextureB
+        } else {
+            writeTexture = lineRenderTextureB
+            readTexture = lineRenderTextureA
+        }
+        
+        var testPoints: [SIMD3<Float>] = []
         
         let linesPtr = linesBuffer.contents().bindMemory(to: Shader_Line.self, capacity: Int(lineCount))
         // Wipe all lines in the buffer so new ones can be set.
@@ -272,25 +292,30 @@ class MetalRenderer {
             geometriesTime = Float(gIndex) / Float(scene.cachedGeometries.count)
             switch geometry.type {
             case .line:
-                var scalingFactor:Float = 1.0;
-                var line = geometry.getPoints()
-                testPoints.append(line[0] * scalingFactor)
-                testPoints.append(line[1] * scalingFactor)
+                if let lineGeometry = geometry as? Line {
+                    var scalingFactor:Float = 1.0;
+                    var line = geometry.getPoints()
+                    testPoints.append(line[0] * scalingFactor)
+                    testPoints.append(line[1] * scalingFactor)
+                    
+                    let color = SIMD4<Float>(0.0, 1.0 - geometriesTime, geometriesTime, 1.0)
+                    linesPtr[gIndex] = Shader_Line(
+                        p0_world: line[0],
+                        p1_world: line[1],
+                        p0_screen: SIMD2<Float>(0.0, 0.0),
+                        p1_screen: SIMD2<Float>(0.0, 0.0),
+                        halfWidth0: lineGeometry.lineWidth,
+                        halfWidth1: lineGeometry.lineWidth,
+                        antiAlias: 0.707,
+                        depth: 0.0,
+                        p0_depth: 0.0,
+                        p1_depth: 0.0,
+                        _pad0: 0.0,
+                        colorPremul0: color,
+                        colorPremul1: color
+                    )
+                }
                 
-                let color = SIMD4<Float>(0.0, 1.0 - geometriesTime, geometriesTime, 1.0)
-                linesPtr[gIndex] = Shader_Line(
-                    p0_world: line[0],
-                    p1_world: line[1],
-                    p0_screen: SIMD2<Float>(0.0, 0.0),
-                    p1_screen: SIMD2<Float>(0.0, 0.0),
-                    halfWidth0: 10.0,
-                    halfWidth1: 10.0,
-                    antiAlias: 10.0,
-                    depth: 0.0,
-                    _pad0: 0.0,
-                    colorPremul0: color,
-                    colorPremul1: color
-                )
             default:
                 let notImplementedError = "Not implemented yet"
             }
@@ -304,8 +329,12 @@ class MetalRenderer {
         
         let viewW = Int(drawable.texture.width)
         let viewH = Int(drawable.texture.height)
-        createLineRenderTexture(width: viewW, height: viewH)
         
+        if viewW != currentTextureWidth || viewH != currentTextureHeight {
+            createLineRenderTexture(width: viewW, height: viewH)
+            currentTextureWidth = viewW
+            currentTextureHeight = viewH
+        }
         
         // Clear binning data
         let binCols = (viewW + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
@@ -331,9 +360,7 @@ class MetalRenderer {
             offset += lineCount // Each bin can potentially hold all lines
         }
         
-        var transformUniforms: TransformUniforms = TransformUniforms(
-            viewWidth: Int32(viewW), viewHeight: Int32(viewH)
-        )
+        
         
         // Create MVP matrix (identity for this example)
         var MVP = matrix_identity_float4x4
@@ -375,6 +402,12 @@ class MetalRenderer {
         
         MVP = projectionMatrix * viewMatrix
         
+        var transformUniforms: TransformUniforms = TransformUniforms(
+            viewWidth: Int32(viewW),
+            viewHeight: Int32(viewH),
+            cameraPosition: cameraPosition
+        )
+        
         let renderPassDescriptor = MTLRenderPassDescriptor()
         renderPassDescriptor.colorAttachments[0].texture = drawable.texture
         renderPassDescriptor.colorAttachments[0].loadAction = .load
@@ -403,7 +436,7 @@ class MetalRenderer {
             
             if let drawLinesEncoder = commandBuffer.makeComputeCommandEncoder() {
                 drawLinesEncoder.setComputePipelineState(renderPSO!)
-                drawLinesEncoder.setTexture(lineRenderTexture, index: 0)
+                drawLinesEncoder.setTexture(writeTexture, index: 0)
                 drawLinesEncoder.setBuffer(linesBuffer,      offset:0, index:0)
                 drawLinesEncoder.setBuffer(binCounts,     offset:0, index:1)
                 drawLinesEncoder.setBuffer(binOffsets,    offset:0, index:2)
@@ -420,7 +453,6 @@ class MetalRenderer {
         }
         
         
-        
         // FURTHER RENDER PASS
         let computeToRenderRenderPassDescriptor = MTLRenderPassDescriptor()
         computeToRenderRenderPassDescriptor.colorAttachments[0].texture = drawable.texture
@@ -431,7 +463,7 @@ class MetalRenderer {
         guard let computeToRenderRenderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: computeToRenderRenderPassDescriptor) else { return }
         
         computeToRenderRenderEncoder.setRenderPipelineState(computeToRenderPipelineState)
-        computeToRenderRenderEncoder.setFragmentTexture(lineRenderTexture, index: 0)
+        computeToRenderRenderEncoder.setFragmentTexture(readTexture, index: 0)
         
         computeToRenderRenderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
 
@@ -451,7 +483,7 @@ class MetalRenderer {
             rotation -= Float.pi * 2
         }
         
-        drawCounter += 1
+        
         
         // Update uniform buffer with new rotation
         var uniforms = [VertexUniforms(
@@ -478,11 +510,8 @@ class MetalRenderer {
         let rescaleToAspectRatio:Bool = true
         
         if rescaleToAspectRatio {
-            
-            print(aspectRatio)
             for (index, point) in testPoints.enumerated() {
                 testPoints[index].x /= aspectRatio
-                
             }
         }
         
@@ -531,5 +560,6 @@ class MetalRenderer {
         renderEncoder.endEncoding()
         commandBuffer.present(drawable)
         commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
     }
 }
