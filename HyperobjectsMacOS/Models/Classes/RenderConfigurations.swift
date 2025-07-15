@@ -18,8 +18,10 @@ class RenderConfigurations: ObservableObject {
     
     @Published var renderSDFLines: Bool = true
     
-    @Published var renderLinesOverlay: Bool = true
+    @Published var renderLinesOverlay: Bool = false
     
     @Published var showOverlay: Bool = true
+    
+    @Published var cameraDistance: Float = 5.0
 }
 

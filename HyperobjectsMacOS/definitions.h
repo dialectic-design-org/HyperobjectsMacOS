@@ -37,6 +37,11 @@ struct Shader_Line {
     float _pad0;
     vector_float4 colorPremul0;
     vector_float4 colorPremul1;
+    
+    float p0_inv_w;
+    float p1_inv_w;
+    float p0_depth_over_w;
+    float p1_depth_over_w;
 };
 
 

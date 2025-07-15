@@ -27,7 +27,7 @@ struct VertexOut {
 
 #define BIN_POW 4
 #define BIN_SIZE (1 << BIN_POW)
-#define lineCount 1000
+#define lineCount 10000
 
 kernel void transformAndBin(
                             device Shader_Line* lines [[buffer(0)]],
@@ -40,6 +40,13 @@ kernel void transformAndBin(
                             ) {
     if (gid >= lineCount) return;
     Shader_Line L = lines[gid];
+    
+    // Early culling: Skip degenerate lines where start and end are identical
+    if (distance(L.p0_world, L.p1_world) < 1e-8) {
+        return; // Don't add to any bins
+    }
+
+
     float4 p0_clip = MVP * float4(L.p0_world, 1);
     float4 p1_clip = MVP * float4(L.p1_world, 1);
     
@@ -50,6 +57,9 @@ kernel void transformAndBin(
     L.p1_depth = length(L.p1_world - U.cameraPosition);
     
     // 2. Perform the perspective divide to get NDC
+//    float w0 = max(1e-5, abs(p0_clip.w));
+//    float w1 = max(1e-5, abs(p1_clip.w));
+
     float2 p0 = p0_clip.xy / p0_clip.w;
     float2 p1 = p1_clip.xy / p1_clip.w;
     
@@ -57,6 +67,11 @@ kernel void transformAndBin(
     
     p0 = (p0 * 0.5 + 0.5) * viewSize;
     p1 = (p1 * 0.5 + 0.5) * viewSize;
+
+    lines[gid].p0_inv_w = 1.0 / p0_clip.w;
+    lines[gid].p1_inv_w = 1.0 / p1_clip.w;
+    lines[gid].p0_depth_over_w = L.p0_depth / p0_clip.w;
+    lines[gid].p1_depth_over_w = L.p1_depth / p1_clip.w;
     
     lines[gid].p0_screen = p0;
     lines[gid].p1_screen = p1;
@@ -64,18 +79,69 @@ kernel void transformAndBin(
     lines[gid].p1_depth = L.p1_depth;
     
     uint BIN_COLS = (viewSize.x + BIN_SIZE - 1) / BIN_SIZE;
-    
+        
     float2 mn = floor(min(p0, p1) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
     float2 mx = ceil (max(p0, p1) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
-    
+
     uint2 g0 = uint2(max(mn, 0.0));
     uint2 g1 = uint2(min(mx, viewSize - 1));
+
     for (uint y = g0.y >> BIN_POW; y <= g1.y >> BIN_POW; ++y)
     for (uint x = g0.x >> BIN_POW; x <= g1.x >> BIN_POW; ++x) {
-        uint bin = y * BIN_COLS + x;
-        uint  pos = atomic_fetch_add_explicit(&binCounts[bin], 1u,
-                                              memory_order_relaxed);
-        binList[binOffsets[bin] + pos] = gid;    }
+        // Calculate bin bounds (expand by line radius to account for thickness)
+        float lineRadius = max(L.halfWidth0, L.halfWidth1) + L.antiAlias;
+        float2 binMin = float2(x << BIN_POW, y << BIN_POW) - lineRadius;
+        float2 binMax = binMin + BIN_SIZE + 2.0 * lineRadius;
+        
+        // Line-rectangle intersection test
+        // Using parametric line equation: point = p0 + t * (p1 - p0)
+        float2 lineDir = p1 - p0;
+        float2 invDir = 1.0 / lineDir;
+        
+        // Calculate t values for intersection with bin edges
+        float2 t1 = (binMin - p0) * invDir;
+        float2 t2 = (binMax - p0) * invDir;
+        
+        // Handle division by zero (parallel lines)
+        if (abs(lineDir.x) < 1e-6) {
+            // Line is vertical - check if it's within bin's x range
+            if (p0.x >= binMin.x && p0.x <= binMax.x) {
+                t1.x = -1000.0; // Allow intersection
+                t2.x = 1000.0;
+            } else {
+                t1.x = 1000.0;  // No intersection
+                t2.x = -1000.0;
+            }
+        }
+        if (abs(lineDir.y) < 1e-6) {
+            // Line is horizontal - check if it's within bin's y range
+            if (p0.y >= binMin.y && p0.y <= binMax.y) {
+                t1.y = -1000.0; // Allow intersection
+                t2.y = 1000.0;
+            } else {
+                t1.y = 1000.0;  // No intersection
+                t2.y = -1000.0;
+            }
+        }
+        
+        // Ensure t1 <= t2
+        float2 tMin = min(t1, t2);
+        float2 tMax = max(t1, t2);
+        
+        // Find intersection interval
+        float tEnter = max(tMin.x, tMin.y);
+        float tExit = min(tMax.x, tMax.y);
+        
+        // Check if line segment intersects expanded bin
+        bool intersects = (tEnter <= tExit) && (tExit >= 0.0) && (tEnter <= 1.0);
+        
+        if (intersects) {
+            uint bin = y * BIN_COLS + x;
+            uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u,
+                                                memory_order_relaxed);
+            binList[binOffsets[bin] + pos] = gid;
+        }
+    }
 }
 
 
@@ -100,9 +166,6 @@ kernel void drawLines(
     const uint  base  = binOffsets[bin];
     
     
-    const uint MAX_LINES_PER_BIN = min(count, 32u);
-    // const uint MAX_LINES_PER_BIN = count;
-    
     constexpr uint MAX_PER_BIN = 32u;
     
     uint localIdx [MAX_PER_BIN];
@@ -125,7 +188,10 @@ kernel void drawLines(
         if (ba_len2 > 1e-8) {
             t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
         }
-        float depth = mix(L.p0_depth, L.p1_depth, t);
+        // float depth = mix(L.p0_depth, L.p1_depth, t);
+        float inv_w = mix(L.p0_inv_w, L.p1_inv_w, t);
+        float depth_over_w = mix(L.p0_depth_over_w, L.p1_depth_over_w, t);
+        float depth = depth_over_w / inv_w;
         
         // 3. If this line is closer than the farthest one in our list, insert it
         if (depth < localZ[MAX_PER_BIN - 1]) {
@@ -147,9 +213,20 @@ kernel void drawLines(
         localCnt++;
     }
     
+    
+    
+    
+    
+    
     float3 rgb = 0.0;
     float  a   = 0.0;
     float prevDepth = 1000000.0;
+    
+    
+    // Intermediary bin size debug step. TODO: Add as render configuration to show localCnt
+//    float debugIntensity = float(localCnt) / 32.0 * 2.0;
+//    rgb += float3(debugIntensity, debugIntensity, debugIntensity);
+//    a += debugIntensity;
     
     for (uint i = 0; i < localCnt && a < 0.99; ++i) {
         const Shader_Line L = lines[localIdx[i]];
@@ -192,13 +269,38 @@ kernel void drawLines(
         }
         
         
+        
         // Blend the new line on top
 //        rgb += color.xyz * alphaEdge * occlusion; // Correct: Apply only geometric alpha
 //        a   += src_alpha * occlusion;
     }
     a = clamp(a, 0.0, 1.0);
     
-    outTex.write(float4(rgb, a), pix);
+//    const float3 debugColor = float3((bin % 3 == 0), (bin % 3 == 1), (bin % 3 == 2));
+//    outTex.write(float4(debugColor, 1.0), pix);
+    
+    if (false) {
+        if (pix.x == U.viewWidth/2 && pix.y == U.viewHeight/2) {
+            // Center pixel - visualize bin data
+            outTex.write(float4(float(count) / 32.0, 0, 0, 1.0), pix);
+            return;
+        }
+    }
+
+//    if (pix.x == U.viewWidth/2 && pix.y == U.viewHeight/2) {
+//        // Center pixel - visualize bin data
+//        outTex.write(float4(float(count) / 32.0, 0, 0, 1.0), pix);
+//        return;
+//    }
+    
+    if (false) {
+        // Or color-code bins by their content count
+        float debugIntensity = float(count) / 32.0;
+        outTex.write(float4(debugIntensity, debugIntensity, debugIntensity, 1.0), pix);
+        return;
+    }
+    
+     outTex.write(float4(rgb, a), pix);
 }
 
 

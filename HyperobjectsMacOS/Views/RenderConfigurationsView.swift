@@ -11,6 +11,8 @@ struct RenderConfigurationsView: View {
     @EnvironmentObject var sceneManager: SceneManager
     @EnvironmentObject var renderConfigurations: RenderConfigurations
     
+    @State private var camDistance: Float = 5.0
+    
     var body: some View {
         VStack(alignment: .leading) {
             Text("Render Configurations view")
@@ -33,6 +35,8 @@ struct RenderConfigurationsView: View {
                 "Show overlay",
                 isOn: $renderConfigurations.showOverlay
             )
+            Text("Camera Distance")
+            Slider(value: $renderConfigurations.cameraDistance, in: 0...10.0)
         }
     }
 }

@@ -28,7 +28,7 @@ func identity_matrix_float4x4() -> matrix_float4x4 {
 
 private let BIN_POW: UInt32 = 4
 private let BIN_SIZE: UInt32 = 1 << BIN_POW
-private let lineCount: UInt32 = 1000
+private let lineCount: UInt32 = 10000
 
 
 class MetalRenderer {
@@ -137,21 +137,21 @@ class MetalRenderer {
         
         let linesPtr = linesBuffer.contents().bindMemory(to: Shader_Line.self, capacity: Int(lineCount))
         
-        linesPtr[0] = Shader_Line(
-            p0_world: SIMD3<Float>(-1.0, 0.0, 0.0),
-            p1_world: SIMD3<Float>(1.0, 0.0, 0.0),
-            p0_screen: SIMD2<Float>(0.0, 0.0),
-            p1_screen: SIMD2<Float>(0.0, 0.0),
-            halfWidth0: 1.0,
-            halfWidth1: 1.0,
-            antiAlias: 0.01,
-            depth: 0.0,
-            p0_depth: 0.0,
-            p1_depth: 0.0,
-            _pad0: 0.0,
-            colorPremul0: SIMD4<Float>(repeating: 1.0),
-            colorPremul1: SIMD4<Float>(repeating: 1.0)
-        )
+//        linesPtr[0] = Shader_Line(
+//            p0_world: SIMD3<Float>(-1.0, 0.0, 0.0),
+//            p1_world: SIMD3<Float>(1.0, 0.0, 0.0),
+//            p0_screen: SIMD2<Float>(0.0, 0.0),
+//            p1_screen: SIMD2<Float>(0.0, 0.0),
+//            halfWidth0: 1.0,
+//            halfWidth1: 1.0,
+//            antiAlias: 0.01,
+//            depth: 0.0,
+//            p0_depth: 0.0,
+//            p1_depth: 0.0,
+//            _pad0: 0.0,
+//            colorPremul0: SIMD4<Float>(repeating: 1.0),
+//            colorPremul1: SIMD4<Float>(repeating: 1.0)
+//        )
     }
     
     func createRenderPipelineState() {
@@ -302,8 +302,8 @@ class MetalRenderer {
                     linesPtr[gIndex] = Shader_Line(
                         p0_world: line[0],
                         p1_world: line[1],
-                        p0_screen: SIMD2<Float>(0.0, 0.0),
-                        p1_screen: SIMD2<Float>(0.0, 0.0),
+                        p0_screen: SIMD2<Float>(1000.0, 10000.0),
+                        p1_screen: SIMD2<Float>(10000.0, 10000.0),
                         halfWidth0: lineGeometry.lineWidth,
                         halfWidth1: lineGeometry.lineWidth,
                         antiAlias: 0.707,
@@ -311,8 +311,12 @@ class MetalRenderer {
                         p0_depth: 0.0,
                         p1_depth: 0.0,
                         _pad0: 0.0,
-                        colorPremul0: color,
-                        colorPremul1: color
+                        colorPremul0: lineGeometry.colorStart,
+                        colorPremul1: lineGeometry.colorEnd,
+                        p0_inv_w: 0.0,
+                        p1_inv_w: 0.0,
+                        p0_depth_over_w: 0.0,
+                        p1_depth_over_w: 0.0
                     )
                 }
                 
@@ -360,8 +364,6 @@ class MetalRenderer {
             offset += lineCount // Each bin can potentially hold all lines
         }
         
-        
-        
         // Create MVP matrix (identity for this example)
         var MVP = matrix_identity_float4x4
             
@@ -380,7 +382,9 @@ class MetalRenderer {
         var transitionFactor = Float(0.5 + 0.5 * sin(time))
         transitionFactor = 1.0
         
-        let cameraPosition = simd_float3(x: 0.0, y: 0.0, z: 5.0)
+        var cameraDistance = renderConfigs?.cameraDistance ?? 5.0
+        
+        let cameraPosition = simd_float3(x: 0.0, y: 0.0, z: cameraDistance)
         let targetPosition = simd_float3(x: 0.0, y: 0.0, z: 0.0) // Look at the object
         let upDirection = simd_float3(x: 0.0, y: 1.0, z: 0.0) // World's "up" is Y
 

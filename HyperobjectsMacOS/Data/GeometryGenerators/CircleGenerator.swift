@@ -16,7 +16,7 @@ class CircleGenerator: CachedGeometryGenerator {
     override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
         var lines: [Line] = []
         
-        let segmentsCount: Int = 16
+        let segmentsCount: Int = 128
         
         
         
