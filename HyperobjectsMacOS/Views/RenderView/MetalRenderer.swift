@@ -304,8 +304,8 @@ class MetalRenderer {
                         p1_world: line[1],
                         p0_screen: SIMD2<Float>(1000.0, 10000.0),
                         p1_screen: SIMD2<Float>(10000.0, 10000.0),
-                        halfWidth0: lineGeometry.lineWidth,
-                        halfWidth1: lineGeometry.lineWidth,
+                        halfWidth0: lineGeometry.lineWidthStart,
+                        halfWidth1: lineGeometry.lineWidthEnd,
                         antiAlias: 0.707,
                         depth: 0.0,
                         p0_depth: 0.0,
@@ -406,10 +406,15 @@ class MetalRenderer {
         
         MVP = projectionMatrix * viewMatrix
         
+        let backgroundColor = renderConfigs?.backgroundColor ?? ColorInput()
+        
+        // Convert to vector_float3
+        
         var transformUniforms: TransformUniforms = TransformUniforms(
             viewWidth: Int32(viewW),
             viewHeight: Int32(viewH),
-            cameraPosition: cameraPosition
+            cameraPosition: cameraPosition,
+            backgroundColor: colorToVector(backgroundColor.color)
         )
         
         let renderPassDescriptor = MTLRenderPassDescriptor()

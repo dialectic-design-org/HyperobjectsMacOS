@@ -148,6 +148,8 @@ class CubeGenerator: CachedGeometryGenerator {
         
         for i in 0..<lines.count {
             lines[i].lineWidth = lineWidth
+            lines[i].lineWidthStart = lineWidth
+            lines[i].lineWidthEnd = lineWidth
         }
         
         return lines

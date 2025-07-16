@@ -218,7 +218,7 @@ kernel void drawLines(
     
     
     
-    float3 rgb = 0.0;
+    float3 rgb = U.backgroundColor;
     float  a   = 0.0;
     float prevDepth = 1000000.0;
     

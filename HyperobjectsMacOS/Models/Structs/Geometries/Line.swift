@@ -24,6 +24,8 @@ struct Line: Geometry {
     var color: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
     var colorStart: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
     var colorEnd: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
+    var lineWidthStart: Float = 1.0
+    var lineWidthEnd: Float = 1.0
     
     func getPoints() -> [SIMD3<Float>] {
         return [startPoint, endPoint]

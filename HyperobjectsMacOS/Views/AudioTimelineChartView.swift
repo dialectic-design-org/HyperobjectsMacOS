@@ -11,7 +11,7 @@ import SwiftUI
 struct AudioTimelineChartView: View {
     let historyData: [AudioDataPoint]
     
-    @State private var timeWindowSeconds: Double = 30.0 // Fixed 30-second window
+    @State private var timeWindowSeconds: Double = 10.0 // Fixed 30-second window
     private let padding: CGFloat = 8
     
     let timeWindowSecondsOptions: [Double] = [5, 10, 30]

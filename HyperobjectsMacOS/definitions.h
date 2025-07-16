@@ -49,6 +49,7 @@ struct TransformUniforms {
     int viewWidth;
     int viewHeight;
     vector_float3 cameraPosition;
+    vector_float3 backgroundColor;
 };
 
 #endif /* definitions_h */

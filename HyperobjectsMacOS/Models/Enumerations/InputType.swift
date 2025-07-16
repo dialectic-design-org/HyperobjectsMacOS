@@ -12,6 +12,8 @@ enum InputType: String, CaseIterable, Identifiable {
     case oscilationFloat = "oscilationFloat"
     case integer = "integer"
     case vector2d = "vector2d"
+    case colorInput = "colorInput"
+    case audioReactiveColorInput = "audioReactiveColorInput"
     
     var id: String { self.rawValue }
 }

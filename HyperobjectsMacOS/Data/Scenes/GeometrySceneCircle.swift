@@ -6,11 +6,14 @@
 //
 
 import Foundation
+import SwiftUI
 
 func generateGeometrySceneCircle() -> GeometriesSceneBase {
     return GeometriesSceneBase(
         name: "Circle Scene",
         inputs: [
+            SceneInput(name: "StartColor", type: .colorInput, value: Color.white),
+            
             SceneInput(name: "Radius", type: .float,
                        value: 0.5,
                        range: 0...2,
@@ -25,7 +28,14 @@ func generateGeometrySceneCircle() -> GeometriesSceneBase {
                        tickValueAudioAdjustmentRange: 0.0...0.1),
             SceneInput(name:"Stateful Rotation Z", type: .statefulFloat,
                        tickValueAdjustmentRange: 0.0...0.1,
-                       tickValueAudioAdjustmentRange: 0.0...0.1)
+                       tickValueAudioAdjustmentRange: 0.0...0.1),
+            
+            
+            SceneInput(name: "Line Width Base", type: .float, value: 1.0, range: 0...100),
+            SceneInput(name: "Line Width Wave Amplification", type: .float, value: 0.0, range: 0...100),
+            SceneInput(name: "Line Width Wave Frequency", type: .float, value: 0.0, range: 0...64),
+            SceneInput(name: "Line Width Wave Frequency Shift", type: .float, value: 0.0, range: 0...4 * .pi)
+            
             
             // SceneInput(name: "Segments", type: .float, value: 100)
         ],

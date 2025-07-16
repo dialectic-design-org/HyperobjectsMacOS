@@ -37,7 +37,10 @@ struct RenderConfigurationsView: View {
             )
             Text("Camera Distance")
             Slider(value: $renderConfigurations.cameraDistance, in: 0...10.0)
-        }
+            
+            Text("Background color")
+            ColorPickerControlView(colorInput: renderConfigurations.backgroundColor)
+        }.padding()
     }
 }
 

@@ -16,7 +16,7 @@ class CircleGenerator: CachedGeometryGenerator {
     override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
         var lines: [Line] = []
         
-        let segmentsCount: Int = 128
+        let segmentsCount: Int = 512
         
         
         
@@ -31,9 +31,18 @@ class CircleGenerator: CachedGeometryGenerator {
         let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
         let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
         
+        let lineWidthBase = floatFromInputs(inputs, name: "Line Width Base")
+        let lineWidthFrequency = floatFromInputs(inputs, name: "Line Width Wave Frequency")
+        let lineWidthAmplification = floatFromInputs(inputs, name: "Line Width Wave Amplification")
+        let lineWidthFrequencyShift = floatFromInputs(inputs, name: "Line Width Wave Frequency Shift")
+        
+        
+        let color = colorFromInputs(inputs, name: "StartColor")
         
         for i in 0..<segmentsCount {
             let angle: Float = Float(i) / Float(segmentsCount) * 2.0 * .pi
+            
+            
             
             
             
@@ -42,9 +51,19 @@ class CircleGenerator: CachedGeometryGenerator {
             let nextAngle: Float = Float(i + 1) / Float(segmentsCount) * 2.0 * .pi
             let nextX: Float = radius * cos(nextAngle)
             let nextY: Float = radius * sin(nextAngle)
+            
+            
+            
+            let lineWidthStart: Float = lineWidthBase + (1.0 + sin((angle + lineWidthFrequencyShift) * lineWidthFrequency)) * lineWidthAmplification
+            let lineWidthEnd: Float = lineWidthBase + (1.0 + sin((nextAngle + lineWidthFrequencyShift) * lineWidthFrequency)) * lineWidthAmplification
+            
             lines.append(Line(
                 startPoint: SIMD3<Float>(x: x, y: y, z: 0),
-                endPoint: SIMD3<Float>(x: nextX, y: nextY, z: 0)
+                endPoint: SIMD3<Float>(x: nextX, y: nextY, z: 0),
+                colorStart: color.toSIMD4(),
+                colorEnd: color.toSIMD4(),
+                lineWidthStart: lineWidthStart,
+                lineWidthEnd: lineWidthEnd
                 ))
         }
         

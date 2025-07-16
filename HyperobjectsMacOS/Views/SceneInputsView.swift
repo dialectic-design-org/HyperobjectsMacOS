@@ -156,6 +156,10 @@ struct SceneInputsView: View {
                                 HStack {
                                     StatefulFloatControlView(input: input)
                                 }.frame(maxWidth:.infinity, alignment: .leading)
+                            case .colorInput:
+                                HStack {
+                                    ColorPickerControlWrapperView(input: input)
+                                }.frame(maxWidth:.infinity, alignment: .leading)
                             default:
                                 Text("Default")
                             }

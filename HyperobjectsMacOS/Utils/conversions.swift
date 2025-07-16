@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 import simd
 
 
@@ -37,5 +38,32 @@ func intFromInputs(_ inputs: [String: Any], name: String) -> Int {
         return 0
     }
 }
+
+func colorFromInputs(_ inputs: [String: Any], name: String) -> Color {
+    if let inputColor: Color = inputs[name] as? Color {
+        return inputColor
+    } else {
+        return Color.red
+    }
+}
+
+
+func colorToVector(_ color: Color) -> vector_float3 {
+    let nsColor = NSColor(color) // Convert SwiftUI.Color to NSColor
+
+    // Convert to calibrated RGB color space
+    guard let rgbColor = nsColor.usingColorSpace(.deviceRGB) else {
+        return vector_float3(0, 0, 0) // Fallback
+    }
+
+    var red: CGFloat = 0
+    var green: CGFloat = 0
+    var blue: CGFloat = 0
+
+    rgbColor.getRed(&red, green: &green, blue: &blue, alpha: nil)
+
+    return vector_float3(Float(red), Float(green), Float(blue))
+}
+
 
 

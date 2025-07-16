@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 class RenderConfigurations: ObservableObject {
     @Published var pipeline: String = "default"
@@ -23,5 +24,7 @@ class RenderConfigurations: ObservableObject {
     @Published var showOverlay: Bool = true
     
     @Published var cameraDistance: Float = 5.0
+    
+    @Published var backgroundColor: ColorInput = ColorInput()
 }
 
