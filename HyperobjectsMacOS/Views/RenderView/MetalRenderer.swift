@@ -299,24 +299,42 @@ class MetalRenderer {
                     testPoints.append(line[1] * scalingFactor)
                     
                     let color = SIMD4<Float>(0.0, 1.0 - geometriesTime, geometriesTime, 1.0)
-                    linesPtr[gIndex] = Shader_Line(
+//                    linesPtr[gIndex] = Shader_Line(
+//                        p0_world: line[0],
+//                        p1_world: line[1],
+//                        p0_screen: SIMD2<Float>(1000.0, 10000.0),
+//                        p1_screen: SIMD2<Float>(10000.0, 10000.0),
+//                        halfWidth0: lineGeometry.lineWidthStart,
+//                        halfWidth1: lineGeometry.lineWidthEnd,
+//                        antiAlias: 0.707,
+//                        depth: 0.0,
+//                        p0_depth: 0.0,
+//                        p1_depth: 0.0,
+//                        _pad0: 0.0,
+//                        colorPremul0: lineGeometry.colorStart,
+//                        colorPremul1: lineGeometry.colorEnd,
+//                        p0_inv_w: 0.0,
+//                        p1_inv_w: 0.0,
+//                        p0_depth_over_w: 0.0,
+//                        p1_depth_over_w: 0.0
+//                    )
+                    linesPtr[gIndex] = Shader_Line.initWithValues(
                         p0_world: line[0],
                         p1_world: line[1],
-                        p0_screen: SIMD2<Float>(1000.0, 10000.0),
-                        p1_screen: SIMD2<Float>(10000.0, 10000.0),
                         halfWidth0: lineGeometry.lineWidthStart,
                         halfWidth1: lineGeometry.lineWidthEnd,
-                        antiAlias: 0.707,
-                        depth: 0.0,
-                        p0_depth: 0.0,
-                        p1_depth: 0.0,
-                        _pad0: 0.0,
                         colorPremul0: lineGeometry.colorStart,
+                        colorPremul0OuterLeft: lineGeometry.colorStartOuterLeft,
+                        colorPremul0OuterRight: lineGeometry.colorStartOuterRight,
+                        sigmoidSteepness0: lineGeometry.sigmoidSteepness0,
+                        sigmoidMidpoint0: lineGeometry.sigmoidMidpoint0,
                         colorPremul1: lineGeometry.colorEnd,
-                        p0_inv_w: 0.0,
-                        p1_inv_w: 0.0,
-                        p0_depth_over_w: 0.0,
-                        p1_depth_over_w: 0.0
+                        colorPremul1OuterLeft: lineGeometry.colorEndOuterLeft,
+                        colorPremul1OuterRight: lineGeometry.colorEndOuterRight,
+                        sigmoidSteepness1: lineGeometry.sigmoidSteepness1,
+                        sigmoidMidpoint1: lineGeometry.sigmoidMidpoint1
+                        
+                        
                     )
                 }
                 

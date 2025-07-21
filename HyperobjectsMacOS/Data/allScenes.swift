@@ -6,6 +6,7 @@
 //
 
 var allScenes: [GeometriesSceneBase] = [
+    generateGeometrySceneLine(),
     generateGeometrySceneCircle(),
     generateGeometrySceneCross(),
     generateGeometrySceneCube(),

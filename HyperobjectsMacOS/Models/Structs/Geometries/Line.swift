@@ -20,10 +20,19 @@ struct Line: Geometry {
     let type: GeometryType = .line
     var startPoint: SIMD3<Float>
     var endPoint: SIMD3<Float>
-    var lineWidth: Float = 1.0
-    var color: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
     var colorStart: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
+    var colorStartOuterLeft: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
+    var colorStartOuterRight: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
+    
     var colorEnd: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
+    var colorEndOuterLeft: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
+    var colorEndOuterRight: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
+    
+    var sigmoidSteepness0: Float = 6.0
+    var sigmoidMidpoint0: Float = 0.5
+    var sigmoidSteepness1: Float = 6.0
+    var sigmoidMidpoint1: Float = 0.5
+    
     var lineWidthStart: Float = 1.0
     var lineWidthEnd: Float = 1.0
     
@@ -31,9 +40,6 @@ struct Line: Geometry {
         return [startPoint, endPoint]
     }
     
-    func getLineWidth() -> Float {
-        return lineWidth
-    }
     
     mutating func applyMatrix(_ matrix: matrix_float4x4) -> Line {
         let vecStartRotated = matrix * SIMD4<Float>(startPoint.x, startPoint.y, startPoint.z, 1.0)
@@ -41,5 +47,20 @@ struct Line: Geometry {
         startPoint = SIMD3<Float>(vecStartRotated.x, vecStartRotated.y, vecStartRotated.z)
         endPoint = SIMD3<Float>(vecEndRotated.x, vecEndRotated.y, vecEndRotated.z)
         return self
+    }
+    
+    func initBasic(p1: SIMD3<Float>, p2: SIMD3<Float>) -> Line {
+        return Line(startPoint: p1, endPoint: p2)
+    }
+    
+    func initWithColor(p1: SIMD3<Float>, p2: SIMD3<Float>, c: SIMD4<Float>) -> Line {
+        var l = self.initBasic(p1: p1, p2: p2)
+        l.colorStart = c
+        l.colorStartOuterLeft = c
+        l.colorStartOuterRight = c
+        l.colorEnd = c
+        l.colorEndOuterLeft = c
+        l.colorEndOuterRight = c
+        return l
     }
 }

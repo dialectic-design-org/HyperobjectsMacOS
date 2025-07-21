@@ -35,6 +35,9 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         self.name = name
         self.inputs = inputs
         self.geometryGenerators = geometryGenerators
+        if self.geometryGenerators.count == 0 {
+            print("No geometries defined for scene \(name)")
+        }
     }
     
     func updateInput(name: String, value: Any) {

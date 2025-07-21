@@ -7,6 +7,7 @@
 
 import Foundation
 import simd
+import SwiftUI
 
 class CircleGenerator: CachedGeometryGenerator {
     init() {
@@ -16,7 +17,7 @@ class CircleGenerator: CachedGeometryGenerator {
     override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
         var lines: [Line] = []
         
-        let segmentsCount: Int = 512
+        let segmentsCount: Int = 512 // 512
         
         
         
@@ -61,7 +62,9 @@ class CircleGenerator: CachedGeometryGenerator {
                 startPoint: SIMD3<Float>(x: x, y: y, z: 0),
                 endPoint: SIMD3<Float>(x: nextX, y: nextY, z: 0),
                 colorStart: color.toSIMD4(),
+                colorStartOuterLeft: Color.blue.toSIMD4(),
                 colorEnd: color.toSIMD4(),
+                colorEndOuterLeft: Color.blue.toSIMD4(),
                 lineWidthStart: lineWidthStart,
                 lineWidthEnd: lineWidthEnd
                 ))

@@ -234,7 +234,7 @@ kernel void drawLines(
         float2 pa = p - L.p0_screen;
         float2 ba = L.p1_screen - L.p0_screen;
         float ba_len2 = dot(ba, ba);
-        float t, d;
+        float t, d, signedDistance;
         
         if (ba_len2 < 1e-8) {
             d = length(pa);
@@ -242,7 +242,11 @@ kernel void drawLines(
         } else {
             t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
             float2 closest = L.p0_screen + ba * t;
+            float2 toPixel = p - closest;
             d = length(p - closest);
+            float2 lineDirection = normalize(ba);
+            float2 perpendicular = float2(-lineDirection.y, lineDirection.x); // 90° rotation
+            signedDistance = dot(toPixel, perpendicular);
         }
         
         float depth = mix(L.p0_depth, L.p1_depth, t);
@@ -251,7 +255,37 @@ kernel void drawLines(
         float halfWidth = mix(L.halfWidth0, L.halfWidth1, t);
         float aa = max(L.antiAlias, 0.0);
         float alphaEdge = smoothstep(halfWidth + aa, halfWidth - aa, d);
-        float4 color = mix(L.colorPremul0, L.colorPremul1, t);
+        
+        float4 innerColor = mix(L.colorPremul0, L.colorPremul1, t);
+        
+        float4 outerColorLeft = mix(L.colorPremul0OuterLeft, L.colorPremul1OuterLeft, t);
+        float4 outerColorRight = mix(L.colorPremul0OuterRight, L.colorPremul1OuterRight, t);
+        
+        float sigmoidSteepness = mix(L.sigmoidSteepness0, L.sigmoidSteepness1, t);
+        float sigmoidMidpoint = mix(L.sigmoidMidpoint0, L.sigmoidMidpoint1, t);
+        
+        float normalizedDistance = d / halfWidth;
+        
+        float finalSignedDistance = (ba_len2 < 1e-8) ? d : signedDistance;
+        
+        float2 perpendicular = normalize(float2(-ba.y, ba.x));
+        float signedNormalizedDistance = signedDistance / halfWidth;
+        
+        float absDistance = abs(signedNormalizedDistance);
+        float sigmoidInput = sigmoidSteepness * (absDistance - sigmoidMidpoint);
+        float sigmoidValue = 1.0 / (1.0 + exp(-sigmoidInput));
+        
+        float4 outerColor = (signedNormalizedDistance >= 0.0) ? outerColorLeft : outerColorRight;
+        
+        // float4 color = mix(L.colorPremul0, L.colorPremul1, t);
+        float4 color = mix(innerColor, outerColor, sigmoidValue);
+        // float4 color = float4(absDistance, 1.0 - absDistance, 0.0, 1.0);
+        // float4 color = outerColorLeft;
+        // float4 color = outerColorRight;
+        // float4 color = float4(sigmoidMidpoint, 1.0 - sigmoidMidpoint, 0.0, 1.0);
+        // float4 color = float4(sigmoidSteepness, 1.0 - sigmoidSteepness, 0.0, 1.0);
+        
+        
         
         // The alpha of the current line fragment considering its geometry
         float src_alpha = alphaEdge * color.w;

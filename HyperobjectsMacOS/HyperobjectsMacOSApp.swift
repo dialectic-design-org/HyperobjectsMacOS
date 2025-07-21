@@ -9,7 +9,7 @@ import SwiftUI
 
 @main
 struct HyperobjectsMacOSApp: App {
-    @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneCircle())
+    @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneLine())
     @StateObject private var renderConfigurations = RenderConfigurations()
     
     var body: some Scene {

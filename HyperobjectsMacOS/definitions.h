@@ -29,14 +29,24 @@ struct Shader_Line {
     float halfWidth1;
     
     float antiAlias;
-    float depth;
     
     float p0_depth;
     float p1_depth;
     
     float _pad0;
     vector_float4 colorPremul0;
+    vector_float4 colorPremul0OuterLeft;
+    vector_float4 colorPremul0OuterRight;
+    
     vector_float4 colorPremul1;
+    vector_float4 colorPremul1OuterLeft;
+    vector_float4 colorPremul1OuterRight;
+    
+    float sigmoidSteepness0;
+    float sigmoidMidpoint0;
+    
+    float sigmoidSteepness1;
+    float sigmoidMidpoint1;
     
     float p0_inv_w;
     float p1_inv_w;
