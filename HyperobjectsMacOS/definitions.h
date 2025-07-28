@@ -19,19 +19,18 @@ struct Shader_Sphere {
     
 };
 
-struct Shader_Line {
+struct Shader_PathSeg {
     vector_float3 p0_world;
     vector_float3 p1_world;
-    vector_float2 p0_screen;
-    vector_float2 p1_screen;
+    vector_float4 p_world[4];
+    
+    vector_float2 p_screen[4];
+    int degree;
     
     float halfWidth0;
     float halfWidth1;
     
     float antiAlias;
-    
-    float p0_depth;
-    float p1_depth;
     
     float _pad0;
     vector_float4 colorPremul0;
@@ -48,10 +47,9 @@ struct Shader_Line {
     float sigmoidSteepness1;
     float sigmoidMidpoint1;
     
-    float p0_inv_w;
-    float p1_inv_w;
-    float p0_depth_over_w;
-    float p1_depth_over_w;
+    float p_depth[4];
+    float p_inv_w[4];
+    float p_depth_over_w[4];
 };
 
 

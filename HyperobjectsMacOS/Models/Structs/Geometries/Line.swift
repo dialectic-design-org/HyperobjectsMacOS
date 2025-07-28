@@ -20,6 +20,8 @@ struct Line: Geometry {
     let type: GeometryType = .line
     var startPoint: SIMD3<Float>
     var endPoint: SIMD3<Float>
+    var degree: Int = 1;
+    var controlPoints: [SIMD3<Float>] = []
     var colorStart: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
     var colorStartOuterLeft: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
     var colorStartOuterRight: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
@@ -46,6 +48,11 @@ struct Line: Geometry {
         let vecEndRotated = matrix * SIMD4<Float>(endPoint.x, endPoint.y, endPoint.z, 1.0)
         startPoint = SIMD3<Float>(vecStartRotated.x, vecStartRotated.y, vecStartRotated.z)
         endPoint = SIMD3<Float>(vecEndRotated.x, vecEndRotated.y, vecEndRotated.z)
+        // Iterate over control points
+        for (i, point) in controlPoints.enumerated() {
+            let vecRotated = matrix * SIMD4<Float>(point.x, point.y, point.z, 1.0)
+            controlPoints[i] = SIMD3<Float>(vecRotated.x, vecRotated.y, vecRotated.z)
+        }
         return self
     }
     

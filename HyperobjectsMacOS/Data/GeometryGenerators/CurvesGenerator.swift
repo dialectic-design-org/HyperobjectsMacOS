@@ -1,16 +1,17 @@
 //
-//  LineGenerator.swift
+//  CurvesGenerator.swift
 //  HyperobjectsMacOS
 //
-//  Created by Erwin Hoogerwoord on 19/07/2025.
+//  Created by Erwin Hoogerwoord on 27/07/2025.
 //
+
 
 import Foundation
 import simd
 
-class LineGenerator: CachedGeometryGenerator {
+class CurvesGenerator: CachedGeometryGenerator {
     init() {
-        super.init(name: "Line Generator",
+        super.init(name: "Curves Generator",
                    inputDependencies: [
                     "Length",
                     "Rotation",
@@ -53,6 +54,7 @@ class LineGenerator: CachedGeometryGenerator {
         lines.append(Line(
             startPoint: SIMD3<Float>(-length / 2.0, 0, 0),
             endPoint: SIMD3<Float>(length / 2.0, 0.0, 0.0),
+            degree: 1,
             colorStart: startColorInner.toSIMD4(),
             colorStartOuterLeft: startColorOuterLeft.toSIMD4(),
             colorStartOuterRight: startColorOuterRight.toSIMD4(),
@@ -67,6 +69,57 @@ class LineGenerator: CachedGeometryGenerator {
             lineWidthStart: startLineWidth,
             lineWidthEnd: endLineWidth,
         ))
+        
+        lines.append(Line(
+            startPoint: SIMD3<Float>(-length / 2.0, -0.5, 0),
+            endPoint: SIMD3<Float>(length / 2.0, -0.5, 0.0),
+            degree: 2,
+            controlPoints: [
+                SIMD3<Float>(0.0, 1.0, 0.0)
+            ],
+            colorStart: startColorInner.toSIMD4(),
+            colorStartOuterLeft: startColorOuterLeft.toSIMD4(),
+            colorStartOuterRight: startColorOuterRight.toSIMD4(),
+            colorEnd: endColorInner.toSIMD4(),
+            colorEndOuterLeft: endColorOuterLeft.toSIMD4(),
+            colorEndOuterRight: endColorOuterRight.toSIMD4(),
+            sigmoidSteepness0: startSigmoidSteepness,
+            sigmoidMidpoint0: startSigmoidMidpoint,
+            sigmoidSteepness1: endSigmoidSteepness,
+            sigmoidMidpoint1: endSigmoidMidpoint,
+            
+            lineWidthStart: startLineWidth,
+            lineWidthEnd: endLineWidth,
+        ))
+        
+        lines.append(Line(
+            startPoint: SIMD3<Float>(-length / 2.0, 0.5, 0),
+            endPoint: SIMD3<Float>(length / 2.0, 0.5, 0.0),
+            degree: 3,
+            controlPoints: [
+                SIMD3<Float>(0.0, 1.0, 0.0),
+                SIMD3<Float>(0.0, -1.0, 0.0)
+            ],
+            colorStart: startColorInner.toSIMD4(),
+            colorStartOuterLeft: startColorOuterLeft.toSIMD4(),
+            colorStartOuterRight: startColorOuterRight.toSIMD4(),
+            colorEnd: endColorInner.toSIMD4(),
+            colorEndOuterLeft: endColorOuterLeft.toSIMD4(),
+            colorEndOuterRight: endColorOuterRight.toSIMD4(),
+            sigmoidSteepness0: startSigmoidSteepness,
+            sigmoidMidpoint0: startSigmoidMidpoint,
+            sigmoidSteepness1: endSigmoidSteepness,
+            sigmoidMidpoint1: endSigmoidMidpoint,
+            
+            lineWidthStart: startLineWidth,
+            lineWidthEnd: endLineWidth,
+        ))
+        
+        let rotationMatrix = matrix_rotation(angle: rotation, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
+        
+        for i in 0..<lines.count {
+            lines[i] = lines[i].applyMatrix(rotationMatrix)
+        }
         
         return lines
     }

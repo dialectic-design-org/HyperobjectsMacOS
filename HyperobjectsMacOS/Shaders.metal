@@ -30,7 +30,7 @@ struct VertexOut {
 #define lineCount 10000
 
 kernel void transformAndBin(
-                            device Shader_Line* lines [[buffer(0)]],
+                            device Shader_PathSeg* lines [[buffer(0)]],
                             constant float4x4& MVP [[buffer(1)]],
                             constant TransformUniforms& U [[buffer(2)]],
                             device atomic_uint* binCounts [[buffer(3)]],
@@ -39,115 +39,174 @@ kernel void transformAndBin(
                             uint gid [[thread_position_in_grid]]
                             ) {
     if (gid >= lineCount) return;
-    Shader_Line L = lines[gid];
+    Shader_PathSeg L = lines[gid];
     
     // Early culling: Skip degenerate lines where start and end are identical
     if (distance(L.p0_world, L.p1_world) < 1e-8) {
         return; // Don't add to any bins
     }
-
-
-    float4 p0_clip = MVP * float4(L.p0_world, 1);
-    float4 p1_clip = MVP * float4(L.p1_world, 1);
-    
-    // L.p0_depth = p0_clip.z / max(p0_clip.w, 1e-6);
-    // L.p1_depth = p1_clip.z / max(p1_clip.w, 1e-6);
-    
-    L.p0_depth = length(L.p0_world - U.cameraPosition);
-    L.p1_depth = length(L.p1_world - U.cameraPosition);
-    
-    // 2. Perform the perspective divide to get NDC
-//    float w0 = max(1e-5, abs(p0_clip.w));
-//    float w1 = max(1e-5, abs(p1_clip.w));
-
-    float2 p0 = p0_clip.xy / p0_clip.w;
-    float2 p1 = p1_clip.xy / p1_clip.w;
     
     float2 viewSize = float2(U.viewWidth, U.viewHeight);
     
-    p0 = (p0 * 0.5 + 0.5) * viewSize;
-    p1 = (p1 * 0.5 + 0.5) * viewSize;
-
-    lines[gid].p0_inv_w = 1.0 / p0_clip.w;
-    lines[gid].p1_inv_w = 1.0 / p1_clip.w;
-    lines[gid].p0_depth_over_w = L.p0_depth / p0_clip.w;
-    lines[gid].p1_depth_over_w = L.p1_depth / p1_clip.w;
+    float2 points[4];
     
-    lines[gid].p0_screen = p0;
-    lines[gid].p1_screen = p1;
-    lines[gid].p0_depth = L.p0_depth;
-    lines[gid].p1_depth = L.p1_depth;
+    for (int i = 0; i <= L.degree; i++) {
+        float4 p_clip = MVP * L.p_world[i];
+        float2 p_screen = p_clip.xy / p_clip.w;
+        p_screen = (p_screen * 0.5 + 0.5) * viewSize;
+        lines[gid].p_screen[i] = p_screen;
+        lines[gid].p_depth[i] = length(L.p_world[i].xyz - U.cameraPosition);
+        lines[gid].p_inv_w[i] = 1.0 / p_clip.w;
+        lines[gid].p_depth_over_w[i] = lines[gid].p_depth[i] / p_clip.w;
+        points[i] = p_screen;
+    }
     
     uint BIN_COLS = (viewSize.x + BIN_SIZE - 1) / BIN_SIZE;
         
-    float2 mn = floor(min(p0, p1) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
-    float2 mx = ceil (max(p0, p1) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
-
+    float2 mn = floor(min(points[0], points[1]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
+    float2 mx = ceil (max(points[0], points[1]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
+    
+    if (L.degree == 2) {
+        mn = floor(min(mn, points[2]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
+        mx = ceil (max(mx, points[2]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
+    } else if (L.degree == 3) {
+        mn = floor(min(mn, points[2]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
+        mx = ceil (max(mx, points[2]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
+        mn = floor(min(mn, points[3]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
+        mx = ceil (max(mx, points[3]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
+    }
+    
     uint2 g0 = uint2(max(mn, 0.0));
     uint2 g1 = uint2(min(mx, viewSize - 1));
 
     for (uint y = g0.y >> BIN_POW; y <= g1.y >> BIN_POW; ++y)
     for (uint x = g0.x >> BIN_POW; x <= g1.x >> BIN_POW; ++x) {
-        // Calculate bin bounds (expand by line radius to account for thickness)
-        float lineRadius = max(L.halfWidth0, L.halfWidth1) + L.antiAlias;
-        float2 binMin = float2(x << BIN_POW, y << BIN_POW) - lineRadius;
-        float2 binMax = binMin + BIN_SIZE + 2.0 * lineRadius;
         
-        // Line-rectangle intersection test
-        // Using parametric line equation: point = p0 + t * (p1 - p0)
-        float2 lineDir = p1 - p0;
-        float2 invDir = 1.0 / lineDir;
-        
-        // Calculate t values for intersection with bin edges
-        float2 t1 = (binMin - p0) * invDir;
-        float2 t2 = (binMax - p0) * invDir;
-        
-        // Handle division by zero (parallel lines)
-        if (abs(lineDir.x) < 1e-6) {
-            // Line is vertical - check if it's within bin's x range
-            if (p0.x >= binMin.x && p0.x <= binMax.x) {
-                t1.x = -1000.0; // Allow intersection
-                t2.x = 1000.0;
-            } else {
-                t1.x = 1000.0;  // No intersection
-                t2.x = -1000.0;
+        if(L.degree == 1) {
+            // Calculate bin bounds (expand by line radius to account for thickness)
+            float lineRadius = max(L.halfWidth0, L.halfWidth1) + L.antiAlias;
+            float2 binMin = float2(x << BIN_POW, y << BIN_POW) - lineRadius;
+            float2 binMax = binMin + BIN_SIZE + 2.0 * lineRadius;
+            
+            // Line-rectangle intersection test
+            // Using parametric line equation: point = p0 + t * (p1 - p0)
+            float2 lineDir = points[1] - points[0];
+            float2 invDir = 1.0 / lineDir;
+            
+            // Calculate t values for intersection with bin edges
+            float2 t1 = (binMin - points[0]) * invDir;
+            float2 t2 = (binMax - points[0]) * invDir;
+            
+            // Handle division by zero (parallel lines)
+            if (abs(lineDir.x) < 1e-6) {
+                // Line is vertical - check if it's within bin's x range
+                if (points[0].x >= binMin.x && points[0].x <= binMax.x) {
+                    t1.x = -1000.0; // Allow intersection
+                    t2.x = 1000.0;
+                } else {
+                    t1.x = 1000.0;  // No intersection
+                    t2.x = -1000.0;
+                }
             }
-        }
-        if (abs(lineDir.y) < 1e-6) {
-            // Line is horizontal - check if it's within bin's y range
-            if (p0.y >= binMin.y && p0.y <= binMax.y) {
-                t1.y = -1000.0; // Allow intersection
-                t2.y = 1000.0;
-            } else {
-                t1.y = 1000.0;  // No intersection
-                t2.y = -1000.0;
+            if (abs(lineDir.y) < 1e-6) {
+                // Line is horizontal - check if it's within bin's y range
+                if (points[0].y >= binMin.y && points[0].y <= binMax.y) {
+                    t1.y = -1000.0; // Allow intersection
+                    t2.y = 1000.0;
+                } else {
+                    t1.y = 1000.0;  // No intersection
+                    t2.y = -1000.0;
+                }
             }
-        }
-        
-        // Ensure t1 <= t2
-        float2 tMin = min(t1, t2);
-        float2 tMax = max(t1, t2);
-        
-        // Find intersection interval
-        float tEnter = max(tMin.x, tMin.y);
-        float tExit = min(tMax.x, tMax.y);
-        
-        // Check if line segment intersects expanded bin
-        bool intersects = (tEnter <= tExit) && (tExit >= 0.0) && (tEnter <= 1.0);
-        
-        if (intersects) {
+            
+            // Ensure t1 <= t2
+            float2 tMin = min(t1, t2);
+            float2 tMax = max(t1, t2);
+            
+            // Find intersection interval
+            float tEnter = max(tMin.x, tMin.y);
+            float tExit = min(tMax.x, tMax.y);
+            
+            // Check if line segment intersects expanded bin
+            bool intersects = (tEnter <= tExit) && (tExit >= 0.0) && (tEnter <= 1.0);
+            
+            if (intersects) {
+                uint bin = y * BIN_COLS + x;
+                uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u,
+                                                    memory_order_relaxed);
+                binList[binOffsets[bin] + pos] = gid;
+            }
+        } else {
             uint bin = y * BIN_COLS + x;
-            uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u,
-                                                memory_order_relaxed);
+            uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
             binList[binOffsets[bin] + pos] = gid;
         }
     }
 }
 
 
+
+////////////////////////////////////////////////////////////////////////////
+// Path evaluation helpers
+
+inline float2 eval_point(Shader_PathSeg S, float t) {
+    float u = 1.0 - t;
+    if (S.degree == 1) {
+        return mix(S.p_screen[0], S.p_screen[1], t);
+    } else if (S.degree == 2) {
+        return u*u*S.p_screen[0] + 2.0*u*t*S.p_screen[1] + t*t*S.p_screen[2];
+    } else {
+        float uu = u*u; float tt = t*t;
+        return uu*u*S.p_screen[0] + 3.0*uu*t*S.p_screen[1] + 3.0*u*tt*S.p_screen[2] + tt*t*S.p_screen[3];
+    }
+}
+
+inline float2 eval_deriv(Shader_PathSeg S, float t) {
+    if (S.degree == 1) {
+        return S.p_screen[1] - S.p_screen[0];
+    } else if (S.degree == 2) {
+        return 2.0 * mix(S.p_screen[1] - S.p_screen[0], S.p_screen[2] - S.p_screen[1], t);
+    } else {
+        float u = 1.0 - t;
+        return 3.0 * (u*u*(S.p_screen[1]-S.p_screen[0]) + 2.0*u*t*(S.p_screen[2]-S.p_screen[1]) + t*t*(S.p_screen[3]-S.p_screen[2]));
+    }
+}
+
+
+inline float closestT(Shader_PathSeg S, float2 p) {
+    float bestT = 0.0;
+    float bestD = 1e9;
+    const uint N = 16u;
+    for (uint i = 0; i < N; i ++) {
+        float t = float(i) / float(N);
+        float d = distance(eval_point(S, t), p);
+        if (d < bestD) {
+            bestD = d;
+            bestT = t;
+        }
+    }
+    
+    for (uint k=0; k < 3; k++) {
+        float2 pt = eval_point(S, bestT);
+        float2 dpt = eval_deriv(S, bestT);
+        float2 r = pt - p;
+        float f = dot(r, dpt);
+        float g = dot(dpt, dpt) + dot(r, eval_deriv(S, bestT + 1e-3) - dpt) / 1e-3;
+        float dt = (g == 0.0) ? 0.0 : f / g;
+        bestT = clamp(bestT - dt, 0.0, 1.0);
+    }
+    return bestT;
+}
+
+
+
+////////////////////////////////////////////////////////////////////////////
+// Path shader
+
+
 kernel void drawLines(
                       texture2d<float, access::write> outTex [[texture(0)]],
-                      device const Shader_Line* lines [[buffer(0)]],
+                      device const Shader_PathSeg* lines [[buffer(0)]],
                       device const atomic_uint* binCounts [[buffer(1)]],
                       device const uint* binOffsets [[buffer(2)]],
                       device const uint* binList [[buffer(3)]],
@@ -178,20 +237,30 @@ kernel void drawLines(
     
     for (uint i = 0; i < count; ++i) {
         const uint line_idx = binList[base + i];
-        const Shader_Line L = lines[line_idx];
+        const Shader_PathSeg L = lines[line_idx];
         
         // Calculate interpolated depth for the current pixel
-        float2 pa = p - L.p0_screen;
-        float2 ba = L.p1_screen - L.p0_screen;
+        float2 pa = p - L.p_screen[0];
+        float2 ba = L.p_screen[1] - L.p_screen[0];
         float ba_len2 = dot(ba, ba);
         float t = 0.0;
         if (ba_len2 > 1e-8) {
             t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
         }
         // float depth = mix(L.p0_depth, L.p1_depth, t);
-        float inv_w = mix(L.p0_inv_w, L.p1_inv_w, t);
-        float depth_over_w = mix(L.p0_depth_over_w, L.p1_depth_over_w, t);
+        float inv_w = mix(L.p_inv_w[0], L.p_inv_w[1], t);
+        float depth_over_w = mix(L.p_depth_over_w[0], L.p_depth_over_w[1], t);
         float depth = depth_over_w / inv_w;
+        if (L.degree == 2) {
+            float u = 1.0 - t;
+            depth = u*u*L.p_depth[0] + 2.0*u*t*L.p_depth[1] + t*t*L.p_depth[2];
+        } else if (L.degree == 3) {
+            float u = 1.0 - t;
+            float uu = u*u;
+            float tt = t*t;
+            depth = uu*u*L.p_depth[0] + 3.0*uu*t*L.p_depth[1] +
+                    3.0*u*tt*L.p_depth[2] + tt*t*L.p_depth[3];
+        }
         
         // 3. If this line is closer than the farthest one in our list, insert it
         if (depth < localZ[MAX_PER_BIN - 1]) {
@@ -213,26 +282,20 @@ kernel void drawLines(
         localCnt++;
     }
     
-    
-    
-    
-    
-    
     float3 rgb = U.backgroundColor;
     float  a   = 0.0;
     float prevDepth = 1000000.0;
-    
     
     // Intermediary bin size debug step. TODO: Add as render configuration to show localCnt
 //    float debugIntensity = float(localCnt) / 32.0 * 2.0;
 //    rgb += float3(debugIntensity, debugIntensity, debugIntensity);
 //    a += debugIntensity;
-    
+//    
     for (uint i = 0; i < localCnt && a < 0.99; ++i) {
-        const Shader_Line L = lines[localIdx[i]];
+        const Shader_PathSeg L = lines[localIdx[i]];
         
-        float2 pa = p - L.p0_screen;
-        float2 ba = L.p1_screen - L.p0_screen;
+        float2 pa = p - L.p_screen[0];
+        float2 ba = L.p_screen[1] - L.p_screen[0];
         float ba_len2 = dot(ba, ba);
         float t, d, signedDistance;
         
@@ -240,16 +303,29 @@ kernel void drawLines(
             d = length(pa);
             t = 0;
         } else {
+            // Time on path
             t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
-            float2 closest = L.p0_screen + ba * t;
-            float2 toPixel = p - closest;
+            t = closestT(L, p);
+            
+            // Point on line
+            float2 closest = L.p_screen[0] + ba * t;
+            closest = eval_point(L, t);
+            
+            // Distance to pixel 2d vector
+            // float2 toPixel = p - closest;
+            
+            // Distance to pixel float
             d = length(p - closest);
-            float2 lineDirection = normalize(ba);
-            float2 perpendicular = float2(-lineDirection.y, lineDirection.x); // 90° rotation
-            signedDistance = dot(toPixel, perpendicular);
+            float2 dpt = eval_deriv(L, t);
+            float sign = (dot(p - closest, float2(-dpt.y, dpt.x)) > 0) ? 1.0 : -1.0;
+            
+            // 'Signed' distance to extended line
+            // float2 lineDirection = normalize(ba);
+            // float2 perpendicular = float2(-lineDirection.y, lineDirection.x); // 90° rotation
+            signedDistance = d * sign;
         }
         
-        float depth = mix(L.p0_depth, L.p1_depth, t);
+        float depth = mix(L.p_depth[0], L.p_depth[1], t);
         
         
         float halfWidth = mix(L.halfWidth0, L.halfWidth1, t);
@@ -269,6 +345,7 @@ kernel void drawLines(
         float finalSignedDistance = (ba_len2 < 1e-8) ? d : signedDistance;
         
         float2 perpendicular = normalize(float2(-ba.y, ba.x));
+        
         float signedNormalizedDistance = signedDistance / halfWidth;
         
         float absDistance = abs(signedNormalizedDistance);
@@ -284,8 +361,7 @@ kernel void drawLines(
         // float4 color = outerColorRight;
         // float4 color = float4(sigmoidMidpoint, 1.0 - sigmoidMidpoint, 0.0, 1.0);
         // float4 color = float4(sigmoidSteepness, 1.0 - sigmoidSteepness, 0.0, 1.0);
-        
-        
+        // color = float4(finalSignedDistance, 0.0, 0.0, 1.0);
         
         // The alpha of the current line fragment considering its geometry
         float src_alpha = alphaEdge * color.w;
@@ -301,7 +377,6 @@ kernel void drawLines(
                 prevDepth = depth;
             }
         }
-        
         
         
         // Blend the new line on top

@@ -1,16 +1,17 @@
 //
-//  GeometrySceneLine.swift
+//  GeometrySceneCurves.swift
 //  HyperobjectsMacOS
 //
-//  Created by Erwin Hoogerwoord on 16/07/2025.
+//  Created by Erwin Hoogerwoord on 27/07/2025.
 //
+
 
 import Foundation
 import SwiftUI
 
-func generateGeometrySceneLine() -> GeometriesSceneBase {
+func generateGeometrySceneCurves() -> GeometriesSceneBase {
     return GeometriesSceneBase(
-        name: "Line Scene",
+        name: "Curve Scene",
         inputs: [
             SceneInput(name: "Length", type: .float,
                        value: 2.5,
@@ -40,7 +41,7 @@ func generateGeometrySceneLine() -> GeometriesSceneBase {
             SceneInput(name: "End sigmoid midpoint", type: .float, value: 0.5, range: 0...1),
         ],
         geometryGenerators: [
-            LineGenerator()
+            CurvesGenerator()
         ]
     )
 }

@@ -130,12 +130,12 @@ class MetalRenderer {
         let totalBins = binCols * binRows
         
         
-        linesBuffer = device.makeBuffer(length: MemoryLayout<Shader_Line>.stride * Int(lineCount), options: .storageModeShared)!
+        linesBuffer = device.makeBuffer(length: MemoryLayout<Shader_PathSeg>.stride * Int(lineCount), options: .storageModeShared)!
         binCounts = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
         binOffsets = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
         binList = device.makeBuffer(length: MemoryLayout<UInt32>.stride * Int(lineCount) * totalBins, options: .storageModeShared)!
         
-        let linesPtr = linesBuffer.contents().bindMemory(to: Shader_Line.self, capacity: Int(lineCount))
+        let linesPtr = linesBuffer.contents().bindMemory(to: Shader_PathSeg.self, capacity: Int(lineCount))
         
 //        linesPtr[0] = Shader_Line(
 //            p0_world: SIMD3<Float>(-1.0, 0.0, 0.0),
@@ -279,7 +279,7 @@ class MetalRenderer {
         
         var testPoints: [SIMD3<Float>] = []
         
-        let linesPtr = linesBuffer.contents().bindMemory(to: Shader_Line.self, capacity: Int(lineCount))
+        let linesPtr = linesBuffer.contents().bindMemory(to: Shader_PathSeg.self, capacity: Int(lineCount))
         // Wipe all lines in the buffer so new ones can be set.
         let byteCount = linesBuffer.length
         memset(linesBuffer.contents(), 0, byteCount)
@@ -293,34 +293,22 @@ class MetalRenderer {
             switch geometry.type {
             case .line:
                 if let lineGeometry = geometry as? Line {
-                    var scalingFactor:Float = 1.0;
-                    var line = geometry.getPoints()
-                    testPoints.append(line[0] * scalingFactor)
-                    testPoints.append(line[1] * scalingFactor)
+                    let line = geometry.getPoints()
                     
-                    let color = SIMD4<Float>(0.0, 1.0 - geometriesTime, geometriesTime, 1.0)
-//                    linesPtr[gIndex] = Shader_Line(
-//                        p0_world: line[0],
-//                        p1_world: line[1],
-//                        p0_screen: SIMD2<Float>(1000.0, 10000.0),
-//                        p1_screen: SIMD2<Float>(10000.0, 10000.0),
-//                        halfWidth0: lineGeometry.lineWidthStart,
-//                        halfWidth1: lineGeometry.lineWidthEnd,
-//                        antiAlias: 0.707,
-//                        depth: 0.0,
-//                        p0_depth: 0.0,
-//                        p1_depth: 0.0,
-//                        _pad0: 0.0,
-//                        colorPremul0: lineGeometry.colorStart,
-//                        colorPremul1: lineGeometry.colorEnd,
-//                        p0_inv_w: 0.0,
-//                        p1_inv_w: 0.0,
-//                        p0_depth_over_w: 0.0,
-//                        p1_depth_over_w: 0.0
-//                    )
-                    linesPtr[gIndex] = Shader_Line.initWithValues(
+                    testPoints.append(line[0])
+                    testPoints.append(line[1])
+                    if lineGeometry.degree == 2 {
+                        testPoints.append(lineGeometry.controlPoints[0])
+                    }
+                    if lineGeometry.degree == 3 {
+                        testPoints.append(lineGeometry.controlPoints[1])
+                    }
+                    
+                    linesPtr[gIndex] = Shader_PathSeg.initWithValues(
                         p0_world: line[0],
                         p1_world: line[1],
+                        degree: lineGeometry.degree,
+                        controlPoints: lineGeometry.controlPoints,
                         halfWidth0: lineGeometry.lineWidthStart,
                         halfWidth1: lineGeometry.lineWidthEnd,
                         colorPremul0: lineGeometry.colorStart,
@@ -333,8 +321,6 @@ class MetalRenderer {
                         colorPremul1OuterRight: lineGeometry.colorEndOuterRight,
                         sigmoidSteepness1: lineGeometry.sigmoidSteepness1,
                         sigmoidMidpoint1: lineGeometry.sigmoidMidpoint1
-                        
-                        
                     )
                 }
                 
@@ -493,7 +479,6 @@ class MetalRenderer {
         computeToRenderRenderEncoder.setFragmentTexture(readTexture, index: 0)
         
         computeToRenderRenderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-
         
         computeToRenderRenderEncoder.endEncoding()
         
@@ -510,8 +495,6 @@ class MetalRenderer {
             rotation -= Float.pi * 2
         }
         
-        
-        
         // Update uniform buffer with new rotation
         var uniforms = [VertexUniforms(
             projectionMatrix: identity_matrix_float4x4(),
@@ -520,9 +503,7 @@ class MetalRenderer {
         )]
         
         
-        
         let applyRotationEffect = false
-        
         
         if applyRotationEffect {
             for (index, point) in testPoints.enumerated() {
