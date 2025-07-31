@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct SliderControlView: View {
+struct FloatSliderControlView: View {
     @ObservedObject var input: SceneInput
     
     // Local state mirrors

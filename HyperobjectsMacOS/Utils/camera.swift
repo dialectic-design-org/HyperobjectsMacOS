@@ -33,6 +33,15 @@ func matrix_translation(translation: SIMD3<Float>) -> matrix_float4x4 {
     )
 }
 
+func matrix_scale(scale: SIMD3<Float>) -> matrix_float4x4 {
+    return matrix_float4x4(
+        SIMD4<Float>(scale.x, 0, 0, 0),
+        SIMD4<Float>(0, scale.y, 0, 0),
+        SIMD4<Float>(0, 0, scale.z, 0),
+        SIMD4<Float>(0, 0, 0, 1)
+    )
+}
+
 
 func matrix_lookAt(eye: SIMD3<Float>, target: SIMD3<Float>, up: SIMD3<Float>) -> matrix_float4x4 {
     let zAxis = normalize(target - eye)

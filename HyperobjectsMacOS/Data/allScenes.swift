@@ -12,5 +12,7 @@ var allScenes: [GeometriesSceneBase] = [
     generateGeometrySceneCube(),
     generateGeometrySceneLorenz(),
     generateGeometrySceneCurves(),
-    generateGeometrySceneTube()
+    generateGeometrySceneTube(),
+    geenrateGeometrySceneBezierPathsSphere(),
+    generateColorScalesGemoScene()
 ]

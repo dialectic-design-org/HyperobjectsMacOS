@@ -35,8 +35,8 @@ struct Line: Geometry {
     var sigmoidSteepness1: Float = 6.0
     var sigmoidMidpoint1: Float = 0.5
     
-    var lineWidthStart: Float = 1.0
-    var lineWidthEnd: Float = 1.0
+    var lineWidthStart: Float = 0.0005
+    var lineWidthEnd: Float = 0.00005
     
     func getPoints() -> [SIMD3<Float>] {
         return [startPoint, endPoint]
@@ -69,5 +69,44 @@ struct Line: Geometry {
         l.colorEndOuterLeft = c
         l.colorEndOuterRight = c
         return l
+    }
+    
+    mutating func setBasicEndPointColors(startColor: SIMD4<Float>, endColor: SIMD4<Float>) -> Line {
+        self.colorStart = startColor
+        self.colorStartOuterLeft = startColor
+        self.colorStartOuterRight = startColor
+        self.colorEnd = endColor
+        self.colorEndOuterLeft = endColor
+        self.colorEndOuterRight = endColor
+        return self
+    }
+    
+    func interpolate(t: Float) -> SIMD3<Float> {
+        switch degree {
+        case 1:
+            return mix(startPoint, endPoint, t: t)
+        case 2:
+            guard controlPoints.count >= 1 else { return mix(startPoint, endPoint, t: t)}
+            let p0 = startPoint
+            let p1 = controlPoints[0]
+            let p2 = endPoint
+            let a = mix(p0, p1, t: t)
+            let b = mix(p1, p2, t: t)
+            return mix(a, b, t: t)
+        case 3:
+            guard controlPoints.count >= 2 else { return mix(startPoint, endPoint, t: t) }
+            let p0 = startPoint
+            let p1 = controlPoints[0]
+            let p2 = controlPoints[1]
+            let p3 = endPoint
+            let a = mix(p0, p1, t: t)
+            let b = mix(p1, p2, t: t)
+            let c = mix(p2, p3, t: t)
+            let d = mix(a, b, t: t)
+            let e = mix(b, c, t: t)
+            return mix(d, e, t: t)
+        default:
+            return mix(startPoint, endPoint, t: t)
+        }
     }
 }

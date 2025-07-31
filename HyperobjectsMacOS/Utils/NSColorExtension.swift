@@ -57,4 +57,40 @@ extension Color {
             Float(alpha)
         )
     }
+    
+    func toSIMD3() -> SIMD3<Float> {
+        let nsColor = NSColor(self)
+            .usingColorSpace(.sRGB) ?? NSColor.black
+        
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        
+        nsColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        
+        return SIMD3<Float>(
+            Float(red),
+            Float(green),
+            Float(blue)
+        )
+    }
+    
+    func toSIMD3Double() -> SIMD3<Double> {
+        let nsColor = NSColor(self)
+            .usingColorSpace(.sRGB) ?? NSColor.black
+        
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        
+        nsColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        
+        return SIMD3<Double>(
+            Double(red),
+            Double(green),
+            Double(blue)
+        )
+    }
 }

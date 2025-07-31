@@ -150,8 +150,12 @@ struct SceneInputsView: View {
                             switch input.type {
                             case .float:
                                 HStack {
-                                    SliderControlView(input: input)
+                                    FloatSliderControlView(input: input)
                                 }.frame(maxWidth:.infinity, alignment: .leading)
+                            case .integer:
+                                HStack {
+                                    IntegerSliderControlView(input: input)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
                             case .statefulFloat:
                                 HStack {
                                     StatefulFloatControlView(input: input)
