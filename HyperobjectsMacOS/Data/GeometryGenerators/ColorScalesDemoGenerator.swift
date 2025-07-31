@@ -33,8 +33,6 @@ class ColorScalesDemoGenerator: CachedGeometryGenerator {
         let scale = ColorScale(colors: [startColor, endColor], mode: .hsl)
         
         
-        print(brightness)
-        
         for i in 0...100 {
             var t = Float(i) / 99.0
             let color = scale.color(at: Double(t), saturation: Double(saturation), brightness: Double(brightness))

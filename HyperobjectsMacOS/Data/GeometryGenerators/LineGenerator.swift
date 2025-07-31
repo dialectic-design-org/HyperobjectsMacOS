@@ -50,9 +50,6 @@ class LineGenerator: CachedGeometryGenerator {
         var endSigmoidSteepness = floatFromInputs(inputs, name: "End sigmoid steepness")
         var endSigmoidMidpoint = floatFromInputs(inputs, name: "End sigmoid midpoint")
         
-        print("Line generator")
-        print(startColorInner)
-        
         lines.append(Line(
             startPoint: SIMD3<Float>(-length / 2.0, 0, 0),
             endPoint: SIMD3<Float>(length / 2.0, 0.0, 0.0),
