@@ -7,6 +7,7 @@
 
 import Foundation
 import simd
+import SwiftUICore
 
 class LineGenerator: CachedGeometryGenerator {
     init() {
@@ -30,25 +31,25 @@ class LineGenerator: CachedGeometryGenerator {
     override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
         var lines: [Line] = []
         
-        var length = floatFromInputs(inputs, name: "Length")
-        var rotation = floatFromInputs(inputs, name: "Rotation")
+        let length = floatFromInputs(inputs, name: "Length")
+        let rotation = floatFromInputs(inputs, name: "Rotation")
         
-        var startLineWidth = floatFromInputs(inputs, name: "Start line width")
-        var endLineWidth = floatFromInputs(inputs, name: "End line width")
+        let startLineWidth = floatFromInputs(inputs, name: "Start line width")
+        let endLineWidth = floatFromInputs(inputs, name: "End line width")
         
-        var startColorInner = colorFromInputs(inputs, name: "Start color inner")
-        var startColorOuterLeft = colorFromInputs(inputs, name: "Start color outer left")
-        var startColorOuterRight = colorFromInputs(inputs, name: "Start color outer right")
+        let startColorInner = colorFromInputs(inputs, name: "Start color inner")
+        let startColorOuterLeft = colorFromInputs(inputs, name: "Start color outer left")
+        let startColorOuterRight = colorFromInputs(inputs, name: "Start color outer right")
         
-        var endColorInner = colorFromInputs(inputs, name: "End color inner")
-        var endColorOuterLeft = colorFromInputs(inputs, name: "End color outer left")
-        var endColorOuterRight = colorFromInputs(inputs, name: "End color outer right")
+        let endColorInner = colorFromInputs(inputs, name: "End color inner")
+        let endColorOuterLeft = colorFromInputs(inputs, name: "End color outer left")
+        let endColorOuterRight = colorFromInputs(inputs, name: "End color outer right")
         
-        var startSigmoidSteepness = floatFromInputs(inputs, name: "Start sigmoid steepness")
-        var startSigmoidMidpoint = floatFromInputs(inputs, name: "Start sigmoid midpoint")
+        let startSigmoidSteepness = floatFromInputs(inputs, name: "Start sigmoid steepness")
+        let startSigmoidMidpoint = floatFromInputs(inputs, name: "Start sigmoid midpoint")
         
-        var endSigmoidSteepness = floatFromInputs(inputs, name: "End sigmoid steepness")
-        var endSigmoidMidpoint = floatFromInputs(inputs, name: "End sigmoid midpoint")
+        let endSigmoidSteepness = floatFromInputs(inputs, name: "End sigmoid steepness")
+        let endSigmoidMidpoint = floatFromInputs(inputs, name: "End sigmoid midpoint")
         
         lines.append(Line(
             startPoint: SIMD3<Float>(-length / 2.0, 0, 0),
