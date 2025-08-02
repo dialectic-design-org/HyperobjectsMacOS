@@ -74,8 +74,32 @@ class TextDemoGenerator: CachedGeometryGenerator {
         let spacing = floatFromInputs(inputs, name: "Spacing")
         let replacementProbability = floatFromInputs(inputs, name: "Replacement probability")
         let restoreProbability = floatFromInputs(inputs, name: "Restore probability")
+        var inputString = stringFromInputs(inputs, name: "Title text")
+        
+        let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
+        let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
+        let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
+        
+        
+        if inputString == "" {
+            // inputString = "PLACEHOLDER"
+        }
+        if originalText != inputString {
+            originalText = inputString
+            currentText = inputString
+            map.removeAll()
+        }
+        
         
         var lines: [Line] = []
+        
+        // Line to protect against returning a 0 array
+        lines.append(
+            Line(
+                startPoint: SIMD3<Float>(-1000.0, 0.0, 0.0), endPoint: SIMD3<Float>(-1000.1, 0.0, 0.0)
+            )
+        )
+        
         
         
         currentText = mutateString(
@@ -87,16 +111,23 @@ class TextDemoGenerator: CachedGeometryGenerator {
             )
         
         
-        let textLines = textToBezierPaths(currentText, font: .custom("SF Mono", size: 48), size: 0.4)
+        let textLines = textToBezierPaths(currentText, font: .custom("SF Mono", size: 48), size: 0.4, maxLineWidth: 5.0)
         
-        let transformMatrix = matrix_translation(
+        var transformMatrix = matrix_translation(
             translation: SIMD3<Float>(
                 -Float(originalText.count) * 0.25,
                  0.0,
                  0.0
             ))
         
-                var charIndex = 0
+        let rotationMatrixX = matrix_rotation(angle: statefulRotationX, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
+        let rotationMatrixY = matrix_rotation(angle: statefulRotationY, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
+        let rotationMatrixZ = matrix_rotation(angle: statefulRotationZ, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
+
+        let rotationMatrixXYZ = rotationMatrixX * rotationMatrixY * rotationMatrixZ
+        
+        
+        var charIndex = 0
         var charT = 0.0
         for char in textLines {
             charIndex += 1
@@ -112,6 +143,7 @@ class TextDemoGenerator: CachedGeometryGenerator {
                     controlPoints: line.controlPoints
                 )
                 transformedLine = transformedLine.applyMatrix(charTransform)
+                transformedLine = transformedLine.applyMatrix(rotationMatrixXYZ)
                 lines.append(transformedLine)
             }
         }

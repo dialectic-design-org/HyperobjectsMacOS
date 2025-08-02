@@ -47,6 +47,14 @@ func colorFromInputs(_ inputs: [String: Any], name: String) -> Color {
     }
 }
 
+func stringFromInputs(_ inputs: [String: Any], name: String) -> String {
+    if let inputValue: String = inputs[name] as? String {
+        return inputValue
+    } else {
+        return ""
+    }
+}
+
 
 func colorToVector(_ color: Color) -> vector_float3 {
     let nsColor = NSColor(color) // Convert SwiftUI.Color to NSColor

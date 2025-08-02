@@ -164,6 +164,10 @@ struct SceneInputsView: View {
                                 HStack {
                                     ColorPickerControlWrapperView(input: input)
                                 }.frame(maxWidth:.infinity, alignment: .leading)
+                            case .string:
+                                HStack {
+                                    StringInputControlView(input: input)
+                                }.frame(maxWidth:.infinity, alignment: .leading)
                             default:
                                 Text("Default")
                             }

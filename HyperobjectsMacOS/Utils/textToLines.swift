@@ -12,12 +12,37 @@ import CoreText
 import CoreGraphics
 import simd
 
-func textToBezierPaths(_ text: String, font: Font, size: CGFloat) -> [[Line]] {
+func textToBezierPaths(_ text: String, font: Font, size: CGFloat, maxLineWidth: CGFloat) -> [[Line]] {
     guard let ctFont = resolveCTFont(from: font, size: size) else { return [] }
 
-    
-    
-    // Precompute mapping from unicode scalars to their UTF-16 ranges
+    // Helper: split into words but keep trailing spaces so spacing is preserved
+    let wordsWithSpaces: [String] = {
+        var words: [String] = []
+        var current = ""
+        for char in text {
+            current.append(char)
+            if char.isWhitespace {
+                words.append(current)
+                current = ""
+            } else if current.last?.isWhitespace == false,
+                      let next = current.last,
+                      next == " " {
+                // unlikely, just in case
+                words.append(current)
+                current = ""
+            }
+        }
+        if !current.isEmpty { words.append(current) }
+        return words
+    }()
+
+    // Font metrics for line height (ascent + descent + leading)
+    let ascent = CTFontGetAscent(ctFont)
+    let descent = CTFontGetDescent(ctFont)
+    let leading = CTFontGetLeading(ctFont)
+    let lineHeight = ascent + descent + leading
+
+    // Precompute scalar UTF16 ranges for full text (used for mapping later)
     struct ScalarUTF16Range {
         let scalarIndex: Int
         let utf16Range: Range<Int>
@@ -34,65 +59,89 @@ func textToBezierPaths(_ text: String, font: Font, size: CGFloat) -> [[Line]] {
         return ranges
     }
     let scalarRanges = buildScalarUTF16Ranges(from: text)
-    
-    // Create attributed string so CoreText applies kerning and positioning
-    let attributes: [NSAttributedString.Key: Any] = [.font: ctFont]
-    let attrString = NSAttributedString(string: text, attributes: attributes)
-    let line = CTLineCreateWithAttributedString(attrString)
-    let runs = CTLineGetGlyphRuns(line) as? [CTRun] ?? []
 
+    // Prepare result per scalar
     var resultPerCharacter: [[Line]] = Array(repeating: [], count: text.unicodeScalars.count)
 
-    for run in runs {
-        let glyphCount = CTRunGetGlyphCount(run)
-        if glyphCount == 0 { continue }
+    var cursorX: CGFloat = 0
+    var cursorY: CGFloat = 0 // start baseline at y=0; subsequent lines go downward (negative)
 
-        var glyphs = Array<CGGlyph>(repeating: 0, count: glyphCount)
-        var positions = Array<CGPoint>(repeating: .zero, count: glyphCount)
-        var stringIndices = Array<CFIndex>(repeating: 0, count: glyphCount)
+    // We'll need to track the global scalar offset as we consume words
+    var consumedScalars = text.unicodeScalars.makeIterator()
+    var scalarIndexOrder: [String.UnicodeScalarView.Index] = Array(text.unicodeScalars.indices) // for mapping, not strictly needed here
 
-        CTRunGetGlyphs(run, CFRange(location: 0, length: 0), &glyphs)
-        CTRunGetPositions(run, CFRange(location: 0, length: 0), &positions)
-        CTRunGetStringIndices(run, CFRange(location: 0, length: 0), &stringIndices)
+    // Process each word (which may include whitespace)
+    var processedPrefix = "" // to track how many scalars consumed for string indices
+    for word in wordsWithSpaces {
+        // Create attributed string for the word
+        let attrString = NSAttributedString(string: word, attributes: [.font: ctFont])
+        let lineRef = CTLineCreateWithAttributedString(attrString)
+        let wordWidth = CGFloat(CTLineGetTypographicBounds(lineRef, nil, nil, nil))
 
-        for i in 0..<glyphCount {
-            let glyph = glyphs[i]
-            let position = positions[i]
-            let strIndex = stringIndices[i]  // UTF-16 based index
-
-            // Map to scalar index
-            guard let mapping = scalarRanges.first(where: { $0.utf16Range.contains(strIndex) }) else {
-                continue
-            }
-            let scalarPos = mapping.scalarIndex
-            if scalarPos >= resultPerCharacter.count { continue }
-
-            // Glyph path
-            guard let glyphPath = CTFontCreatePathForGlyph(ctFont, glyph, nil) else {
-                continue
-            }
-            var lines = decompose(path: glyphPath)
-
-            // Translation matrix for glyph position
-            let tx = Float(position.x)
-            let ty = Float(position.y)
-            let translation = simd_float4x4(
-                SIMD4<Float>(1, 0, 0, 0),
-                SIMD4<Float>(0, 1, 0, 0),
-                SIMD4<Float>(0, 0, 1, 0),
-                SIMD4<Float>(tx, ty, 0, 1)
-            )
-
-            for idx in lines.indices {
-                lines[idx] = lines[idx].applyMatrix(translation)
-            }
-
-            resultPerCharacter[scalarPos].append(contentsOf: lines)
+        // Wrap if needed (if non-empty and would exceed)
+        if cursorX > 0 && cursorX + wordWidth > maxLineWidth {
+            cursorX = 0
+            cursorY -= lineHeight
         }
-    }
 
-    // Fallback: ensure spaces / missing glyphs don't break layout (no geometry to add)
-    // Positioning was applied via CTLine; empty buckets are acceptable for e.g. space.
+        // Get glyph runs for this word
+        let runs = CTLineGetGlyphRuns(lineRef) as? [CTRun] ?? []
+
+        // We need to know the base UTF-16 index offset of this word within the full text
+        // Compute prefix length in UTF16
+        let prefixUTF16Count = processedPrefix.utf16.count
+
+        for run in runs {
+            let glyphCount = CTRunGetGlyphCount(run)
+            if glyphCount == 0 { continue }
+
+            var glyphs = Array<CGGlyph>(repeating: 0, count: glyphCount)
+            var positions = Array<CGPoint>(repeating: .zero, count: glyphCount)
+            var stringIndices = Array<CFIndex>(repeating: 0, count: glyphCount)
+
+            CTRunGetGlyphs(run, CFRange(location: 0, length: 0), &glyphs)
+            CTRunGetPositions(run, CFRange(location: 0, length: 0), &positions)
+            CTRunGetStringIndices(run, CFRange(location: 0, length: 0), &stringIndices)
+
+            for i in 0..<glyphCount {
+                let glyph = glyphs[i]
+                let position = positions[i]
+                let strIndexInWord = stringIndices[i] // UTF-16 index within word
+                let globalUTF16Index = prefixUTF16Count + strIndexInWord
+
+                // Map to scalar index in full text
+                guard let mapping = scalarRanges.first(where: { $0.utf16Range.contains(globalUTF16Index) }) else {
+                    continue
+                }
+                let scalarPos = mapping.scalarIndex
+                if scalarPos >= resultPerCharacter.count { continue }
+
+                // Path for glyph
+                guard let glyphPath = CTFontCreatePathForGlyph(ctFont, glyph, nil) else { continue }
+                var lines = decompose(path: glyphPath)
+
+                // Compute translation: glyph position + current line offset
+                let tx = Float(position.x + cursorX)
+                let ty = Float(position.y + cursorY)
+                let translation = simd_float4x4(
+                    SIMD4<Float>(1, 0, 0, 0),
+                    SIMD4<Float>(0, 1, 0, 0),
+                    SIMD4<Float>(0, 0, 1, 0),
+                    SIMD4<Float>(tx, ty, 0, 1)
+                )
+
+                for idx in lines.indices {
+                    lines[idx] = lines[idx].applyMatrix(translation)
+                }
+
+                resultPerCharacter[scalarPos].append(contentsOf: lines)
+            }
+        }
+
+        // Advance cursor by word width
+        cursorX += wordWidth
+        processedPrefix += word
+    }
 
     return resultPerCharacter
 }

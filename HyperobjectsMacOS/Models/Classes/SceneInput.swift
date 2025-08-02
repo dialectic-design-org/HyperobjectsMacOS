@@ -12,6 +12,7 @@ class SceneInput: ObservableObject, Identifiable {
     var name: String
     var type: InputType
     var value: Any
+    var presetValues: [String: Any] = [:]
     var range: ClosedRange<Float> = 0...1
     var audioReactive: Bool = false
     var audioAmplificationAddition: Float = 0.0
@@ -31,6 +32,7 @@ class SceneInput: ObservableObject, Identifiable {
     init(name: String,
          type: InputType,
          value: Any = 0.0,
+         presetValues: [String: Any] = [:],
          range: ClosedRange<Float> = 0...1,
          audioReactive: Bool = false,
          audioAmplificationAddition: Float = 0.0,
@@ -48,6 +50,7 @@ class SceneInput: ObservableObject, Identifiable {
         self.name = name
         self.type = type
         self.value = value
+        self.presetValues = presetValues
         self.range = range
         self.audioReactive = audioReactive
         self.audioAmplificationAddition = audioAmplificationAddition
