@@ -113,7 +113,7 @@ private func resolveCTFont(from font: Font, size: CGFloat) -> CTFont? {
             }
         }
     }
-    return CTFontCreateWithName("SF Mono Semibold" as CFString, size, nil)
+    return CTFontCreateWithName("SF Mono Heavy" as CFString, size, nil)
 }
 
 private func decompose(path: CGPath) -> [Line] {

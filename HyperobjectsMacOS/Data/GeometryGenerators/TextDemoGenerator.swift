@@ -27,7 +27,7 @@ private func mutateString(
     
     for i in 0..<originalArray.count {
         let origChar = originalArray[i]
-        let currChar = mutated[i]
+        // let currChar = mutated[i]
         
         if replacementMap[i] != nil {
             // Already replaced
@@ -49,7 +49,9 @@ private func mutateString(
 }
 
 private func randomCharacter(excluding excluded: Character) -> Character {
-    let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+    // let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+    let letters = Array("$#%@*!+")
+    // let letters = Array("پ")
     var candidate: Character
     repeat {
         candidate = letters.randomElement()!
