@@ -45,8 +45,6 @@ extension Shader_PathSeg {
         }
         
         return Shader_PathSeg(
-            p0_world: p0_world,
-            p1_world: p1_world,
             p_world: (
                 world_p0,
                 world_p1,
@@ -79,6 +77,20 @@ extension Shader_PathSeg {
             sigmoidMidpoint0: sigmoidMidpoint0,
             sigmoidSteepness1: sigmoidSteepness1,
             sigmoidMidpoint1: sigmoidMidpoint1,
+            
+            dashPattern: (
+                Float(1),
+                Float(0),
+                Float(0),
+                Float(0),
+                Float(0),
+                Float(0),
+                Float(0),
+                Float(0))
+            ,
+            dashCount: 2,
+            dashPhase: 0.0,
+            _padDash: 0,
             
             p_depth: (Float(0.0),Float(0.0),Float(0.0),Float(0.0)),
             p_inv_w: (Float(0.0),Float(0.0),Float(0.0),Float(0.0)),

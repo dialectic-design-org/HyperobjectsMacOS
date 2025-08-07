@@ -42,7 +42,8 @@ kernel void transformAndBin(
     Shader_PathSeg L = lines[gid];
     
     // Early culling: Skip degenerate lines where start and end are identical
-    if (distance(L.p0_world, L.p1_world) < 1e-8) {
+    
+    if (distance(L.p_world[0], L.p_world[1]) < 1e-8) {
         return; // Don't add to any bins
     }
     
@@ -371,17 +372,10 @@ kernel void drawLines(
         
         if (alphaEdge > 0.001) {
             if(depth < prevDepth) {
-                // rgb = float3(L.p0_depth, 0.1, 0.1);
-                rgb = color.xyz;
-                a = 1.0;
-                prevDepth = depth;
+                rgb += color.xyz * alphaEdge * color.w * occlusion;
+                a   += alphaEdge * color.w * occlusion;
             }
         }
-        
-        
-        // Blend the new line on top
-//        rgb += color.xyz * alphaEdge * occlusion; // Correct: Apply only geometric alpha
-//        a   += src_alpha * occlusion;
     }
     a = clamp(a, 0.0, 1.0);
     

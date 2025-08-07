@@ -67,7 +67,9 @@ class LorenzGenerator: CachedGeometryGenerator {
             
             lines.append(Line(
                 startPoint: currentPoint,
-                endPoint: nextPoint
+                endPoint: nextPoint,
+                lineWidthStart: 0.8,
+                lineWidthEnd: 0.8
             ))
         }
         let translationMatrixBefore = matrix_translation(translation: SIMD3<Float>(x: translationX, y: translationY, z: translationZ))

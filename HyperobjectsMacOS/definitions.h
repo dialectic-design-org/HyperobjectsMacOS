@@ -10,6 +10,9 @@
 
 #include <simd/simd.h>
 
+#define MAX_DASH_SEGMENTS 8
+
+
 struct Shader_Triangle {
     vector_float3 normals[3];
     vector_float3 colors[3];
@@ -20,8 +23,6 @@ struct Shader_Sphere {
 };
 
 struct Shader_PathSeg {
-    vector_float3 p0_world;
-    vector_float3 p1_world;
     vector_float4 p_world[4];
     
     vector_float2 p_screen[4];
@@ -47,6 +48,13 @@ struct Shader_PathSeg {
     float sigmoidSteepness1;
     float sigmoidMidpoint1;
     
+    // Dash detail
+    float dashPattern[MAX_DASH_SEGMENTS];
+    int dashCount;
+    float dashPhase;
+    int _padDash;
+    
+    // Derived screen-space (set by transform and bin kernel)
     float p_depth[4];
     float p_inv_w[4];
     float p_depth_over_w[4];

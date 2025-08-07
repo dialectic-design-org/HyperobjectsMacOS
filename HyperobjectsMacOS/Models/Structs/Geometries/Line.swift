@@ -35,8 +35,8 @@ struct Line: Geometry {
     var sigmoidSteepness1: Float = 6.0
     var sigmoidMidpoint1: Float = 0.5
     
-    var lineWidthStart: Float = 0.0005
-    var lineWidthEnd: Float = 0.00005
+    var lineWidthStart: Float = 0.4
+    var lineWidthEnd: Float = 0.4
     
     func getPoints() -> [SIMD3<Float>] {
         return [startPoint, endPoint]
@@ -109,4 +109,89 @@ struct Line: Geometry {
             return mix(startPoint, endPoint, t: t)
         }
     }
+    
+    func length() -> Double {
+        if degree == 1 || controlPoints.isEmpty {
+            // Straight line case
+            let diff = endPoint - startPoint
+            return Double(sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z))
+        } else {
+            // Bézier curve case - use numerical approximation
+            return approximateBezierLength()
+        }
+    }
+    
+    
+    private func approximateBezierLength(segments: Int = 100) -> Double {
+        var totalLength: Double = 0.0
+        let step = 1.0 / Double(segments)
+        
+        var previousPoint = evaluateBezier(t: 0.0)
+        
+        for i in 1...segments {
+            let t = Double(i) * step
+            let currentPoint = evaluateBezier(t: t)
+            
+            let diff = currentPoint - previousPoint
+            let segmentLength = sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z)
+            totalLength += Double(segmentLength)
+            
+            previousPoint = currentPoint
+        }
+        
+        return totalLength
+    }
+
+    private func evaluateBezier(t: Double) -> SIMD3<Float> {
+        let ft = Float(t)
+        
+        if degree == 2 {
+            // Quadratic Bézier: B(t) = (1-t)²P₀ + 2(1-t)tP₁ + t²P₂
+            guard controlPoints.count >= 1 else { return startPoint }
+            
+            let oneMinusT = 1.0 - ft
+            let oneMinusTSquared = oneMinusT * oneMinusT
+            let tSquared = ft * ft
+            let twoOneMinusTt = 2.0 * oneMinusT * ft
+            
+            return oneMinusTSquared * startPoint +
+                   twoOneMinusTt * controlPoints[0] +
+                   tSquared * endPoint
+                   
+        } else if degree == 3 {
+            // Cubic Bézier: B(t) = (1-t)³P₀ + 3(1-t)²tP₁ + 3(1-t)t²P₂ + t³P₃
+            guard controlPoints.count >= 2 else { return startPoint }
+            
+            let oneMinusT = 1.0 - ft
+            let oneMinusTCubed = oneMinusT * oneMinusT * oneMinusT
+            let tCubed = ft * ft * ft
+            let threeOneMinusTSquaredT = 3.0 * oneMinusT * oneMinusT * ft
+            let threeOneMinusTtSquared = 3.0 * oneMinusT * ft * ft
+            
+            return oneMinusTCubed * startPoint +
+                   threeOneMinusTSquaredT * controlPoints[0] +
+                   threeOneMinusTtSquared * controlPoints[1] +
+                   tCubed * endPoint
+                   
+        } else {
+            // For higher degree curves, use De Casteljau's algorithm
+            return evaluateBezierDeCasteljau(t: ft)
+        }
+    }
+
+    private func evaluateBezierDeCasteljau(t: Float) -> SIMD3<Float> {
+        // Create array of all control points (start, control points, end)
+        var points: [SIMD3<Float>] = [startPoint] + controlPoints + [endPoint]
+        
+        // De Casteljau's algorithm
+        for i in 1...degree {
+            for j in 0..<(degree - i + 1) {
+                points[j] = (1.0 - t) * points[j] + t * points[j + 1]
+            }
+        }
+        
+        return points[0]
+    }
 }
+
+

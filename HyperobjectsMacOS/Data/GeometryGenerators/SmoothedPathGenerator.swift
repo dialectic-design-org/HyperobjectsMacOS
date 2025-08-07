@@ -7,6 +7,7 @@
 
 import Foundation
 import simd
+import SwiftUI
 
 // Generate N random points inside a cube of side length `size` centered at origin.
 private func generateRandomPoints(count: Int, size: Float) -> [SIMD3<Float>] {
@@ -52,6 +53,10 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
     var sortedPoints: [SIMD3<Float>] = []
     var smoothedLines: [Line] = []
     var previousSmoothingValue: Float = 0.0
+    var pointT: Double = 0.0
+    var prevTolerance: Float = 0.5
+    
+    
     init() {
         super.init(name: "Smoothed Path Generator",
                    inputDependencies: [
@@ -68,19 +73,77 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
         let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
         let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
         let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
+        let toleranceInput = floatFromInputs(inputs, name: "Tolerance")
+        
+        var startColor = colorFromInputs(inputs, name: "Color start")
+        var endColor = colorFromInputs(inputs, name: "Color end")
+        
+        let pointsCount = intFromInputs(inputs, name: "Points count")
         
         
         var lines: [Line] = []
         
-        if randomPoints.count == 0 {
-            randomPoints = generateRandomPoints(count: 125, size: 5.0)
+        let scale = ColorScale(colors: [startColor, endColor], mode: .hsl)
+        
+        var pointsUpdated: Bool = false
+        if pointsCount != randomPoints.count {
+            pointsUpdated = true
+            randomPoints = generateRandomPoints(count: pointsCount, size: 5.0)
             sortedPoints = greedyOrder(points: randomPoints)
-            smoothedLines = smoothedBezierPath(points: sortedPoints, tolerance: 2.0)
+            
+        }
+        if prevTolerance != toleranceInput || pointsUpdated {
+            prevTolerance = toleranceInput
+            smoothedLines = smoothedBezierPath(points: sortedPoints, tolerance: toleranceInput)
+            
+            var tIncrement = 1.0 / Double(smoothedLines.count)
             for i in 0..<smoothedLines.count {
+                var lineT = Double(i) / Double(smoothedLines.count)
                 smoothedLines[i].lineWidthStart = 3.0
                 smoothedLines[i].lineWidthEnd = 3.0
+                smoothedLines[i].setBasicEndPointColors(
+                    startColor: scale.color(at: lineT).toSIMD4(),
+                    endColor: scale.color(at: lineT + tIncrement).toSIMD4()
+                )
             }
         }
+        
+        pointT += 0.0001
+        pointT = fmod(pointT, 1.0)
+        
+        var smoothedPath = PathGeometry(lines: smoothedLines)
+        var smoothedPathPoint = smoothedPath.interpolate(t: pointT)
+        
+        var pointLinesWidth: Float = 0.5
+        var lineExtension: Float = 1.0
+        
+        var pointLines: [Line] = [
+            Line(
+                startPoint: smoothedPathPoint + SIMD3<Float>(0.0, -lineExtension, 0.0),
+                endPoint: smoothedPathPoint + SIMD3<Float>(0.0, lineExtension, 0.0),
+                lineWidthStart: pointLinesWidth,
+                lineWidthEnd: pointLinesWidth
+            ),
+            Line(
+                startPoint: smoothedPathPoint + SIMD3<Float>(-lineExtension, 0.0, 0.0),
+                endPoint: smoothedPathPoint + SIMD3<Float>(lineExtension, 0.0, 0.0),
+                lineWidthStart: pointLinesWidth,
+                lineWidthEnd: pointLinesWidth
+            ),
+            Line(
+                startPoint: smoothedPathPoint + SIMD3<Float>(0.0, 0.0, -lineExtension),
+                endPoint: smoothedPathPoint + SIMD3<Float>(0.0, 0.0, lineExtension),
+                lineWidthStart: pointLinesWidth,
+                lineWidthEnd: pointLinesWidth
+            ),
+        ]
+        for i in 0..<pointLines.count {
+            pointLines[i].setBasicEndPointColors(
+                startColor: Color.green.toSIMD4(),
+                endColor: Color.green.toSIMD4()
+            )
+        }
+        lines += pointLines
         
         for i in stride(from: 0, to: randomPoints.count, by: 1) {
             let p1 = randomPoints[i]
