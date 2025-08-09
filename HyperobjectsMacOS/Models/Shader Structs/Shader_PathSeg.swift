@@ -7,6 +7,22 @@
 
 import simd
 
+
+private func tupleFromArray<T>(_ array: [T]) -> (
+    T, T, T, T, T, T, T, T,
+    T, T, T, T, T, T, T, T,
+    T, T, T, T, T, T, T, T,
+    T, T, T, T, T, T, T, T
+) {
+    precondition(array.count == 32)
+    return (
+        array[0], array[1], array[2], array[3], array[4], array[5], array[6], array[7],
+        array[8], array[9], array[10], array[11], array[12], array[13], array[14], array[15],
+        array[16], array[17], array[18], array[19], array[20], array[21], array[22], array[23],
+        array[24], array[25], array[26], array[27], array[28], array[29], array[30], array[31]
+    )
+}
+
 extension Shader_PathSeg {
     static func initWithValues(
         p0_world: SIMD3<Float> = SIMD3<Float>(0,0,0),
@@ -44,6 +60,18 @@ extension Shader_PathSeg {
             world_p2 = SIMD4<Float>(controlPoints[1], 1.0);
         }
         
+        let dashPatternPx = (
+            Float(0.0),
+            Float(0.0),
+            Float(0.0),
+            Float(0.0),
+            Float(0.0),
+            Float(0.0),
+            Float(0.0),
+            Float(0.0))
+        
+        let sLUTPlaceholder = tupleFromArray(Array(repeating: Float(0), count: Int(ARC_LUT_SAMPLES)))
+        
         return Shader_PathSeg(
             p_world: (
                 world_p0,
@@ -64,8 +92,6 @@ extension Shader_PathSeg {
             halfWidth0: halfWidth0,
             halfWidth1: halfWidth1,
             antiAlias: antialias,
-            // p0_depth: 0.0,
-            // p1_depth: 0.0,
             _pad0: 0.0,
             colorPremul0: colorPremul0,
             colorPremul0OuterLeft: colorPremul0OuterLeft,
@@ -78,23 +104,19 @@ extension Shader_PathSeg {
             sigmoidSteepness1: sigmoidSteepness1,
             sigmoidMidpoint1: sigmoidMidpoint1,
             
-            dashPattern: (
-                Float(1),
-                Float(0),
-                Float(0),
-                Float(0),
-                Float(0),
-                Float(0),
-                Float(0),
-                Float(0))
-            ,
-            dashCount: 2,
-            dashPhase: 0.0,
+            dashPatternPx: dashPatternPx,
+            dashCount: 0,
+            dashTotalPx: 0.0,
+            dashPhasePx: 0.0,
             _padDash: 0,
             
             p_depth: (Float(0.0),Float(0.0),Float(0.0),Float(0.0)),
             p_inv_w: (Float(0.0),Float(0.0),Float(0.0),Float(0.0)),
-            p_depth_over_w: (Float(0.0),Float(0.0),Float(0.0),Float(0.0))
+            p_depth_over_w: (Float(0.0),Float(0.0),Float(0.0),Float(0.0)),
+            
+            sLUT: sLUTPlaceholder,
+            segLengthPx: 0.0,
+            
         )
     }
 }

@@ -11,7 +11,7 @@
 #include <simd/simd.h>
 
 #define MAX_DASH_SEGMENTS 8
-
+#define ARC_LUT_SAMPLES   32
 
 struct Shader_Triangle {
     vector_float3 normals[3];
@@ -49,15 +49,19 @@ struct Shader_PathSeg {
     float sigmoidMidpoint1;
     
     // Dash detail
-    float dashPattern[MAX_DASH_SEGMENTS];
+    float dashPatternPx[MAX_DASH_SEGMENTS];
     int dashCount;
-    float dashPhase;
+    float dashTotalPx;
+    float dashPhasePx;
     int _padDash;
     
     // Derived screen-space (set by transform and bin kernel)
     float p_depth[4];
     float p_inv_w[4];
     float p_depth_over_w[4];
+    
+    float  sLUT[ARC_LUT_SAMPLES]; // cumulative length; sLUT[0]=0, sLUT[N-1]=segLengthPx
+    float  segLengthPx;           // convenience alias of sLUT[N-1]
 };
 
 

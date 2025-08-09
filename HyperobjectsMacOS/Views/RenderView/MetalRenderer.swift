@@ -287,6 +287,7 @@ class MetalRenderer {
         var gIndex: Int = 0
         
         var geometriesTime: Float = 0.0
+        
         for gWrapped in scene.cachedGeometries {
             let geometry = gWrapped.geometry
             geometriesTime = Float(gIndex) / Float(scene.cachedGeometries.count)

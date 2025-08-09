@@ -29,6 +29,28 @@ struct VertexOut {
 #define BIN_SIZE (1 << BIN_POW)
 #define lineCount 10000
 
+
+
+
+
+////////////////////////////////////////////////////////////////////////////
+// Path evaluation helpers
+
+inline float2 eval_point(Shader_PathSeg S, float t) {
+    float u = 1.0 - t;
+    if (S.degree == 1) {
+        return mix(S.p_screen[0], S.p_screen[1], t);
+    } else if (S.degree == 2) {
+        return u*u*S.p_screen[0] + 2.0*u*t*S.p_screen[1] + t*t*S.p_screen[2];
+    } else {
+        float uu = u*u; float tt = t*t;
+        return uu*u*S.p_screen[0] + 3.0*uu*t*S.p_screen[1] + 3.0*u*tt*S.p_screen[2] + tt*t*S.p_screen[3];
+    }
+}
+
+
+
+
 kernel void transformAndBin(
                             device Shader_PathSeg* lines [[buffer(0)]],
                             constant float4x4& MVP [[buffer(1)]],
@@ -61,6 +83,19 @@ kernel void transformAndBin(
         lines[gid].p_depth_over_w[i] = lines[gid].p_depth[i] / p_clip.w;
         points[i] = p_screen;
     }
+    
+    // build arc‑length LUT in screen space --------------------------------
+    lines[gid].sLUT[0] = 0.0;
+    float2 prev = eval_point(L, 0.0);
+    float accum = 0.0;
+    for(uint n=1; n<ARC_LUT_SAMPLES; ++n) {
+        float t = float(n) / float(ARC_LUT_SAMPLES - 1);
+        float2 pt = eval_point(lines[gid], t);
+        accum += distance(pt, prev);
+        lines[gid].sLUT[n] = accum;
+        prev = pt;
+    }
+    lines[gid].segLengthPx = accum;
     
     uint BIN_COLS = (viewSize.x + BIN_SIZE - 1) / BIN_SIZE;
         
@@ -147,20 +182,6 @@ kernel void transformAndBin(
 
 
 
-////////////////////////////////////////////////////////////////////////////
-// Path evaluation helpers
-
-inline float2 eval_point(Shader_PathSeg S, float t) {
-    float u = 1.0 - t;
-    if (S.degree == 1) {
-        return mix(S.p_screen[0], S.p_screen[1], t);
-    } else if (S.degree == 2) {
-        return u*u*S.p_screen[0] + 2.0*u*t*S.p_screen[1] + t*t*S.p_screen[2];
-    } else {
-        float uu = u*u; float tt = t*t;
-        return uu*u*S.p_screen[0] + 3.0*uu*t*S.p_screen[1] + 3.0*u*tt*S.p_screen[2] + tt*t*S.p_screen[3];
-    }
-}
 
 inline float2 eval_deriv(Shader_PathSeg S, float t) {
     if (S.degree == 1) {
@@ -197,6 +218,30 @@ inline float closestT(Shader_PathSeg S, float2 p) {
         bestT = clamp(bestT - dt, 0.0, 1.0);
     }
     return bestT;
+}
+
+inline float arcLenAtT(Shader_PathSeg S, float t) {
+    float u = clamp(t, 0.0, 1.0) * float(ARC_LUT_SAMPLES - 1);
+    uint  i = (uint)floor(u);
+    float f = u - float(i);
+    uint  j = min(i + 1u, (uint)ARC_LUT_SAMPLES - 1u);
+    return mix(S.sLUT[i], S.sLUT[j], f);
+}
+
+
+inline float dashMaskPx(Shader_PathSeg S, float t) {
+    if (S.dashCount == 0 || S.dashTotalPx <= 0.0) return 1.0; // solid
+    float s = arcLenAtT(S, t) + S.dashPhasePx; // pixels from path origin
+    float m = fmod(max(s, 0.0), S.dashTotalPx);
+    float accum = 0.0;
+    for (int i=0; i<S.dashCount; ++i) {
+        float seg = S.dashPatternPx[i];
+        if (m < accum + seg) {
+            return (i & 1u) ? 0.0 : 1.0; // even=draw, odd=gap
+        }
+        accum += seg;
+    }
+    return 1.0;
 }
 
 
@@ -333,6 +378,9 @@ kernel void drawLines(
         float aa = max(L.antiAlias, 0.0);
         float alphaEdge = smoothstep(halfWidth + aa, halfWidth - aa, d);
         
+        alphaEdge *= dashMaskPx(L, t);
+        if(alphaEdge <1e-3) continue;
+        
         float4 innerColor = mix(L.colorPremul0, L.colorPremul1, t);
         
         float4 outerColorLeft = mix(L.colorPremul0OuterLeft, L.colorPremul1OuterLeft, t);
@@ -363,6 +411,8 @@ kernel void drawLines(
         // float4 color = float4(sigmoidMidpoint, 1.0 - sigmoidMidpoint, 0.0, 1.0);
         // float4 color = float4(sigmoidSteepness, 1.0 - sigmoidSteepness, 0.0, 1.0);
         // color = float4(finalSignedDistance, 0.0, 0.0, 1.0);
+        // color = float4(arcLenAtT(L, t) / 1.0, 1.0, 0.0, 1.0);
+        // color = float4(L.sLUT[16], 1.0, 0.0, 1.0);
         
         // The alpha of the current line fragment considering its geometry
         float src_alpha = alphaEdge * color.w;
