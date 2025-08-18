@@ -10,6 +10,314 @@
 
 using namespace metal;
 
+
+constant uint SIMD_WIDTH = 32;
+constant uint TG_ATOMICS_SIZE = 64; // Local bins for threadgroup accumulation
+
+
+
+// Fast math helpers
+[[clang::always_inline]]
+inline float2 fastProjectToScreen(float4 clipPos, float2 viewSize) {
+    float inv_w = fast::divide(1.0f, clipPos.w);
+    float2 ndc = clamp(clipPos.xy * inv_w, -1.0f, 1.0f);
+    return (ndc * 0.5f + 0.5f) * viewSize;
+}
+
+[[clang::always_inline]]
+inline bool lineIntersectsBox(float2 p0, float2 p1, float2 boxMin, float2 boxMax, float radius) {
+    float2 expandedMin = boxMin - radius;
+    float2 expandedMax = boxMax + radius;
+    
+    float2 lineMin = min(p0, p1);
+    float2 lineMax = max(p0, p1);
+    
+    bool2 noOverlap = (lineMax < expandedMin) | (lineMin > expandedMax);
+    return !any(noOverlap);
+}
+
+[[clang::always_inline]]
+inline void binRange(float2 mn, float2 mx, float2 viewPx,
+                     thread uint& bx0, thread uint& by0,
+                     thread uint& bx1, thread uint& by1) {
+    // pixel inclusive rect
+    int px0 = max(0, (int)floor(mn.x));
+    int py0 = max(0, (int)floor(mn.y));
+    int px1 = min((int)viewPx.x - 1, (int)ceil (mx.x) - 1);
+    int py1 = min((int)viewPx.y - 1, (int)ceil (mx.y) - 1);
+    
+    if (px1 < px0 || py1 < py0) { bx0=1; bx1=0; by0=1; by1=0; return; } // empty
+    
+    bx0 = (uint)(px0) >> BIN_POW;
+    by0 = (uint)(py0) >> BIN_POW;
+    bx1 = (uint)(px1) >> BIN_POW;
+    by1 = (uint)(py1) >> BIN_POW;
+}
+
+
+kernel void transformAndBinLinear(
+    device const LinearSeg3D*               inSegs          [[buffer(0)]],
+    constant float4x4&                      MVP             [[buffer(1)]],
+    constant Uniforms&                      U               [[buffer(2)]],
+    device LinearSegScreenSpace*            outSegs         [[buffer(3)]],
+    device atomic_uint*                     binCounts       [[buffer(4)]],
+    device uint*                            binOffsets      [[buffer(5)]],
+    device uint*                            binList         [[buffer(6)]],
+    constant uint&                          segCount        [[buffer(7)]],
+    uint                                    gid             [[thread_position_in_grid]],
+    uint                                    tid             [[thread_index_in_quadgroup]],
+    uint                                    tg_size         [[threads_per_threadgroup]]
+) {
+    if (gid >= segCount) return;
+    
+    const LinearSeg3D S = inSegs[gid];
+    
+    if (length((S.p1_world - S.p0_world).xyz) < 1e-12f) return;
+    
+    // Project endpoints into clip space
+    float4 p0c = MVP * S.p0_world;
+    float4 p1c = MVP * S.p1_world;
+    
+    if (fabs(p0c.w) < 1e-8f || fabs(p1c.w) < 1e-8f) return;
+
+    float2 view = float2(U.viewWidth, U.viewHeight);
+    
+    
+    float inv_p0w = fast::divide(1.0f, p0c.w);
+    float inv_p1w = fast::divide(1.0f, p1c.w);
+    
+    
+    float2 p0ndc = clamp(p0c.xy * inv_p0w, -1.0f, 1.0f);
+    float2 p1ndc = clamp(p1c.xy * inv_p1w, -1.0f, 1.0f);
+    
+    float2 p0ss = (p0ndc * 0.5f + 0.5f) * view;
+    float2 p1ss = (p1ndc * 0.5f + 0.5f) * view;
+    
+    outSegs[gid].p0_ss = p0ss;
+    outSegs[gid].p1_ss = p1ss;
+    outSegs[gid].halfWidthPx = S.halfWidthPx;
+    outSegs[gid].aaPx = U.antiAliasPx;
+    
+    // Expanded bbox (width + aa)
+    float rad = S.halfWidthPx + U.antiAliasPx;
+    float2 mn = floor(min(p0ss, p1ss) - rad);
+    float2 mx = ceil (max(p0ss, p1ss) + rad);
+    
+    outSegs[gid].bboxMinSS = mn;
+    outSegs[gid].bboxMaxSS = mx;
+    
+    // Screen reject vectorized
+    bool2 outside_min = mx < 0.0f;
+    bool2 outside_max = mn >= view;
+    if(any(outside_min) || any(outside_max)) return;
+
+    // Bin by bbox only (simple & over-inclusive)
+    uint BIN_COLS = (uint)((view.x + BIN_SIZE - 1) / BIN_SIZE);
+    float2 binSizeVec = float2(BIN_SIZE);
+    
+    // Threadgroup local atomic accumulation
+    threadgroup atomic_uint tg_localCounts[TG_ATOMICS_SIZE];
+    
+    // Initialize once per threadgroup
+    if (tid < TG_ATOMICS_SIZE) {
+        atomic_store_explicit(&tg_localCounts[tid], 0u, memory_order_relaxed);
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    
+    uint bx0,by0,bx1,by1;
+    binRange(mn, mx, view, bx0,by0,bx1,by1);
+    
+    for (uint by = by0; by <= by1; ++by)
+    for (uint bx = bx0; bx <= bx1; ++bx) {
+        float2 binMin = float2(bx, by) * binSizeVec;
+        float2 binMax = binMin + binSizeVec;
+        
+        
+        if(!lineIntersectsBox(p0ss, p1ss, binMin, binMax, rad)) {
+            continue;
+        }
+        
+        uint bin  = by * BIN_COLS + bx;
+        
+        if (bin < TG_ATOMICS_SIZE) {
+            atomic_fetch_add_explicit(&tg_localCounts[bin], 1u, memory_order_relaxed);
+        } else {
+            uint pos  = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
+            binList[binOffsets[bin] + pos] = gid; // store index of outSegs
+        }
+    }
+    
+    // Flush threadgroup atomics to device memory
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (tid < TG_ATOMICS_SIZE) {
+        uint local_count = atomic_load_explicit(&tg_localCounts[tid], memory_order_relaxed);
+        if (local_count > 0) {
+            uint pos = atomic_fetch_add_explicit(&binCounts[tid], local_count, memory_order_relaxed);
+            // Note: This simplified version assumes single segment per thread
+            // Full implementation would need a separate pass or different strategy
+            // binList[binOffsets[tid] + pos] = gid;
+        }
+    }
+};
+
+
+kernel void drawLines(
+    texture2d<half, access::write>      outTex      [[texture(0)]],
+                      
+    device const LinearSegScreenSpace*  segs        [[buffer(0)]],
+    device const atomic_uint*           binCounts   [[buffer(1)]],
+    device const uint*                  binOffsets  [[buffer(2)]],
+    device const uint*                  binList     [[buffer(3)]],
+    constant Uniforms&                  U           [[buffer(4)]],
+                      
+    ushort2                             tid         [[thread_position_in_threadgroup]],
+    uint2                               gid         [[thread_position_in_grid]],
+    uint                                simd_lane   [[thread_index_in_simdgroup]],
+    uint                                simd_size   [[threads_per_simdgroup]]
+) {
+    const float2 p = float2(gid) + 0.5f;
+    const float2 view = float2(U.viewWidth, U.viewHeight);
+    
+    // Bin lookup
+    uint BIN_COLS = (uint)((view.x + BIN_SIZE - 1) / BIN_SIZE);
+    uint bin = (gid.y >> BIN_POW) * BIN_COLS + (gid.x >> BIN_POW);
+    
+    // Single load of bin count (optimization: removed duplicate load)
+    const uint total = atomic_load_explicit(&binCounts[bin], memory_order_relaxed);
+    uint base = binOffsets[bin];
+    
+    // Threadgroup staging buffers - keeping separate arrays for better access patterns
+    threadgroup float2 tgP0[KMAX_PER_BIN];
+    threadgroup float2 tgP1[KMAX_PER_BIN];
+    threadgroup float2 tgDir[KMAX_PER_BIN];
+    threadgroup float2 tgPerp[KMAX_PER_BIN];
+    threadgroup float tgLen[KMAX_PER_BIN];
+    threadgroup float tgInvLen[KMAX_PER_BIN];
+    threadgroup float tgHW[KMAX_PER_BIN];
+    threadgroup float tgAA[KMAX_PER_BIN];
+    threadgroup float2 tgMN[KMAX_PER_BIN];
+    threadgroup float2 tgMX[KMAX_PER_BIN];
+    threadgroup float tgR0_2[KMAX_PER_BIN];
+    threadgroup float tgR1_2[KMAX_PER_BIN];
+    
+    float3 rgb = U.backgroundColor;
+    float a = 0.0f;
+    
+     if (((bin & 1u) == 0u)) rgb += U.debugBins * float3(0.1);
+
+     rgb += float3(float(total) / 10.0) * U.binVisibility;
+    
+    
+    // Process batches
+    uint processed = 0;
+    while (processed < total && a < 0.99f) {
+        const uint batch = min(KMAX_PER_BIN, total - processed);
+        const uint start = base + processed;
+        
+        // Cooperative loading with SIMD optimization
+        const uint lanes = BIN_SIZE * BIN_SIZE;
+        const uint lane = tid.y * BIN_SIZE + tid.x;
+        for (uint i = lane; i < batch; i += lanes) {
+            const uint idx = binList[start + i];
+            device const LinearSegScreenSpace* S = segs + idx;
+
+            float2 p0 = S->p0_ss;
+            float2 p1 = S->p1_ss;
+            float2 ba = p1 - p0;
+            float l2 = max(dot(ba, ba), 1e-12f);
+            float invLen = fast::rsqrt(l2);  // Optimization: use fast rsqrt
+            float len = l2 * invLen;      // Optimization: use fast sqrt instead of 1/invLen
+            float2 dir = ba * invLen;
+            float2 perp = float2(-dir.y, dir.x);
+
+            float hw = S->halfWidthPx;
+            float aa = S->aaPx;
+            float r0 = max(hw - aa, 0.0f);
+            float r1 = hw + aa;
+
+            tgP0[i] = p0;
+            tgP1[i] = p1;
+            tgDir[i] = dir;
+            tgPerp[i] = perp;
+            tgLen[i] = len;
+            tgInvLen[i] = invLen;
+            tgMN[i] = S->bboxMinSS;
+            tgMX[i] = S->bboxMaxSS;
+            tgHW[i] = hw;
+            tgAA[i] = aa;
+            tgR0_2[i] = r0 * r0;
+            tgR1_2[i] = r1 * r1;
+        }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+
+        // Process cached batch
+        const uint C = batch;
+        for (uint i = 0; i < C && a < 0.99f; ++i) {
+            // Optimized bbox rejection using vector operations
+            bool2 outside_min = p < tgMN[i];
+            bool2 outside_max = p > tgMX[i];
+            if (any(outside_min) || any(outside_max)) continue;
+
+            float2 pa = p - tgP0[i];
+
+            // Parallel & perpendicular components w.r.t. segment
+            float s = dot(pa, tgDir[i]);        // signed distance along the segment
+            float dp = dot(pa, tgPerp[i]);      // signed distance to the infinite line
+
+            // Clamp to the finite segment
+            float sClamped = clamp(s, 0.0f, tgLen[i]);
+
+            // Closest point q = p0 + dir * sClamped
+            float2 dq = pa - tgDir[i] * sClamped;
+
+            // Squared distance from pixel to segment
+            float d2 = dot(dq, dq);
+
+            // Alpha via squared smoothstep: smoothstep(r1^2, r0^2, d^2)
+            float r0_2 = tgR0_2[i];
+            float r1_2 = tgR1_2[i];
+
+            // If fully inside: early O(1) fill
+            if (d2 <= r0_2) {
+                float contrib = (1.0f - a);
+                rgb += float3(1.0f) * contrib;
+                a += contrib;
+                continue;
+            }
+            
+            // If fully outside: skip
+            if (d2 > r1_2) {
+                continue;
+            }
+
+            // Edge band: r0^2 .. r1^2
+            float denom = max(r1_2 - r0_2, 1e-12f);
+            float t = clamp((d2 - r0_2) / denom, 0.0f, 1.0f);
+            float smooth = t * t * (3.0f - 2.0f * t);
+            float alpha = 1.0f - smooth;
+
+            float contrib = alpha * (1.0f - a);
+            rgb += float3(1.0f) * contrib;
+            a += contrib;
+        }
+
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        processed += C;
+
+        // Group-wide early exit if everyone is opaque
+        if (simd_all(a >= 0.99f)) break;
+    }
+    
+    // Use half precision for output (optimization)
+    outTex.write(half4(half3(rgb), half(saturate(a))), gid);
+};
+
+
+
+
+
+
+
 struct VertexUniforms {
     float4x4 projectionMatrix;  // 64 bytes
     float4x4 viewMatrix;        // 64 bytes
@@ -17,543 +325,11 @@ struct VertexUniforms {
     float3 _padding;            // 12 bytes to align to 16 bytes
 };
 
-
-
 struct VertexOut {
     float4 position [[ position ]];
     float2 uv;
     float pointsize [[point_size]];
 };
-
-#define BIN_POW 4
-#define BIN_SIZE (1 << BIN_POW)
-#define lineCount 10000
-
-
-
-
-////////////////////////////////////////////////////////////////////////////
-// Path evaluation helpers
-
-inline float2 eval_point(Shader_PathSeg S, float t) {
-    float u = 1.0 - t;
-    if (S.degree == 1) {
-        return mix(S.p_screen[0], S.p_screen[1], t);
-    } else if (S.degree == 2) {
-        return u*u*S.p_screen[0] + 2.0*u*t*S.p_screen[1] + t*t*S.p_screen[2];
-    } else {
-        float uu = u*u; float tt = t*t;
-        return uu*u*S.p_screen[0] + 3.0*uu*t*S.p_screen[1] + 3.0*u*tt*S.p_screen[2] + tt*t*S.p_screen[3];
-    }
-}
-
-inline float2 eval_deriv(Shader_PathSeg S, float t) {
-    if (S.degree == 1) {
-        return S.p_screen[1] - S.p_screen[0];
-    } else if (S.degree == 2) {
-        return 2.0 * mix(S.p_screen[1] - S.p_screen[0], S.p_screen[2] - S.p_screen[1], t);
-    } else {
-        float u = 1.0 - t;
-        return 3.0 * (u*u*(S.p_screen[1]-S.p_screen[0]) + 2.0*u*t*(S.p_screen[2]-S.p_screen[1]) + t*t*(S.p_screen[3]-S.p_screen[2]));
-    }
-}
-
-
-
-// PREVIOUS 'SLOW' implementation, now replaced by t_from_lut
-
-//inline float closestT(Shader_PathSeg S, float2 p) {
-//    float bestT = 0.0;
-//    float bestD = 1e9;
-//    const uint N = 16u;
-//    for (uint i = 0; i < N; i ++) {
-//        float t = float(i) / float(N);
-//        float d = distance(eval_point(S, t), p);
-//        if (d < bestD) {
-//            bestD = d;
-//            bestT = t;
-//        }
-//    }
-//
-//    for (uint k=0; k < 3; k++) {
-//        float2 pt = eval_point(S, bestT);
-//        float2 dpt = eval_deriv(S, bestT);
-//        float2 r = pt - p;
-//        float f = dot(r, dpt);
-//        float g = dot(dpt, dpt) + dot(r, eval_deriv(S, bestT + 1e-3) - dpt) / 1e-3;
-//        float dt = (g == 0.0) ? 0.0 : f / g;
-//        bestT = clamp(bestT - dt, 0.0, 1.0);
-//    }
-//    return bestT;
-//}
-
-
-
-inline float t_from_lut(Shader_PathSeg L, float2 p) {
-    uint idx = 0;
-    float best = FLT_MAX;
-    
-    for (uint n = 0; n < ARC_LUT_SAMPLES; ++n) {
-        float2 d = p - L.posLUT[n];
-        float dsq = dot(d, d);
-        if(dsq < best) {
-            best = dsq;
-            idx = n;
-        }
-    }
-    float t0 = (float)idx / (ARC_LUT_SAMPLES - 1);
-    
-    float2 pt0 = L.posLUT[idx];
-    float2 dpt = L.tanLUT[idx];
-    float2 r = pt0 - p;
-    float f = dot(r, dpt);
-    float g = max(dot(dpt, dpt), 1e-6);
-    float t = clamp(t0 - f/g, 0.0, 1.0);
-    return t;
-}
-
-
-inline float arcLenAtT(Shader_PathSeg S, float t) {
-    float u = clamp(t, 0.0, 1.0) * float(ARC_LUT_SAMPLES - 1);
-    uint  i = (uint)floor(u);
-    float f = u - float(i);
-    uint  j = min(i + 1u, (uint)ARC_LUT_SAMPLES - 1u);
-    return mix(S.sLUT[i], S.sLUT[j], f);
-}
-
-
-inline float dashMaskPx(Shader_PathSeg S, float t) {
-    if (S.dashCount == 0 || S.dashTotalPx <= 0.0) return 1.0; // solid
-    float s = arcLenAtT(S, t) + S.dashPhasePx; // pixels from path origin
-    float m = fmod(max(s, 0.0), S.dashTotalPx);
-    float accum = 0.0;
-    for (int i=0; i<S.dashCount; ++i) {
-        float seg = S.dashPatternPx[i];
-        if (m < accum + seg) {
-            return (i & 1u) ? 0.0 : 1.0; // even=draw, odd=gap
-        }
-        accum += seg;
-    }
-    return 1.0;
-}
-
-
-
-
-////////////////////////////////////////////////////////////////////////////
-//
-// Core shaders
-//
-////////////////////////////////////////////////////////////////////////////
-
-
-kernel void transformAndBin(
-                            device Shader_PathSeg* lines [[buffer(0)]],
-                            constant float4x4& MVP [[buffer(1)]],
-                            constant TransformUniforms& U [[buffer(2)]],
-                            device atomic_uint* binCounts [[buffer(3)]],
-                            device uint* binOffsets [[buffer(4)]],
-                            device uint* binList [[buffer(5)]],
-                            uint gid [[thread_position_in_grid]]
-                            ) {
-    if (gid >= lineCount) return;
-    Shader_PathSeg L = lines[gid];
-    
-    // Early culling: Skip degenerate lines where start and end are identical
-    
-    if (distance(L.p_world[0], L.p_world[1]) < 1e-8) {
-        return; // Don't add to any bins
-    }
-    
-    float2 viewSize = float2(U.viewWidth, U.viewHeight);
-    
-    // projecting to screen space
-    float2 points[4];
-    
-    for (int i = 0; i <= L.degree; i++) {
-        float4 p_clip = MVP * L.p_world[i];
-        float2 p_screen = p_clip.xy / p_clip.w;
-        p_screen = (p_screen * 0.5 + 0.5) * viewSize;
-        lines[gid].p_screen[i] = p_screen;
-        lines[gid].p_depth[i] = length(L.p_world[i].xyz - U.cameraPosition);
-        lines[gid].p_inv_w[i] = 1.0 / p_clip.w;
-        lines[gid].p_depth_over_w[i] = lines[gid].p_depth[i] / p_clip.w;
-        points[i] = p_screen;
-    }
-    
-    
-    
-    // Calculate and save bounding box for later
-    float2 mn = floor(min(points[0], points[1]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
-    float2 mx = ceil (max(points[0], points[1]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
-
-    if (L.degree == 2) {
-        mn = floor(min(mn, points[2]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
-        mx = ceil (max(mx, points[2]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
-    } else if (L.degree == 3) {
-        mn = floor(min(mn, points[2]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
-        mx = ceil (max(mx, points[2]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
-        mn = floor(min(mn, points[3]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
-        mx = ceil (max(mx, points[3]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
-    }
-    
-    lines[gid].bboxMinSS = mn;
-    lines[gid].bboxMaxSS = mx;
-    
-    // Screenreject if outside
-    if (mx.x < 0.0 || mx.y < 0.0 || mn.x >= viewSize.x || mn.y >= viewSize.y) {
-        lines[gid].lutCount = 0;
-        return;
-    }
-    
-    // build arc‑length LUT in screen space --------------------------------
-    lines[gid].sLUT[0] = 0.0;
-    float2 prev = eval_point(L, 0.0);
-    float accum = 0.0;
-    if (L.degree > 1) {
-        for(uint n=1; n<ARC_LUT_SAMPLES; ++n) {
-            float t = float(n) / float(ARC_LUT_SAMPLES - 1);
-            float2 pt = eval_point(lines[gid], t);
-            float2 tg = eval_deriv(lines[gid], t);
-            lines[gid].posLUT[n] = pt;
-            lines[gid].tanLUT[n] = tg;
-            
-            accum += distance(pt, prev);
-            lines[gid].sLUT[n] = accum;
-            prev = pt;
-        }
-    }
-    lines[gid].segLengthPx = accum;
-    
-    
-    
-    // Binning for optimized drawLines
-    
-    uint BIN_COLS = (viewSize.x + BIN_SIZE - 1) / BIN_SIZE;
-    
-    
-    uint2 g0 = uint2(max(mn, 0.0));
-    uint2 g1 = uint2(min(mx, viewSize - 1));
-
-    for (uint y = g0.y >> BIN_POW; y <= g1.y >> BIN_POW; ++y)
-    for (uint x = g0.x >> BIN_POW; x <= g1.x >> BIN_POW; ++x) {
-        
-        if(L.degree == 1) {
-            // Calculate bin bounds (expand by line radius to account for thickness)
-            float lineRadius = max(L.halfWidth0, L.halfWidth1) + L.antiAlias;
-            float2 binMin = float2(x << BIN_POW, y << BIN_POW) - lineRadius;
-            float2 binMax = binMin + BIN_SIZE + 2.0 * lineRadius;
-            
-            // Line-rectangle intersection test
-            // Using parametric line equation: point = p0 + t * (p1 - p0)
-            float2 lineDir = points[1] - points[0];
-            float2 invDir = 1.0 / lineDir;
-            
-            // Calculate t values for intersection with bin edges
-            float2 t1 = (binMin - points[0]) * invDir;
-            float2 t2 = (binMax - points[0]) * invDir;
-            
-            // Handle division by zero (parallel lines)
-            if (abs(lineDir.x) < 1e-6) {
-                // Line is vertical - check if it's within bin's x range
-                if (points[0].x >= binMin.x && points[0].x <= binMax.x) {
-                    t1.x = -1000.0; // Allow intersection
-                    t2.x = 1000.0;
-                } else {
-                    t1.x = 1000.0;  // No intersection
-                    t2.x = -1000.0;
-                }
-            }
-            if (abs(lineDir.y) < 1e-6) {
-                // Line is horizontal - check if it's within bin's y range
-                if (points[0].y >= binMin.y && points[0].y <= binMax.y) {
-                    t1.y = -1000.0; // Allow intersection
-                    t2.y = 1000.0;
-                } else {
-                    t1.y = 1000.0;  // No intersection
-                    t2.y = -1000.0;
-                }
-            }
-            
-            // Ensure t1 <= t2
-            float2 tMin = min(t1, t2);
-            float2 tMax = max(t1, t2);
-            
-            // Find intersection interval
-            float tEnter = max(tMin.x, tMin.y);
-            float tExit = min(tMax.x, tMax.y);
-            
-            // Check if line segment intersects expanded bin
-            bool intersects = (tEnter <= tExit) && (tExit >= 0.0) && (tEnter <= 1.0);
-            
-            if (intersects) {
-                uint bin = y * BIN_COLS + x;
-                uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u,
-                                                    memory_order_relaxed);
-                binList[binOffsets[bin] + pos] = gid;
-            }
-        } else {
-            uint bin = y * BIN_COLS + x;
-            uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
-            binList[binOffsets[bin] + pos] = gid;
-        }
-    }
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////
-// Path shader
-
-
-kernel void drawLines(
-                      texture2d<float, access::write> outTex [[texture(0)]],
-                      device const Shader_PathSeg* lines [[buffer(0)]],
-                      device const atomic_uint* binCounts [[buffer(1)]],
-                      device const uint* binOffsets [[buffer(2)]],
-                      device const uint* binList [[buffer(3)]],
-                      constant TransformUniforms& U [[buffer(4)]],
-                      ushort2 tid [[thread_position_in_threadgroup]],
-                      uint2 gid [[thread_position_in_grid]]
-                      ) {
-    
-    
-    const uint2 pix = gid;
-    const float2 p  = float2(pix) + 0.5;
-    
-    const float2 viewSize = float2(U.viewWidth, U.viewHeight);
-    
-    // Initialize bins
-    const uint BIN_COLS = (viewSize.x + BIN_SIZE - 1) / BIN_SIZE;
-    const uint  bin = (pix.y >> BIN_POW) * BIN_COLS + (pix.x >> BIN_POW);
-    
-    const uint  count = atomic_load_explicit(&binCounts[bin], memory_order_relaxed);
-    
-    if (count == 0) {
-        float3 rgb = U.backgroundColor;
-        if (bin % 2 == 0) rgb.b += U.binGridVisibility;
-        outTex.write(float4(rgb, 0.0), pix);
-        return;
-    }
-    
-    
-    
-    const uint  base  = binOffsets[bin];
-    
-    
-    constexpr int MAX_PER_BIN = 32u;
-    const int binDepth = U.binDepth;
-    const int binDepthMin = min(MAX_PER_BIN, binDepth);
-    
-    uint localIdx [MAX_PER_BIN];
-    float localZ [MAX_PER_BIN];
-    
-    for (int i = 0; i < binDepthMin; ++i) {
-        localZ[i] = 1.0e9f;
-        localIdx[i] = 0;
-    }
-    
-    // Map lines from world space to screen space & add to bin.
-    
-    for (uint i = 0; i < count; ++i) {
-        const uint line_idx = binList[base + i];
-        const Shader_PathSeg L = lines[line_idx];
-        
-        // Calculate interpolated depth for the current pixel
-        float2 pa = p - L.p_screen[0];
-        float2 ba = L.p_screen[1] - L.p_screen[0];
-        float ba_len2 = dot(ba, ba);
-        float t = 0.0;
-        if (ba_len2 > 1e-8) {
-            t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
-        }
-        
-        // float depth = mix(L.p0_depth, L.p1_depth, t);
-        
-        float inv_w = mix(L.p_inv_w[0], L.p_inv_w[1], t);
-        float depth_over_w = mix(L.p_depth_over_w[0], L.p_depth_over_w[1], t);
-        float depth = depth_over_w / inv_w;
-        if (L.degree == 2) {
-            float u = 1.0 - t;
-            depth = u*u*L.p_depth[0] + 2.0*u*t*L.p_depth[1] + t*t*L.p_depth[2];
-        } else if (L.degree == 3) {
-            float u = 1.0 - t;
-            float uu = u*u;
-            float tt = t*t;
-            depth = uu*u*L.p_depth[0] + 3.0*uu*t*L.p_depth[1] +
-                    3.0*u*tt*L.p_depth[2] + tt*t*L.p_depth[3];
-        }
-        
-        // 3. If this line is closer in depth than the farthest one in our list, insert it
-        if (depth < localZ[binDepthMin - 1]) {
-            uint j = binDepthMin - 1;
-            while (j > 0 && depth < localZ[j - 1]) {
-                localZ[j] = localZ[j-1];
-                localIdx[j] = localIdx[j-1];
-                --j;
-            }
-            localZ[j] = depth;
-            localIdx[j] = line_idx;
-        }
-    }
-    
-    // Count number of lines in bin
-    uint localCnt = 0;
-    while(localCnt < MAX_PER_BIN && localZ[localCnt] < 1.0e9f) {
-        localCnt++;
-    }
-    
-    
-    // Initialize pixel accumulation variables
-    float3 rgb = U.backgroundColor;
-    float  a   = 0.0;
-    float prevDepth = 1000000.0;
-    
-    if (bin % 2 == 0) {
-        rgb.b += U.binGridVisibility;
-    }
-    
-    // Visualize bin size as intermediary debug step.
-    // Tunable via external parameter.
-    // TODO: Add multiplier as render configuration parameter to show localCnt
-    float debugIntensity = float(localCnt) / 32.0 * 2.0;
-    // rgb += float3(debugIntensity, debugIntensity, debugIntensity) * U.binVisibility;
-    rgb.g += debugIntensity * U.binVisibility;
-    a += debugIntensity * U.binVisibility;
-    
-    // Iterate over local index, evaluating lines in bin front to back.
-    // Early abort when alpha has saturated.
-    for (uint i = 0; i < localCnt && a < 0.99; ++i) {
-        const Shader_PathSeg L = lines[localIdx[i]];
-        
-        float2 pa = p - L.p_screen[0];
-        float2 ba = L.p_screen[1] - L.p_screen[0];
-        float ba_len2 = dot(ba, ba);
-        
-        // Initialize variables t = time on line, d = distance from line, signedDistance = positive/negative based on line
-        float t, d, signedDistance;
-        
-        if (ba_len2 < 1e-8) {
-            d = length(pa);
-            t = 0;
-        } else {
-            // Time on path
-            
-            t = (L.degree == 1) ?
-                t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0)
-                : t = t_from_lut(L, p);
-            
-            
-            
-            // Point on line
-            // float2 closest = L.p_screen[0] + ba * t;
-            float2 closest = eval_point(L, t);
-            
-            // Distance to pixel 2d vector
-            // float2 toPixel = p - closest;
-            
-            // Distance to pixel float
-            d = length(p - closest);
-            float2 dpt = eval_deriv(L, t);
-            float sign = (dot(p - closest, float2(-dpt.y, dpt.x)) > 0) ? 1.0 : -1.0;
-            
-            // 'Signed' distance to extended line
-            // float2 lineDirection = normalize(ba);
-            // float2 perpendicular = float2(-lineDirection.y, lineDirection.x); // 90° rotation
-            signedDistance = d * sign;
-        }
-        
-        float depth = mix(L.p_depth[0], L.p_depth[1], t);
-        
-        
-        float halfWidth = mix(L.halfWidth0, L.halfWidth1, t);
-        float aa = max(L.antiAlias, 0.0);
-        float alphaEdge = smoothstep(halfWidth + aa, halfWidth - aa, d);
-        
-        alphaEdge *= dashMaskPx(L, t);
-        if(alphaEdge <1e-3) continue;
-        
-        float4 innerColor = mix(L.colorPremul0, L.colorPremul1, t);
-        
-        float4 outerColorLeft = mix(L.colorPremul0OuterLeft, L.colorPremul1OuterLeft, t);
-        float4 outerColorRight = mix(L.colorPremul0OuterRight, L.colorPremul1OuterRight, t);
-        
-        float sigmoidSteepness = mix(L.sigmoidSteepness0, L.sigmoidSteepness1, t);
-        float sigmoidMidpoint = mix(L.sigmoidMidpoint0, L.sigmoidMidpoint1, t);
-        
-        float normalizedDistance = d / halfWidth;
-        
-        float finalSignedDistance = (ba_len2 < 1e-8) ? d : signedDistance;
-        
-        float2 perpendicular = normalize(float2(-ba.y, ba.x));
-        
-        float signedNormalizedDistance = signedDistance / halfWidth;
-        
-        float absDistance = abs(signedNormalizedDistance);
-        
-//        float sigmoidInput = sigmoidSteepness * (absDistance - sigmoidMidpoint);
-//        float sigmoidValue = 1.0 / (1.0 + exp(-sigmoidInput));
-        
-        float sigmoidEdge0 = sigmoidMidpoint - 0.5 / sigmoidSteepness;
-        float sigmoidEdge1 = sigmoidMidpoint + 0.5 / sigmoidSteepness;
-        float sigmoidValue = smoothstep(sigmoidEdge0, sigmoidEdge1, absDistance);
-        
-        float4 outerColor = (signedNormalizedDistance >= 0.0) ? outerColorLeft : outerColorRight;
-        
-        // float4 color = mix(L.colorPremul0, L.colorPremul1, t);
-        float4 color = mix(innerColor, outerColor, sigmoidValue);
-        // float4 color = float4(absDistance, 1.0 - absDistance, 0.0, 1.0);
-        // float4 color = outerColorLeft;
-        // float4 color = outerColorRight;
-        // float4 color = float4(sigmoidMidpoint, 1.0 - sigmoidMidpoint, 0.0, 1.0);
-        // float4 color = float4(sigmoidSteepness, 1.0 - sigmoidSteepness, 0.0, 1.0);
-        // color = float4(finalSignedDistance, 0.0, 0.0, 1.0);
-        // color = float4(arcLenAtT(L, t) / 1.0, 1.0, 0.0, 1.0);
-        // color = float4(L.sLUT[16], 1.0, 0.0, 1.0);
-        
-        // The alpha of the current line fragment considering its geometry
-        float src_alpha = alphaEdge * color.w;
-        
-        // The accumulated alpha of everything drawn so far
-        float occlusion = 1.0 - a;
-        
-        if (alphaEdge > 0.001) {
-            if(depth < prevDepth) {
-                rgb += color.xyz * alphaEdge * color.w * occlusion;
-                a   += alphaEdge * color.w * occlusion;
-                prevDepth = depth;
-            }
-        }
-    }
-    a = clamp(a, 0.0, 1.0);
-    
-//    const float3 debugColor = float3((bin % 3 == 0), (bin % 3 == 1), (bin % 3 == 2));
-//    outTex.write(float4(debugColor, 1.0), pix);
-    
-    if (false) {
-        if (pix.x == U.viewWidth/2 && pix.y == U.viewHeight/2) {
-            // Center pixel - visualize bin data
-            outTex.write(float4(float(count) / 32.0, 0, 0, 1.0), pix);
-            return;
-        }
-    }
-
-//    if (pix.x == U.viewWidth/2 && pix.y == U.viewHeight/2) {
-//        // Center pixel - visualize bin data
-//        outTex.write(float4(float(count) / 32.0, 0, 0, 1.0), pix);
-//        return;
-//    }
-    
-    if (false) {
-        // Or color-code bins by their content count
-        float debugIntensity = float(count) / 32.0;
-        outTex.write(float4(debugIntensity, debugIntensity, debugIntensity, 1.0), pix);
-        return;
-    }
-    
-     outTex.write(float4(rgb, a), pix);
-}
-
 
 // Backdrop shader is used to make visual the output of the compute shader part of the pipeline
 // Backdrop vertex shader

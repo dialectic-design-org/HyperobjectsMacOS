@@ -15,75 +15,47 @@
 #define DOT_PX2 36.0f
 
 
+#define BIN_POW 6
+#define BIN_SIZE (1 << BIN_POW)
+#define lineCount 10000
+
+#define KMAX_PER_BIN 16u  // clamp for safety
+
 struct Shader_Triangle {
     vector_float3 normals[3];
     vector_float3 colors[3];
 };
 
-struct Shader_Sphere {
+
+struct Uniforms {
+    int viewWidth;
+    int viewHeight;
+    vector_float3 backgroundColor;
+    float antiAliasPx;
     
+    float debugBins;
+    float binVisibility;
 };
 
-struct Shader_PathSeg {
-    vector_float4 p_world[4];
-    
-    vector_float2 p_screen[4];
-    short degree;
-    
-    float halfWidth0;
-    float halfWidth1;
-    
-    float antiAlias;
-    
-    float _pad0;
-    vector_float4 colorPremul0;
-    vector_float4 colorPremul0OuterLeft;
-    vector_float4 colorPremul0OuterRight;
-    
-    vector_float4 colorPremul1;
-    vector_float4 colorPremul1OuterLeft;
-    vector_float4 colorPremul1OuterRight;
-    
-    float sigmoidSteepness0;
-    float sigmoidMidpoint0;
-    
-    float sigmoidSteepness1;
-    float sigmoidMidpoint1;
-    
-    // Dash detail
-    float dashPatternPx[MAX_DASH_SEGMENTS];
-    int dashCount;
-    float dashTotalPx;
-    float dashPhasePx;
-    int _padDash;
-    
-    // Derived screen-space (set by transform and bin kernel)
-    float p_depth[4];
-    float p_inv_w[4];
-    float p_depth_over_w[4];
-    
-    float  sLUT[ARC_LUT_SAMPLES]; // cumulative length; sLUT[0]=0, sLUT[N-1]=segLengthPx
-    float  segLengthPx;           // convenience alias of sLUT[N-1]
-    
-    vector_float2 posLUT[ARC_LUT_SAMPLES];
-    vector_float2 tanLUT[ARC_LUT_SAMPLES];
-    
-    short lutCount;
+
+struct LinearSeg3D {
+    vector_float4 p0_world;
+    vector_float4 p1_world;
+    float halfWidthPx;
+};
+
+struct LinearSegScreenSpace {
+    vector_float2 p0_ss;
+    vector_float2 p1_ss;
+    float halfWidthPx;
+    float aaPx;
     
     vector_float2 bboxMinSS;
     vector_float2 bboxMaxSS;
 };
 
 
-struct TransformUniforms {
-    int viewWidth;
-    int viewHeight;
-    vector_float3 cameraPosition;
-    vector_float3 backgroundColor;
-    
-    float binVisibility;
-    float binGridVisibility;
-    int binDepth;
-};
+
+
 
 #endif /* definitions_h */

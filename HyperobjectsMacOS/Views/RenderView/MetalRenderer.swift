@@ -47,6 +47,7 @@ class MetalRenderer {
     var lineRenderTextureB: MTLTexture!
     
     private var linesBuffer: MTLBuffer!
+    private var linearLinesScreenSpaceBuffer: MTLBuffer!
     private var binCounts: MTLBuffer!
     private var binOffsets: MTLBuffer!
     private var binList: MTLBuffer!
@@ -130,28 +131,13 @@ class MetalRenderer {
         let totalBins = binCols * binRows
         
         
-        linesBuffer = device.makeBuffer(length: MemoryLayout<Shader_PathSeg>.stride * Int(lineCount), options: .storageModeShared)!
+        linesBuffer = device.makeBuffer(length: MemoryLayout<LinearSeg3D>.stride * Int(lineCount), options: .storageModeShared)!
+        linearLinesScreenSpaceBuffer = device.makeBuffer(length: MemoryLayout<LinearSegScreenSpace>.stride * Int(lineCount), options: .storageModeShared)!
+        
         binCounts = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
         binOffsets = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
         binList = device.makeBuffer(length: MemoryLayout<UInt32>.stride * Int(lineCount) * totalBins, options: .storageModeShared)!
         
-        let linesPtr = linesBuffer.contents().bindMemory(to: Shader_PathSeg.self, capacity: Int(lineCount))
-        
-//        linesPtr[0] = Shader_Line(
-//            p0_world: SIMD3<Float>(-1.0, 0.0, 0.0),
-//            p1_world: SIMD3<Float>(1.0, 0.0, 0.0),
-//            p0_screen: SIMD2<Float>(0.0, 0.0),
-//            p1_screen: SIMD2<Float>(0.0, 0.0),
-//            halfWidth0: 1.0,
-//            halfWidth1: 1.0,
-//            antiAlias: 0.01,
-//            depth: 0.0,
-//            p0_depth: 0.0,
-//            p1_depth: 0.0,
-//            _pad0: 0.0,
-//            colorPremul0: SIMD4<Float>(repeating: 1.0),
-//            colorPremul1: SIMD4<Float>(repeating: 1.0)
-//        )
     }
     
     func createRenderPipelineState() {
@@ -220,7 +206,7 @@ class MetalRenderer {
         }
         
         do {
-            self.transformPSO = try device.makeComputePipelineState(function: library!.makeFunction(name: "transformAndBin")!)
+            self.transformPSO = try device.makeComputePipelineState(function: library!.makeFunction(name: "transformAndBinLinear")!)
         } catch {
             fatalError("Failed to create transformAndBin pipeline state: \(error)")
         }
@@ -229,7 +215,6 @@ class MetalRenderer {
         } catch {
             fatalError("Failed to create drawLines pipeline state: \(error)")
         }
-        
     }
     
     func createLineRenderTexture(width: Int, height: Int) {
@@ -279,10 +264,13 @@ class MetalRenderer {
         
         var testPoints: [SIMD3<Float>] = []
         
-        let linesPtr = linesBuffer.contents().bindMemory(to: Shader_PathSeg.self, capacity: Int(lineCount))
+        let linesPtr = linesBuffer.contents().bindMemory(to: LinearSeg3D.self, capacity: Int(lineCount))
+        
         // Wipe all lines in the buffer so new ones can be set.
         let byteCount = linesBuffer.length
         memset(linesBuffer.contents(), 0, byteCount)
+        
+        
         
         var gIndex: Int = 0
         
@@ -305,23 +293,9 @@ class MetalRenderer {
                         testPoints.append(lineGeometry.controlPoints[1])
                     }
                     
-                    linesPtr[gIndex] = Shader_PathSeg.initWithValues(
+                    linesPtr[gIndex] = createShaderLinearSeg(
                         p0_world: line[0],
-                        p1_world: line[1],
-                        degree: lineGeometry.degree,
-                        controlPoints: lineGeometry.controlPoints,
-                        halfWidth0: lineGeometry.lineWidthStart,
-                        halfWidth1: lineGeometry.lineWidthEnd,
-                        colorPremul0: lineGeometry.colorStart,
-                        colorPremul0OuterLeft: lineGeometry.colorStartOuterLeft,
-                        colorPremul0OuterRight: lineGeometry.colorStartOuterRight,
-                        sigmoidSteepness0: lineGeometry.sigmoidSteepness0,
-                        sigmoidMidpoint0: lineGeometry.sigmoidMidpoint0,
-                        colorPremul1: lineGeometry.colorEnd,
-                        colorPremul1OuterLeft: lineGeometry.colorEndOuterLeft,
-                        colorPremul1OuterRight: lineGeometry.colorEndOuterRight,
-                        sigmoidSteepness1: lineGeometry.sigmoidSteepness1,
-                        sigmoidMidpoint1: lineGeometry.sigmoidMidpoint1
+                        p1_world: line[1]
                     )
                 }
                 
@@ -330,11 +304,6 @@ class MetalRenderer {
             }
             gIndex += 1
         }
-        
-        
-        
-        
-        
         
         let viewW = Int(drawable.texture.width)
         let viewH = Int(drawable.texture.height)
@@ -418,14 +387,13 @@ class MetalRenderer {
         let binDepthSource = renderConfigs?.binDepth ?? 16
         let binDepth = Int32(binDepthSource)
         
-        var transformUniforms: TransformUniforms = TransformUniforms(
+        var uniforms: Uniforms = Uniforms(
             viewWidth: Int32(viewW),
             viewHeight: Int32(viewH),
-            cameraPosition: cameraPosition,
             backgroundColor: colorToVector(backgroundColor.color),
-            binVisibility: renderConfigs?.binVisibility ?? Float(0.0),
-            binGridVisibility: renderConfigs?.binGridVisibility ?? Float(0.0),
-            binDepth: binDepth
+            antiAliasPx: 0.808,
+            debugBins: renderConfigs?.binGridVisibility ?? 0.0,
+            binVisibility: renderConfigs?.binVisibility ?? 0.0
         )
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
@@ -437,18 +405,24 @@ class MetalRenderer {
         
         let renderSDFLines = renderConfigs?.renderSDFLines ?? false
         
+        var segCount: Int32 = Int32(gIndex)
+        
         if renderSDFLines {
             if let transformEncoder = commandBuffer.makeComputeCommandEncoder() {
                 transformEncoder.setComputePipelineState(transformPSO!)
                 transformEncoder.setBuffer(linesBuffer,      offset:0, index:0)
                 transformEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
-                transformEncoder.setBytes(&transformUniforms,      length:MemoryLayout<TransformUniforms>.stride, index:2)
-                transformEncoder.setBuffer(binCounts,     offset:0, index:3)
-                transformEncoder.setBuffer(binOffsets,    offset:0, index:4)
-                transformEncoder.setBuffer(binList,       offset:0, index:5)
+                transformEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:2)
+                transformEncoder.setBuffer(linearLinesScreenSpaceBuffer,      offset:0, index:3)
+                transformEncoder.setBuffer(binCounts,     offset:0, index:4)
+                transformEncoder.setBuffer(binOffsets,    offset:0, index:5)
+                transformEncoder.setBuffer(binList,       offset:0, index:6)
+                transformEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
+                
                 let tg = MTLSize(width: transformPSO!.threadExecutionWidth,
                                  height: 1,
                                  depth: 1)
+                
                 transformEncoder.dispatchThreads(MTLSize(width: Int(lineCount), height: 1, depth: 1),
                                                  threadsPerThreadgroup: tg)
                 transformEncoder.endEncoding()          // ← guarantees completion before the next encoder
@@ -457,17 +431,21 @@ class MetalRenderer {
             if let drawLinesEncoder = commandBuffer.makeComputeCommandEncoder() {
                 drawLinesEncoder.setComputePipelineState(renderPSO!)
                 drawLinesEncoder.setTexture(writeTexture, index: 0)
-                drawLinesEncoder.setBuffer(linesBuffer,      offset:0, index:0)
+                drawLinesEncoder.setBuffer(linearLinesScreenSpaceBuffer,      offset:0, index:0)
                 drawLinesEncoder.setBuffer(binCounts,     offset:0, index:1)
                 drawLinesEncoder.setBuffer(binOffsets,    offset:0, index:2)
                 drawLinesEncoder.setBuffer(binList,       offset:0, index:3)
-                drawLinesEncoder.setBytes(&transformUniforms,      length:MemoryLayout<TransformUniforms>.stride, index:4)
+                drawLinesEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:4)
                 
                 let w  = renderPSO!.threadExecutionWidth
                 let h  = renderPSO!.maxTotalThreadsPerThreadgroup / w
-                let tg2 = MTLSize(width: w, height: h, depth: 1)
+                
+                // let tg2 = MTLSize(width: w, height: h, depth: 1)
+                
+                let tgsDrawLines = MTLSize(width: Int(BIN_SIZE), height: Int(BIN_SIZE), depth: 1)
+                
                 drawLinesEncoder.dispatchThreads(MTLSize(width: viewW, height: viewH, depth: 1),
-                                                 threadsPerThreadgroup: tg2)
+                                                 threadsPerThreadgroup: tgsDrawLines)
                 drawLinesEncoder.endEncoding()
             }
         }
@@ -503,7 +481,7 @@ class MetalRenderer {
         }
         
         // Update uniform buffer with new rotation
-        var uniforms = [VertexUniforms(
+        var vertexUniforms = [VertexUniforms(
             projectionMatrix: identity_matrix_float4x4(),
             viewMatrix: identity_matrix_float4x4(),
             rotationAngle: rotation
@@ -540,7 +518,7 @@ class MetalRenderer {
         
         
         
-        memcpy(uniformBuffer.contents(), uniforms, MemoryLayout<VertexUniforms>.size)
+        memcpy(uniformBuffer.contents(), vertexUniforms, MemoryLayout<VertexUniforms>.size)
         
         renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
         
