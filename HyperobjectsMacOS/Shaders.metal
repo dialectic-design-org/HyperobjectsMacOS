@@ -32,7 +32,6 @@ struct VertexOut {
 
 
 
-
 ////////////////////////////////////////////////////////////////////////////
 // Path evaluation helpers
 
@@ -48,7 +47,104 @@ inline float2 eval_point(Shader_PathSeg S, float t) {
     }
 }
 
+inline float2 eval_deriv(Shader_PathSeg S, float t) {
+    if (S.degree == 1) {
+        return S.p_screen[1] - S.p_screen[0];
+    } else if (S.degree == 2) {
+        return 2.0 * mix(S.p_screen[1] - S.p_screen[0], S.p_screen[2] - S.p_screen[1], t);
+    } else {
+        float u = 1.0 - t;
+        return 3.0 * (u*u*(S.p_screen[1]-S.p_screen[0]) + 2.0*u*t*(S.p_screen[2]-S.p_screen[1]) + t*t*(S.p_screen[3]-S.p_screen[2]));
+    }
+}
 
+
+
+// PREVIOUS 'SLOW' implementation, now replaced by t_from_lut
+
+//inline float closestT(Shader_PathSeg S, float2 p) {
+//    float bestT = 0.0;
+//    float bestD = 1e9;
+//    const uint N = 16u;
+//    for (uint i = 0; i < N; i ++) {
+//        float t = float(i) / float(N);
+//        float d = distance(eval_point(S, t), p);
+//        if (d < bestD) {
+//            bestD = d;
+//            bestT = t;
+//        }
+//    }
+//
+//    for (uint k=0; k < 3; k++) {
+//        float2 pt = eval_point(S, bestT);
+//        float2 dpt = eval_deriv(S, bestT);
+//        float2 r = pt - p;
+//        float f = dot(r, dpt);
+//        float g = dot(dpt, dpt) + dot(r, eval_deriv(S, bestT + 1e-3) - dpt) / 1e-3;
+//        float dt = (g == 0.0) ? 0.0 : f / g;
+//        bestT = clamp(bestT - dt, 0.0, 1.0);
+//    }
+//    return bestT;
+//}
+
+
+
+inline float t_from_lut(Shader_PathSeg L, float2 p) {
+    uint idx = 0;
+    float best = FLT_MAX;
+    
+    for (uint n = 0; n < ARC_LUT_SAMPLES; ++n) {
+        float2 d = p - L.posLUT[n];
+        float dsq = dot(d, d);
+        if(dsq < best) {
+            best = dsq;
+            idx = n;
+        }
+    }
+    float t0 = (float)idx / (ARC_LUT_SAMPLES - 1);
+    
+    float2 pt0 = L.posLUT[idx];
+    float2 dpt = L.tanLUT[idx];
+    float2 r = pt0 - p;
+    float f = dot(r, dpt);
+    float g = max(dot(dpt, dpt), 1e-6);
+    float t = clamp(t0 - f/g, 0.0, 1.0);
+    return t;
+}
+
+
+inline float arcLenAtT(Shader_PathSeg S, float t) {
+    float u = clamp(t, 0.0, 1.0) * float(ARC_LUT_SAMPLES - 1);
+    uint  i = (uint)floor(u);
+    float f = u - float(i);
+    uint  j = min(i + 1u, (uint)ARC_LUT_SAMPLES - 1u);
+    return mix(S.sLUT[i], S.sLUT[j], f);
+}
+
+
+inline float dashMaskPx(Shader_PathSeg S, float t) {
+    if (S.dashCount == 0 || S.dashTotalPx <= 0.0) return 1.0; // solid
+    float s = arcLenAtT(S, t) + S.dashPhasePx; // pixels from path origin
+    float m = fmod(max(s, 0.0), S.dashTotalPx);
+    float accum = 0.0;
+    for (int i=0; i<S.dashCount; ++i) {
+        float seg = S.dashPatternPx[i];
+        if (m < accum + seg) {
+            return (i & 1u) ? 0.0 : 1.0; // even=draw, odd=gap
+        }
+        accum += seg;
+    }
+    return 1.0;
+}
+
+
+
+
+////////////////////////////////////////////////////////////////////////////
+//
+// Core shaders
+//
+////////////////////////////////////////////////////////////////////////////
 
 
 kernel void transformAndBin(
@@ -71,6 +167,7 @@ kernel void transformAndBin(
     
     float2 viewSize = float2(U.viewWidth, U.viewHeight);
     
+    // projecting to screen space
     float2 points[4];
     
     for (int i = 0; i <= L.degree; i++) {
@@ -84,24 +181,12 @@ kernel void transformAndBin(
         points[i] = p_screen;
     }
     
-    // build arc‑length LUT in screen space --------------------------------
-    lines[gid].sLUT[0] = 0.0;
-    float2 prev = eval_point(L, 0.0);
-    float accum = 0.0;
-    for(uint n=1; n<ARC_LUT_SAMPLES; ++n) {
-        float t = float(n) / float(ARC_LUT_SAMPLES - 1);
-        float2 pt = eval_point(lines[gid], t);
-        accum += distance(pt, prev);
-        lines[gid].sLUT[n] = accum;
-        prev = pt;
-    }
-    lines[gid].segLengthPx = accum;
     
-    uint BIN_COLS = (viewSize.x + BIN_SIZE - 1) / BIN_SIZE;
-        
+    
+    // Calculate and save bounding box for later
     float2 mn = floor(min(points[0], points[1]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
     float2 mx = ceil (max(points[0], points[1]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
-    
+
     if (L.degree == 2) {
         mn = floor(min(mn, points[2]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
         mx = ceil (max(mx, points[2]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
@@ -111,6 +196,41 @@ kernel void transformAndBin(
         mn = floor(min(mn, points[3]) - max(L.halfWidth0, L.halfWidth1) - L.antiAlias);
         mx = ceil (max(mx, points[3]) + max(L.halfWidth0, L.halfWidth1) + L.antiAlias);
     }
+    
+    lines[gid].bboxMinSS = mn;
+    lines[gid].bboxMaxSS = mx;
+    
+    // Screenreject if outside
+    if (mx.x < 0.0 || mx.y < 0.0 || mn.x >= viewSize.x || mn.y >= viewSize.y) {
+        lines[gid].lutCount = 0;
+        return;
+    }
+    
+    // build arc‑length LUT in screen space --------------------------------
+    lines[gid].sLUT[0] = 0.0;
+    float2 prev = eval_point(L, 0.0);
+    float accum = 0.0;
+    if (L.degree > 1) {
+        for(uint n=1; n<ARC_LUT_SAMPLES; ++n) {
+            float t = float(n) / float(ARC_LUT_SAMPLES - 1);
+            float2 pt = eval_point(lines[gid], t);
+            float2 tg = eval_deriv(lines[gid], t);
+            lines[gid].posLUT[n] = pt;
+            lines[gid].tanLUT[n] = tg;
+            
+            accum += distance(pt, prev);
+            lines[gid].sLUT[n] = accum;
+            prev = pt;
+        }
+    }
+    lines[gid].segLengthPx = accum;
+    
+    
+    
+    // Binning for optimized drawLines
+    
+    uint BIN_COLS = (viewSize.x + BIN_SIZE - 1) / BIN_SIZE;
+    
     
     uint2 g0 = uint2(max(mn, 0.0));
     uint2 g1 = uint2(min(mx, viewSize - 1));
@@ -182,70 +302,6 @@ kernel void transformAndBin(
 
 
 
-
-inline float2 eval_deriv(Shader_PathSeg S, float t) {
-    if (S.degree == 1) {
-        return S.p_screen[1] - S.p_screen[0];
-    } else if (S.degree == 2) {
-        return 2.0 * mix(S.p_screen[1] - S.p_screen[0], S.p_screen[2] - S.p_screen[1], t);
-    } else {
-        float u = 1.0 - t;
-        return 3.0 * (u*u*(S.p_screen[1]-S.p_screen[0]) + 2.0*u*t*(S.p_screen[2]-S.p_screen[1]) + t*t*(S.p_screen[3]-S.p_screen[2]));
-    }
-}
-
-
-inline float closestT(Shader_PathSeg S, float2 p) {
-    float bestT = 0.0;
-    float bestD = 1e9;
-    const uint N = 16u;
-    for (uint i = 0; i < N; i ++) {
-        float t = float(i) / float(N);
-        float d = distance(eval_point(S, t), p);
-        if (d < bestD) {
-            bestD = d;
-            bestT = t;
-        }
-    }
-    
-    for (uint k=0; k < 3; k++) {
-        float2 pt = eval_point(S, bestT);
-        float2 dpt = eval_deriv(S, bestT);
-        float2 r = pt - p;
-        float f = dot(r, dpt);
-        float g = dot(dpt, dpt) + dot(r, eval_deriv(S, bestT + 1e-3) - dpt) / 1e-3;
-        float dt = (g == 0.0) ? 0.0 : f / g;
-        bestT = clamp(bestT - dt, 0.0, 1.0);
-    }
-    return bestT;
-}
-
-inline float arcLenAtT(Shader_PathSeg S, float t) {
-    float u = clamp(t, 0.0, 1.0) * float(ARC_LUT_SAMPLES - 1);
-    uint  i = (uint)floor(u);
-    float f = u - float(i);
-    uint  j = min(i + 1u, (uint)ARC_LUT_SAMPLES - 1u);
-    return mix(S.sLUT[i], S.sLUT[j], f);
-}
-
-
-inline float dashMaskPx(Shader_PathSeg S, float t) {
-    if (S.dashCount == 0 || S.dashTotalPx <= 0.0) return 1.0; // solid
-    float s = arcLenAtT(S, t) + S.dashPhasePx; // pixels from path origin
-    float m = fmod(max(s, 0.0), S.dashTotalPx);
-    float accum = 0.0;
-    for (int i=0; i<S.dashCount; ++i) {
-        float seg = S.dashPatternPx[i];
-        if (m < accum + seg) {
-            return (i & 1u) ? 0.0 : 1.0; // even=draw, odd=gap
-        }
-        accum += seg;
-    }
-    return 1.0;
-}
-
-
-
 ////////////////////////////////////////////////////////////////////////////
 // Path shader
 
@@ -260,26 +316,44 @@ kernel void drawLines(
                       ushort2 tid [[thread_position_in_threadgroup]],
                       uint2 gid [[thread_position_in_grid]]
                       ) {
+    
+    
     const uint2 pix = gid;
     const float2 p  = float2(pix) + 0.5;
     
     const float2 viewSize = float2(U.viewWidth, U.viewHeight);
     
-    uint BIN_COLS = (viewSize.x + BIN_SIZE - 1) / BIN_SIZE;
+    // Initialize bins
+    const uint BIN_COLS = (viewSize.x + BIN_SIZE - 1) / BIN_SIZE;
     const uint  bin = (pix.y >> BIN_POW) * BIN_COLS + (pix.x >> BIN_POW);
+    
     const uint  count = atomic_load_explicit(&binCounts[bin], memory_order_relaxed);
+    
+    if (count == 0) {
+        float3 rgb = U.backgroundColor;
+        if (bin % 2 == 0) rgb.b += U.binGridVisibility;
+        outTex.write(float4(rgb, 0.0), pix);
+        return;
+    }
+    
+    
+    
     const uint  base  = binOffsets[bin];
     
     
-    constexpr uint MAX_PER_BIN = 32u;
+    constexpr int MAX_PER_BIN = 32u;
+    const int binDepth = U.binDepth;
+    const int binDepthMin = min(MAX_PER_BIN, binDepth);
     
     uint localIdx [MAX_PER_BIN];
     float localZ [MAX_PER_BIN];
     
-    for (uint i = 0; i < MAX_PER_BIN; ++i) {
+    for (int i = 0; i < binDepthMin; ++i) {
         localZ[i] = 1.0e9f;
         localIdx[i] = 0;
     }
+    
+    // Map lines from world space to screen space & add to bin.
     
     for (uint i = 0; i < count; ++i) {
         const uint line_idx = binList[base + i];
@@ -293,7 +367,9 @@ kernel void drawLines(
         if (ba_len2 > 1e-8) {
             t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
         }
+        
         // float depth = mix(L.p0_depth, L.p1_depth, t);
+        
         float inv_w = mix(L.p_inv_w[0], L.p_inv_w[1], t);
         float depth_over_w = mix(L.p_depth_over_w[0], L.p_depth_over_w[1], t);
         float depth = depth_over_w / inv_w;
@@ -308,9 +384,9 @@ kernel void drawLines(
                     3.0*u*tt*L.p_depth[2] + tt*t*L.p_depth[3];
         }
         
-        // 3. If this line is closer than the farthest one in our list, insert it
-        if (depth < localZ[MAX_PER_BIN - 1]) {
-            uint j = MAX_PER_BIN - 1;
+        // 3. If this line is closer in depth than the farthest one in our list, insert it
+        if (depth < localZ[binDepthMin - 1]) {
+            uint j = binDepthMin - 1;
             while (j > 0 && depth < localZ[j - 1]) {
                 localZ[j] = localZ[j-1];
                 localIdx[j] = localIdx[j-1];
@@ -321,28 +397,40 @@ kernel void drawLines(
         }
     }
     
-    // reverse localIdx
-
+    // Count number of lines in bin
     uint localCnt = 0;
     while(localCnt < MAX_PER_BIN && localZ[localCnt] < 1.0e9f) {
         localCnt++;
     }
     
+    
+    // Initialize pixel accumulation variables
     float3 rgb = U.backgroundColor;
     float  a   = 0.0;
     float prevDepth = 1000000.0;
     
-    // Intermediary bin size debug step. TODO: Add as render configuration to show localCnt
-//    float debugIntensity = float(localCnt) / 32.0 * 2.0;
-//    rgb += float3(debugIntensity, debugIntensity, debugIntensity);
-//    a += debugIntensity;
-//    
+    if (bin % 2 == 0) {
+        rgb.b += U.binGridVisibility;
+    }
+    
+    // Visualize bin size as intermediary debug step.
+    // Tunable via external parameter.
+    // TODO: Add multiplier as render configuration parameter to show localCnt
+    float debugIntensity = float(localCnt) / 32.0 * 2.0;
+    // rgb += float3(debugIntensity, debugIntensity, debugIntensity) * U.binVisibility;
+    rgb.g += debugIntensity * U.binVisibility;
+    a += debugIntensity * U.binVisibility;
+    
+    // Iterate over local index, evaluating lines in bin front to back.
+    // Early abort when alpha has saturated.
     for (uint i = 0; i < localCnt && a < 0.99; ++i) {
         const Shader_PathSeg L = lines[localIdx[i]];
         
         float2 pa = p - L.p_screen[0];
         float2 ba = L.p_screen[1] - L.p_screen[0];
         float ba_len2 = dot(ba, ba);
+        
+        // Initialize variables t = time on line, d = distance from line, signedDistance = positive/negative based on line
         float t, d, signedDistance;
         
         if (ba_len2 < 1e-8) {
@@ -350,12 +438,16 @@ kernel void drawLines(
             t = 0;
         } else {
             // Time on path
-            t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
-            t = closestT(L, p);
+            
+            t = (L.degree == 1) ?
+                t = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0)
+                : t = t_from_lut(L, p);
+            
+            
             
             // Point on line
-            float2 closest = L.p_screen[0] + ba * t;
-            closest = eval_point(L, t);
+            // float2 closest = L.p_screen[0] + ba * t;
+            float2 closest = eval_point(L, t);
             
             // Distance to pixel 2d vector
             // float2 toPixel = p - closest;
@@ -398,8 +490,13 @@ kernel void drawLines(
         float signedNormalizedDistance = signedDistance / halfWidth;
         
         float absDistance = abs(signedNormalizedDistance);
-        float sigmoidInput = sigmoidSteepness * (absDistance - sigmoidMidpoint);
-        float sigmoidValue = 1.0 / (1.0 + exp(-sigmoidInput));
+        
+//        float sigmoidInput = sigmoidSteepness * (absDistance - sigmoidMidpoint);
+//        float sigmoidValue = 1.0 / (1.0 + exp(-sigmoidInput));
+        
+        float sigmoidEdge0 = sigmoidMidpoint - 0.5 / sigmoidSteepness;
+        float sigmoidEdge1 = sigmoidMidpoint + 0.5 / sigmoidSteepness;
+        float sigmoidValue = smoothstep(sigmoidEdge0, sigmoidEdge1, absDistance);
         
         float4 outerColor = (signedNormalizedDistance >= 0.0) ? outerColorLeft : outerColorRight;
         
@@ -424,6 +521,7 @@ kernel void drawLines(
             if(depth < prevDepth) {
                 rgb += color.xyz * alphaEdge * color.w * occlusion;
                 a   += alphaEdge * color.w * occlusion;
+                prevDepth = depth;
             }
         }
     }

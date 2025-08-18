@@ -25,6 +25,12 @@ class RenderConfigurations: ObservableObject {
     
     @Published var cameraDistance: Float = 5.0
     
+    @Published var binVisibility: Float = 0.0
+    
+    @Published var binGridVisibility: Float = 0.0
+    
+    @Published var binDepth: Int = 16
+    
     @Published var backgroundColor: ColorInput = ColorInput()
 }
 

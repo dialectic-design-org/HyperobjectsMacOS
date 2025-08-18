@@ -415,11 +415,17 @@ class MetalRenderer {
         
         // Convert to vector_float3
         
+        let binDepthSource = renderConfigs?.binDepth ?? 16
+        let binDepth = Int32(binDepthSource)
+        
         var transformUniforms: TransformUniforms = TransformUniforms(
             viewWidth: Int32(viewW),
             viewHeight: Int32(viewH),
             cameraPosition: cameraPosition,
-            backgroundColor: colorToVector(backgroundColor.color)
+            backgroundColor: colorToVector(backgroundColor.color),
+            binVisibility: renderConfigs?.binVisibility ?? Float(0.0),
+            binGridVisibility: renderConfigs?.binGridVisibility ?? Float(0.0),
+            binDepth: binDepth
         )
         
         let renderPassDescriptor = MTLRenderPassDescriptor()

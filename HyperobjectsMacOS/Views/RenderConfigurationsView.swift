@@ -13,6 +13,8 @@ struct RenderConfigurationsView: View {
     
     @State private var camDistance: Float = 5.0
     
+    @State private var binDepth: Float = 16
+    
     var body: some View {
         VStack(alignment: .leading) {
             Text("Render Configurations view")
@@ -37,6 +39,21 @@ struct RenderConfigurationsView: View {
             )
             Text("Camera Distance")
             Slider(value: $renderConfigurations.cameraDistance, in: 0...10.0)
+            
+            Text("Bin visibility")
+            Slider(value: $renderConfigurations.binVisibility, in: 0...10.0)
+            
+            Text("Bin grid visibility")
+            Slider(value: $renderConfigurations.binGridVisibility, in: 0...1.0)
+            
+            
+            Text("Bin depth rendering")
+            Slider(value: $binDepth,
+                   in: 1.0...32.0,
+                   step: 1
+            ).onChange(of: binDepth) { oldValue, newValue in
+                renderConfigurations.binDepth = Int(newValue)
+            }
             
             Text("Background color")
             ColorPickerControlView(colorInput: renderConfigurations.backgroundColor)

@@ -72,6 +72,10 @@ extension Shader_PathSeg {
         
         let sLUTPlaceholder = tupleFromArray(Array(repeating: Float(0), count: Int(ARC_LUT_SAMPLES)))
         
+        let posLUTPLaceholder = tupleFromArray(Array(repeating: SIMD2<Float>(0.0, 0.0), count: Int(ARC_LUT_SAMPLES)))
+        
+        let tanLUTPlaceholder = tupleFromArray(Array(repeating: SIMD2<Float>(0.0, 0.0), count: Int(ARC_LUT_SAMPLES)))
+        
         return Shader_PathSeg(
             p_world: (
                 world_p0,
@@ -87,7 +91,7 @@ extension Shader_PathSeg {
                 SIMD2<Float>(0.0, 0.0)
             ),
             
-            degree: Int32(degree),
+            degree: Int16(degree),
             
             halfWidth0: halfWidth0,
             halfWidth1: halfWidth1,
@@ -116,6 +120,13 @@ extension Shader_PathSeg {
             
             sLUT: sLUTPlaceholder,
             segLengthPx: 0.0,
+            
+            posLUT: posLUTPLaceholder,
+            tanLUT: tanLUTPlaceholder,
+            
+            lutCount: 0,
+            bboxMinSS: SIMD2<Float>(0.0, 0.0),
+            bboxMaxSS: SIMD2<Float>(0.0, 0.0)
             
         )
     }

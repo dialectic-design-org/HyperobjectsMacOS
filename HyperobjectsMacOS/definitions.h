@@ -12,6 +12,8 @@
 
 #define MAX_DASH_SEGMENTS 8
 #define ARC_LUT_SAMPLES   32
+#define DOT_PX2 36.0f
+
 
 struct Shader_Triangle {
     vector_float3 normals[3];
@@ -26,7 +28,7 @@ struct Shader_PathSeg {
     vector_float4 p_world[4];
     
     vector_float2 p_screen[4];
-    int degree;
+    short degree;
     
     float halfWidth0;
     float halfWidth1;
@@ -62,6 +64,14 @@ struct Shader_PathSeg {
     
     float  sLUT[ARC_LUT_SAMPLES]; // cumulative length; sLUT[0]=0, sLUT[N-1]=segLengthPx
     float  segLengthPx;           // convenience alias of sLUT[N-1]
+    
+    vector_float2 posLUT[ARC_LUT_SAMPLES];
+    vector_float2 tanLUT[ARC_LUT_SAMPLES];
+    
+    short lutCount;
+    
+    vector_float2 bboxMinSS;
+    vector_float2 bboxMaxSS;
 };
 
 
@@ -70,6 +80,10 @@ struct TransformUniforms {
     int viewHeight;
     vector_float3 cameraPosition;
     vector_float3 backgroundColor;
+    
+    float binVisibility;
+    float binGridVisibility;
+    int binDepth;
 };
 
 #endif /* definitions_h */
