@@ -25,12 +25,15 @@ private func tupleFromArray<T>(_ array: [T]) -> (
 
 func createShaderLinearSeg(
     p0_world: SIMD3<Float> = SIMD3<Float>(0.0, 0.0, 0.0),
-    p1_world: SIMD3<Float> = SIMD3<Float>(0.0, 0.0, 0.0)
+    p1_world: SIMD3<Float> = SIMD3<Float>(0.0, 0.0, 0.0),
+    p0_width: Float = 1.0,
+    p1_width: Float = 1.0
 ) -> LinearSeg3D {
     return LinearSeg3D(
         p0_world: SIMD4<Float>(p0_world, 1.0),
         p1_world: SIMD4<Float>(p1_world, 1.0),
-        halfWidthPx: 500.0
+        halfWidthPx: (p0_width + p1_width) / 2.0,
+        aaPx: 0.707
     )
 }
 

@@ -15,7 +15,7 @@
 #define DOT_PX2 36.0f
 
 
-#define BIN_POW 6
+#define BIN_POW 7
 #define BIN_SIZE (1 << BIN_POW)
 #define lineCount 10000
 
@@ -35,6 +35,7 @@ struct Uniforms {
     
     float debugBins;
     float binVisibility;
+    float boundingBoxVisibility;
 };
 
 
@@ -42,6 +43,24 @@ struct LinearSeg3D {
     vector_float4 p0_world;
     vector_float4 p1_world;
     float halfWidthPx;
+    float aaPx;
+};
+
+struct QuadraticSeg3D {
+    vector_float4 p0_world;
+    vector_float4 p1_world;
+    vector_float4 p2_world;
+    float halfWidthPx;
+    float aaPx;
+};
+
+struct CubicSeg3D {
+    vector_float4 p0_world;
+    vector_float4 p1_world;
+    vector_float4 p2_world;
+    vector_float4 p3_world;
+    float halfWidthPx;
+    float aaPx;
 };
 
 struct LinearSegScreenSpace {
@@ -52,10 +71,10 @@ struct LinearSegScreenSpace {
     
     vector_float2 bboxMinSS;
     vector_float2 bboxMaxSS;
+    
+    vector_float4 colorStart;
+    vector_float4 colorEnd;
 };
-
-
-
 
 
 #endif /* definitions_h */

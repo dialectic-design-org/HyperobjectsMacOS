@@ -35,8 +35,8 @@ struct Line: Geometry {
     var sigmoidSteepness1: Float = 6.0
     var sigmoidMidpoint1: Float = 0.5
     
-    var lineWidthStart: Float = 0.4
-    var lineWidthEnd: Float = 0.4
+    var lineWidthStart: Float = 0.6
+    var lineWidthEnd: Float = 0.6
     
     func getPoints() -> [SIMD3<Float>] {
         return [startPoint, endPoint]

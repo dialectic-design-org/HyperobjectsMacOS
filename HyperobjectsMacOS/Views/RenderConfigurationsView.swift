@@ -37,14 +37,28 @@ struct RenderConfigurationsView: View {
                 "Show overlay",
                 isOn: $renderConfigurations.showOverlay
             )
-            Text("Camera Distance")
-            Slider(value: $renderConfigurations.cameraDistance, in: 0...10.0)
+            
+            Text("Projection mix")
+            Slider(value: $renderConfigurations.projectionMix, in: 0...1.0)
+            
+            Text("Camera Distance: \(String(format: "%.1f", renderConfigurations.cameraDistance))")
+            Slider(value: $renderConfigurations.cameraDistance, in: 0...50.0)
+
+            Text("Orthographic projection height: \(String(format: "%.1f", renderConfigurations.orthographicProjectionHeight))")
+            Slider(value: $renderConfigurations.orthographicProjectionHeight, in: 0...10.0)
+
+            Text("FOV Division: \(String(format: "%.1f", renderConfigurations.FOVDivision))")
+            Slider(value: $renderConfigurations.FOVDivision, in: 0...10.0)
+            
             
             Text("Bin visibility")
             Slider(value: $renderConfigurations.binVisibility, in: 0...10.0)
             
             Text("Bin grid visibility")
             Slider(value: $renderConfigurations.binGridVisibility, in: 0...1.0)
+            
+            Text("Bounding box visibility")
+            Slider(value: $renderConfigurations.boundingBoxVisibility, in: 0...1.0)
             
             
             Text("Bin depth rendering")

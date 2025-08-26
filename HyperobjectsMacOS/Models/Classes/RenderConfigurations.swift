@@ -23,13 +23,21 @@ class RenderConfigurations: ObservableObject {
     
     @Published var showOverlay: Bool = true
     
-    @Published var cameraDistance: Float = 5.0
+    @Published var cameraDistance: Float = 1.7320508075688772
     
     @Published var binVisibility: Float = 0.0
     
     @Published var binGridVisibility: Float = 0.0
     
+    @Published var boundingBoxVisibility: Float = 0.0
+    
     @Published var binDepth: Int = 16
+    
+    @Published var projectionMix: Float = 1.0
+    
+    @Published var FOVDivision: Float = 3.0
+    
+    @Published var orthographicProjectionHeight: Float = 2.0
     
     @Published var backgroundColor: ColorInput = ColorInput()
 }

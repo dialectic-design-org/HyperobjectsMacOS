@@ -17,16 +17,29 @@ struct VertexUniforms {
     var _padding: SIMD3<Float> = SIMD3<Float>(0, 0, 0) // 12 bytes padding
 }
 
-func identity_matrix_float4x4() -> matrix_float4x4 {
-    return matrix_float4x4(
-        vector_float4(1.0, 0.0, 0.0, 0.0),  // column 0
-        vector_float4(0.0, 1.0, 0.0, 0.0),  // column 1
-        vector_float4(0.0, 0.0, 1.0, 0.0),  // column 2
-        vector_float4(0.0, 0.0, 0.0, 1.0)   // column 3
-    )
+struct SegAlloc {
+    var next: uint32
+    var capacity: uint32
 }
 
-private let BIN_POW: UInt32 = 4
+let maxMicroSegPerQuad  = 16
+let maxMicroSegPerCubic = 24
+
+
+func binGrid(viewWidth: Int, viewHeight: Int) -> (cols: Int, rows: Int, bins: Int) {
+    let cols = (UInt32(viewWidth) + BIN_SIZE - 1) / BIN_SIZE
+    let rows = (UInt32(viewHeight) + BIN_SIZE - 1) / BIN_SIZE
+    return (Int(cols), Int(rows), Int(cols * rows))
+}
+
+func computeOutSegsCapacity(linearCount: Int, quadCount: Int, cubicCount: Int) -> Int {
+    let reserveLinear = linearCount
+    let reserveQuads = quadCount * maxMicroSegPerQuad
+    let reserveCubics = cubicCount * maxMicroSegPerCubic
+    return Int(Double(reserveLinear + reserveQuads + reserveCubics) * 1.2)
+}
+
+private let BIN_POW: UInt32 = 5
 private let BIN_SIZE: UInt32 = 1 << BIN_POW
 private let lineCount: UInt32 = 10000
 
@@ -34,7 +47,9 @@ private let lineCount: UInt32 = 10000
 class MetalRenderer {
     let device: MTLDevice
     let commandQueue: MTLCommandQueue
-    var transformPSO: MTLComputePipelineState?
+    var transformLinear: MTLComputePipelineState?
+    var transformQuad: MTLComputePipelineState?
+    var transformCubic: MTLComputePipelineState?
     var renderPSO: MTLComputePipelineState?
     var renderPipelineState: MTLRenderPipelineState?
     var computeToRenderPipelineState: MTLRenderPipelineState?
@@ -45,12 +60,19 @@ class MetalRenderer {
     var uniformBuffer: MTLBuffer?
     var lineRenderTextureA: MTLTexture!
     var lineRenderTextureB: MTLTexture!
+    let maxViewSize = 4096 * 2
+    
     
     private var linesBuffer: MTLBuffer!
+    private var quadraticCurvesBuffer: MTLBuffer!
+    private var cubicCurvesBuffer: MTLBuffer!
+    
     private var linearLinesScreenSpaceBuffer: MTLBuffer!
+    
     private var binCounts: MTLBuffer!
     private var binOffsets: MTLBuffer!
     private var binList: MTLBuffer!
+    private var segAllocBuffer: MTLBuffer!
     
     private var currentTextureWidth: Int = 0
     private var currentTextureHeight: Int = 0
@@ -96,7 +118,7 @@ class MetalRenderer {
              0.5, -0.5, 0.0,            0.0, 0.0, 1.0, 1.0
         ]
         // Apply scaling to the vertices with a factor variable
-        var scalingFactor = 1.0
+        let scalingFactor = 1.0
         for i in stride(from: 0, to: vertices.count, by: 3) {
             vertices[i] *= Float(scalingFactor)
             vertices[i+1] *= Float(scalingFactor)
@@ -125,18 +147,24 @@ class MetalRenderer {
                                          length: MemoryLayout<VertexUniforms>.size,
                                          options: .storageModeShared)
         
-        let maxViewSize = 4096
+        
         let binCols = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
         let binRows = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
         let totalBins = binCols * binRows
         
-        
+        // TODO: set correct buffer sizes based on types of lines
         linesBuffer = device.makeBuffer(length: MemoryLayout<LinearSeg3D>.stride * Int(lineCount), options: .storageModeShared)!
+        quadraticCurvesBuffer = device.makeBuffer(length: MemoryLayout<QuadraticSeg3D>.stride * Int(lineCount), options: .storageModeShared)!
+        cubicCurvesBuffer = device.makeBuffer(length: MemoryLayout<CubicSeg3D>.stride * Int(lineCount), options: .storageModeShared)!
         linearLinesScreenSpaceBuffer = device.makeBuffer(length: MemoryLayout<LinearSegScreenSpace>.stride * Int(lineCount), options: .storageModeShared)!
         
         binCounts = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
         binOffsets = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
         binList = device.makeBuffer(length: MemoryLayout<UInt32>.stride * Int(lineCount) * totalBins, options: .storageModeShared)!
+        
+        // TODO: IMPLEMENT DYNAMIC CAPACITY ALLOCATION!
+        
+        segAllocBuffer = device.makeBuffer(length: MemoryLayout<SegAlloc>.stride, options: .storageModeShared)!
         
     }
     
@@ -193,6 +221,15 @@ class MetalRenderer {
         computeRenderPipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
         
         
+        func makePSO(_ name: String) throws -> MTLComputePipelineState {
+            do {
+                return try device.makeComputePipelineState(function: library!.makeFunction(name: name)!)
+            } catch {
+                fatalError("Failed to create \(name) pipeline state: \(error)")
+            }
+            
+        }
+        
         do {
             renderPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         } catch {
@@ -205,16 +242,16 @@ class MetalRenderer {
             print("Error creating render pipeline state: \(error)")
         }
         
+        
         do {
-            self.transformPSO = try device.makeComputePipelineState(function: library!.makeFunction(name: "transformAndBinLinear")!)
+            self.transformLinear = try makePSO("transformAndBinLinear")
+            self.transformQuad = try makePSO("transformAndBinQuadratic")
+            self.transformCubic = try makePSO("transformAndBinCubic")
+            self.renderPSO = try makePSO("drawLines")
         } catch {
-            fatalError("Failed to create transformAndBin pipeline state: \(error)")
+            fatalError("Failed to create pipelines: \(error)")
         }
-        do {
-            self.renderPSO = try device.makeComputePipelineState(function: library!.makeFunction(name: "drawLines")!)
-        } catch {
-            fatalError("Failed to create drawLines pipeline state: \(error)")
-        }
+        
     }
     
     func createLineRenderTexture(width: Int, height: Int) {
@@ -266,15 +303,28 @@ class MetalRenderer {
         
         let linesPtr = linesBuffer.contents().bindMemory(to: LinearSeg3D.self, capacity: Int(lineCount))
         
+        let quadraticCurvesPtr = quadraticCurvesBuffer.contents().bindMemory(to: QuadraticSeg3D.self, capacity: Int(lineCount))
+        
+        let cubicCurvesPtr = cubicCurvesBuffer.contents().bindMemory(to: CubicSeg3D.self, capacity: Int(lineCount))
+        
         // Wipe all lines in the buffer so new ones can be set.
         let byteCount = linesBuffer.length
         memset(linesBuffer.contents(), 0, byteCount)
         
+        let byteCountQuadratic = quadraticCurvesBuffer.length
+        memset(quadraticCurvesBuffer.contents(), 0, byteCountQuadratic)
+        
+        let byteCountCubic = cubicCurvesBuffer.length
+        memset(cubicCurvesBuffer.contents(), 0, byteCountCubic)
         
         
         var gIndex: Int = 0
         
         var geometriesTime: Float = 0.0
+        
+        var linearLinesIndex: Int = 0
+        var quadraticLinesIndex: Int = 0
+        var cubicLinesIndex: Int = 0
         
         for gWrapped in scene.cachedGeometries {
             let geometry = gWrapped.geometry
@@ -286,17 +336,45 @@ class MetalRenderer {
                     
                     testPoints.append(line[0])
                     testPoints.append(line[1])
-                    if lineGeometry.degree == 2 {
-                        testPoints.append(lineGeometry.controlPoints[0])
-                    }
-                    if lineGeometry.degree == 3 {
-                        testPoints.append(lineGeometry.controlPoints[1])
-                    }
                     
-                    linesPtr[gIndex] = createShaderLinearSeg(
-                        p0_world: line[0],
-                        p1_world: line[1]
-                    )
+                    if lineGeometry.degree == 1 {
+                        linesPtr[linearLinesIndex] = createShaderLinearSeg(
+                            p0_world: line[0],
+                            p1_world: line[1],
+                            p0_width: lineGeometry.lineWidthStart,
+                            p1_width: lineGeometry.lineWidthEnd
+                        )
+                        linearLinesIndex += 1
+                        
+                    } else if lineGeometry.degree == 2 {
+                        testPoints.append(lineGeometry.controlPoints[0])
+                        
+                        quadraticCurvesPtr[quadraticLinesIndex] = QuadraticSeg3D(
+                            p0_world: SIMD4<Float>(line[0], 1.0),
+                            p1_world: SIMD4<Float>(lineGeometry.controlPoints[0], 1.0),
+                            p2_world: SIMD4<Float>(line[1], 1.0),
+                            halfWidthPx: lineGeometry.lineWidthStart,
+                            aaPx: 0.707
+                        )
+                        
+                        quadraticLinesIndex += 1
+                        
+                    } else if lineGeometry.degree == 3 {
+                        testPoints.append(lineGeometry.controlPoints[0])
+                        testPoints.append(lineGeometry.controlPoints[1])
+                        
+                        cubicCurvesPtr[cubicLinesIndex] = CubicSeg3D(
+                            p0_world: SIMD4<Float>(line[0], 1.0),
+                            p1_world: SIMD4<Float>(lineGeometry.controlPoints[0], 1.0),
+                            p2_world: SIMD4<Float>(lineGeometry.controlPoints[1], 1.0),
+                            p3_world: SIMD4<Float>(line[1], 1.0),
+                            halfWidthPx: lineGeometry.lineWidthStart,
+                            aaPx: 0.707
+                        )
+                        
+                        cubicLinesIndex += 1
+                        
+                    }
                 }
                 
             default:
@@ -319,7 +397,6 @@ class MetalRenderer {
         let binRows = (viewH + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
         let totalBins = binCols * binRows
         
-        let maxViewSize = 4096
         let maxBinCols = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
         let maxBinRows = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
         let maxTotalBins = maxBinCols * maxBinRows
@@ -349,36 +426,47 @@ class MetalRenderer {
         let nearClippingPlane: Float = 0.1
         let farCplippingPlane: Float = 100.0
         
-        let perspectiveMatrix = matrix_perspective(fovY: fieldOfView, aspect: aspectRatio, nearZ: nearClippingPlane, farZ: farCplippingPlane)
+        
         // 1. Define the camera's properties
         
         let time = CACurrentMediaTime()
         var transitionFactor = Float(0.5 + 0.5 * sin(time))
-        transitionFactor = 1.0
+        transitionFactor = renderConfigs?.projectionMix ?? transitionFactor
         
-        var cameraDistance = renderConfigs?.cameraDistance ?? 5.0
+        let cameraDistance = renderConfigs?.cameraDistance ?? 5.0
         
-        let cameraPosition = simd_float3(x: 0.0, y: 0.0, z: cameraDistance)
-        let targetPosition = simd_float3(x: 0.0, y: 0.0, z: 0.0) // Look at the object
-        let upDirection = simd_float3(x: 0.0, y: 1.0, z: 0.0) // World's "up" is Y
+        let FOVDivision: Float = renderConfigs?.FOVDivision ?? 3
+        let fovY: Float = .pi / FOVDivision
+        let nearZ: Float = 0.1
+        let farZ:  Float = 100.0
 
-        // 2. Create the view matrix
-        let viewMatrix = matrix_lookAt(eye: cameraPosition, target: targetPosition, up: upDirection)
+        let eye = SIMD3<Float>(0, 0, cameraDistance)   // +Z
+        let ctr = SIMD3<Float>(0, 0, 0)
+        let up  = SIMD3<Float>(0, 1, 0)
         
-        let focalDistance: Float = 1.0
-        let orthoHeight: Float = 2.0 // * focalDistance * tan((Float.pi / 3) / 2.0)
+        let V = matrix_lookAt_rh(eye: eye, target: ctr, up: up)
+        let P = matrix_perspective_metal_rh(fovY: fovY, aspect: aspectRatio, nearZ: nearZ, farZ: farZ)
+
+        //  // * focalDistance * tan((Float.pi / 3) / 2.0)
+        let orthoHeight: Float = renderConfigs?.orthographicProjectionHeight ?? 2.0
         let orthoWidth = orthoHeight * aspectRatio
         
         let orthographicMatrix = matrix_orthographic(left: -orthoWidth / 2.0,
                                                   right: orthoWidth / 2.0,
                                                   bottom: -orthoHeight / 2.0,
                                                   top: orthoHeight / 2.0,
-                                                  nearZ: 0.1,
+                                                  nearZ: -100.0,
                                                   farZ: 100.0)
         
-        let projectionMatrix = (1.0 - transitionFactor) * orthographicMatrix + transitionFactor * perspectiveMatrix
+        let projectionMatrix = (1.0 - transitionFactor) * orthographicMatrix + transitionFactor * P
         
-        MVP = projectionMatrix * viewMatrix
+        let flipY = float4x4(SIMD4<Float>( 1,  0, 0, 0),
+                             SIMD4<Float>( 0, -1, 0, 0),
+                             SIMD4<Float>( 0,  0, 1, 0),
+                             SIMD4<Float>( 0,  0, 0, 1))
+        
+        // MVP = projectionMatrix * viewMatrix
+        MVP = flipY * (projectionMatrix * V)
         
         let backgroundColor = renderConfigs?.backgroundColor ?? ColorInput()
         
@@ -393,7 +481,8 @@ class MetalRenderer {
             backgroundColor: colorToVector(backgroundColor.color),
             antiAliasPx: 0.808,
             debugBins: renderConfigs?.binGridVisibility ?? 0.0,
-            binVisibility: renderConfigs?.binVisibility ?? 0.0
+            binVisibility: renderConfigs?.binVisibility ?? 0.0,
+            boundingBoxVisibility: renderConfigs?.boundingBoxVisibility ?? 0.0
         )
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
@@ -407,26 +496,78 @@ class MetalRenderer {
         
         var segCount: Int32 = Int32(gIndex)
         
+        
+        var segAlloc = SegAlloc(next: 0, capacity: uint32(10000));
+        var segAllocPtr = segAllocBuffer.contents().bindMemory(to: SegAlloc.self, capacity: Int(1))
+        // Reset to 0 for each frame
+        segAllocPtr[0] = segAlloc
+        
         if renderSDFLines {
-            if let transformEncoder = commandBuffer.makeComputeCommandEncoder() {
-                transformEncoder.setComputePipelineState(transformPSO!)
-                transformEncoder.setBuffer(linesBuffer,      offset:0, index:0)
-                transformEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
-                transformEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:2)
-                transformEncoder.setBuffer(linearLinesScreenSpaceBuffer,      offset:0, index:3)
-                transformEncoder.setBuffer(binCounts,     offset:0, index:4)
-                transformEncoder.setBuffer(binOffsets,    offset:0, index:5)
-                transformEncoder.setBuffer(binList,       offset:0, index:6)
-                transformEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
+            if let transformLinearEncoder = commandBuffer.makeComputeCommandEncoder() {
+                transformLinearEncoder.setComputePipelineState(transformLinear!)
+                transformLinearEncoder.setBuffer(linesBuffer,      offset:0, index:0)
+                transformLinearEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
+                transformLinearEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:2)
+                transformLinearEncoder.setBuffer(linearLinesScreenSpaceBuffer,      offset:0, index:3)
+                transformLinearEncoder.setBuffer(binCounts,     offset:0, index:4)
+                transformLinearEncoder.setBuffer(binOffsets,    offset:0, index:5)
+                transformLinearEncoder.setBuffer(binList,       offset:0, index:6)
+                transformLinearEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
+                transformLinearEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8);
                 
-                let tg = MTLSize(width: transformPSO!.threadExecutionWidth,
+                let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
                                  height: 1,
                                  depth: 1)
                 
-                transformEncoder.dispatchThreads(MTLSize(width: Int(lineCount), height: 1, depth: 1),
+                transformLinearEncoder.dispatchThreads(MTLSize(width: Int(lineCount), height: 1, depth: 1),
                                                  threadsPerThreadgroup: tg)
-                transformEncoder.endEncoding()          // ← guarantees completion before the next encoder
+                transformLinearEncoder.endEncoding()          // ← guarantees completion before the next encoder
             }
+            
+            if let transformQuadraticEncoder = commandBuffer.makeComputeCommandEncoder() {
+                transformQuadraticEncoder.setComputePipelineState(transformQuad!)
+                transformQuadraticEncoder.setBuffer(quadraticCurvesBuffer, offset: 0, index: 0)
+                transformQuadraticEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
+                transformQuadraticEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:2)
+                transformQuadraticEncoder.setBuffer(linearLinesScreenSpaceBuffer,      offset:0, index:3)
+                transformQuadraticEncoder.setBuffer(binCounts,     offset:0, index:4)
+                transformQuadraticEncoder.setBuffer(binOffsets,    offset:0, index:5)
+                transformQuadraticEncoder.setBuffer(binList,       offset:0, index:6)
+                transformQuadraticEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
+                transformQuadraticEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8);
+                
+                let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
+                                 height: 1,
+                                 depth: 1)
+                
+                transformQuadraticEncoder.dispatchThreads(MTLSize(width: Int(lineCount), height: 1, depth: 1),
+                                                 threadsPerThreadgroup: tg)
+                transformQuadraticEncoder.endEncoding()          // ← guarantees completion before the next encoder
+            }
+            
+            if let transformCubicEncoder = commandBuffer.makeComputeCommandEncoder() {
+                transformCubicEncoder.setComputePipelineState(transformCubic!)
+                transformCubicEncoder.setBuffer(cubicCurvesBuffer, offset: 0, index: 0)
+                transformCubicEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
+                transformCubicEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:2)
+                transformCubicEncoder.setBuffer(linearLinesScreenSpaceBuffer,      offset:0, index:3)
+                transformCubicEncoder.setBuffer(binCounts,     offset:0, index:4)
+                transformCubicEncoder.setBuffer(binOffsets,    offset:0, index:5)
+                transformCubicEncoder.setBuffer(binList,       offset:0, index:6)
+                transformCubicEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
+                transformCubicEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8);
+                
+                let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
+                                 height: 1,
+                                 depth: 1)
+                
+                transformCubicEncoder.dispatchThreads(MTLSize(width: Int(lineCount), height: 1, depth: 1),
+                                                 threadsPerThreadgroup: tg)
+                transformCubicEncoder.endEncoding()          // ← guarantees completion before the next encoder
+            }
+            
+            
+            
             
             if let drawLinesEncoder = commandBuffer.makeComputeCommandEncoder() {
                 drawLinesEncoder.setComputePipelineState(renderPSO!)

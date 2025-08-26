@@ -57,6 +57,33 @@ func matrix_lookAt(eye: SIMD3<Float>, target: SIMD3<Float>, up: SIMD3<Float>) ->
     )
 }
 
+// MARK: - Matrix helpers (Metal / RH / z in [0,1])
+func matrix_perspective_metal_rh(fovY: Float, aspect: Float, nearZ: Float, farZ: Float) -> simd_float4x4 {
+    let f = 1 / tanf(fovY * 0.5)
+    let nf = 1 / (nearZ - farZ) // note: RH, Metal/D3D z
+    return simd_float4x4(
+        SIMD4<Float>( f/aspect, 0,  0,                          0),
+        SIMD4<Float>( 0,        f,  0,                          0),
+        SIMD4<Float>( 0,        0,  farZ*nf,                   -1),
+        SIMD4<Float>( 0,        0,  (nearZ*farZ)*nf,            0)
+    )
+}
+
+func matrix_lookAt_rh(eye: SIMD3<Float>, target: SIMD3<Float>, up: SIMD3<Float>) -> simd_float4x4 {
+    let f = simd_normalize(target - eye)              // forward (to -Z if looking down -Z)
+    let s = simd_normalize(simd_cross(f, up))
+    let u = simd_cross(s, f)
+    let m = simd_float4x4(
+        SIMD4<Float>( s.x,  u.x, -f.x, 0),
+        SIMD4<Float>( s.y,  u.y, -f.y, 0),
+        SIMD4<Float>( s.z,  u.z, -f.z, 0),
+        SIMD4<Float>(-simd_dot(s, eye),
+                     -simd_dot(u, eye),
+                      simd_dot(f, eye), 1)
+    )
+    return m
+}
+
 func matrix_perspective(fovY: Float, aspect: Float, nearZ: Float, farZ: Float) -> matrix_float4x4 {
     let yScale = 1.0 / tan(fovY * 0.5)
     let xScale = yScale / aspect
