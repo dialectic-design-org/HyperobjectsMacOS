@@ -15,8 +15,12 @@ enum LineColorMode: String, CaseIterable, Identifiable {
     var id: String { self.rawValue }
 }
 
+// Start with very high value for generic lines so that lower values can be used for specific paths
+private var idIncrement: Int = 100000
+
 struct Line: Geometry {
     let id = UUID()
+    var pathID = Int(0)
     let type: GeometryType = .line
     var startPoint: SIMD3<Float>
     var endPoint: SIMD3<Float>
@@ -37,6 +41,43 @@ struct Line: Geometry {
     
     var lineWidthStart: Float = 0.6
     var lineWidthEnd: Float = 0.6
+    
+    init(startPoint: SIMD3<Float>,
+         endPoint: SIMD3<Float>,
+         degree: Int = 1,
+         controlPoints: [SIMD3<Float>] = [],
+         colorStart: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0),
+         colorStartOuterLeft: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0),
+         colorStartOuterRight: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0),
+         colorEnd: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0),
+         colorEndOuterLeft: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0),
+         colorEndOuterRight: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0),
+         sigmoidSteepness0: Float = 6.0,
+         sigmoidMidpoint0: Float = 0.5,
+         sigmoidSteepness1: Float = 6.0,
+         sigmoidMidpoint1: Float = 0.5,
+         lineWidthStart: Float = 0.6,
+         lineWidthEnd: Float = 0.6) {
+        self.pathID = idIncrement
+        self.startPoint = startPoint
+        self.endPoint = endPoint
+        self.degree = degree
+        self.controlPoints = controlPoints
+        self.colorStart = colorStart
+        self.colorEnd = colorEnd
+        self.colorStartOuterLeft = colorStartOuterLeft
+        self.colorEndOuterLeft = colorEndOuterLeft
+        self.colorStartOuterRight = colorStartOuterRight
+        self.colorEndOuterRight = colorEndOuterRight
+        self.sigmoidSteepness0 = sigmoidSteepness0
+        self.sigmoidMidpoint0 = sigmoidMidpoint0
+        self.sigmoidSteepness1 = sigmoidSteepness1
+        self.sigmoidMidpoint1 = sigmoidMidpoint1
+        self.lineWidthStart = lineWidthStart
+        self.lineWidthEnd = lineWidthEnd
+        
+        idIncrement += 1
+    }
     
     func getPoints() -> [SIMD3<Float>] {
         return [startPoint, endPoint]

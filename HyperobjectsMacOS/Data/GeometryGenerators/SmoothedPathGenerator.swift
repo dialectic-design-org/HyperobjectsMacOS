@@ -105,6 +105,7 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
                     startColor: scale.color(at: lineT).toSIMD4(),
                     endColor: scale.color(at: lineT + tIncrement).toSIMD4()
                 )
+                smoothedLines[i].pathID = 1
             }
         }
         

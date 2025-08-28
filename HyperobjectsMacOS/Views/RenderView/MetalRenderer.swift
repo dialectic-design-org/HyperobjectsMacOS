@@ -339,10 +339,13 @@ class MetalRenderer {
                     
                     if lineGeometry.degree == 1 {
                         linesPtr[linearLinesIndex] = createShaderLinearSeg(
+                            pathID: Int32(lineGeometry.pathID),
                             p0_world: line[0],
                             p1_world: line[1],
                             p0_width: lineGeometry.lineWidthStart,
-                            p1_width: lineGeometry.lineWidthEnd
+                            p1_width: lineGeometry.lineWidthEnd,
+                            colorStartCenter: lineGeometry.colorStart,
+                            colorEndCenter: lineGeometry.colorEnd
                         )
                         linearLinesIndex += 1
                         
@@ -350,11 +353,14 @@ class MetalRenderer {
                         testPoints.append(lineGeometry.controlPoints[0])
                         
                         quadraticCurvesPtr[quadraticLinesIndex] = QuadraticSeg3D(
+                            pathID: Int32(lineGeometry.pathID),
                             p0_world: SIMD4<Float>(line[0], 1.0),
                             p1_world: SIMD4<Float>(lineGeometry.controlPoints[0], 1.0),
                             p2_world: SIMD4<Float>(line[1], 1.0),
                             halfWidthPx: lineGeometry.lineWidthStart,
-                            aaPx: 0.707
+                            aaPx: 0.707,
+                            colorStartCenter: lineGeometry.colorStart,
+                            colorEndCenter: lineGeometry.colorEnd
                         )
                         
                         quadraticLinesIndex += 1
@@ -364,12 +370,15 @@ class MetalRenderer {
                         testPoints.append(lineGeometry.controlPoints[1])
                         
                         cubicCurvesPtr[cubicLinesIndex] = CubicSeg3D(
+                            pathID: Int32(lineGeometry.pathID),
                             p0_world: SIMD4<Float>(line[0], 1.0),
                             p1_world: SIMD4<Float>(lineGeometry.controlPoints[0], 1.0),
                             p2_world: SIMD4<Float>(lineGeometry.controlPoints[1], 1.0),
                             p3_world: SIMD4<Float>(line[1], 1.0),
                             halfWidthPx: lineGeometry.lineWidthStart,
-                            aaPx: 0.707
+                            aaPx: 0.707,
+                            colorStartCenter: lineGeometry.colorStart,
+                            colorEndCenter: lineGeometry.colorEnd
                         )
                         
                         cubicLinesIndex += 1
@@ -470,6 +479,9 @@ class MetalRenderer {
         
         let backgroundColor = renderConfigs?.backgroundColor ?? ColorInput()
         
+        let lineDebugGradientStart = renderConfigs?.lineTimeDebugStartGradientColor ?? ColorInput()
+        let lineDebugGradientEnd = renderConfigs?.lineTimeDebugEndGradientColor ?? ColorInput()
+        
         // Convert to vector_float3
         
         let binDepthSource = renderConfigs?.binDepth ?? 16
@@ -482,7 +494,11 @@ class MetalRenderer {
             antiAliasPx: 0.808,
             debugBins: renderConfigs?.binGridVisibility ?? 0.0,
             binVisibility: renderConfigs?.binVisibility ?? 0.0,
-            boundingBoxVisibility: renderConfigs?.boundingBoxVisibility ?? 0.0
+            boundingBoxVisibility: renderConfigs?.boundingBoxVisibility ?? 0.0,
+            lineColorStrength: renderConfigs?.lineColorStrength ?? 1.0,
+            lineDebugGradientStrength: renderConfigs?.lineTimeDebugGradientStrength ?? 0.0,
+            lineDebugGradientStartColor: colorToVector(lineDebugGradientStart.color),
+            lineDebugGradientEndColor: colorToVector(lineDebugGradientEnd.color)
         )
         
         let renderPassDescriptor = MTLRenderPassDescriptor()

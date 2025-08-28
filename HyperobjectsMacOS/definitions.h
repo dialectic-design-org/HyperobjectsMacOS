@@ -36,31 +36,49 @@ struct Uniforms {
     float debugBins;
     float binVisibility;
     float boundingBoxVisibility;
+    
+    float lineColorStrength;
+    float lineDebugGradientStrength;
+    
+    vector_float3 lineDebugGradientStartColor;
+    vector_float3 lineDebugGradientEndColor;
 };
 
 
 struct LinearSeg3D {
+    int pathID;
     vector_float4 p0_world;
     vector_float4 p1_world;
     float halfWidthPx;
     float aaPx;
+    
+    vector_float4 colorStartCenter;
+    vector_float4 colorEndCenter;
 };
 
 struct QuadraticSeg3D {
+    int pathID;
     vector_float4 p0_world;
     vector_float4 p1_world;
     vector_float4 p2_world;
     float halfWidthPx;
     float aaPx;
+    
+    vector_float4 colorStartCenter;
+    vector_float4 colorEndCenter;
 };
 
 struct CubicSeg3D {
+    int pathID;
     vector_float4 p0_world;
     vector_float4 p1_world;
     vector_float4 p2_world;
     vector_float4 p3_world;
     float halfWidthPx;
     float aaPx;
+    
+    vector_float4 colorStartCenter;
+    vector_float4 colorEndCenter;
 };
 
 struct LinearSegScreenSpace {
@@ -72,8 +90,17 @@ struct LinearSegScreenSpace {
     vector_float2 bboxMinSS;
     vector_float2 bboxMaxSS;
     
-    vector_float4 colorStart;
-    vector_float4 colorEnd;
+    vector_float4 colorStartCenter;
+    vector_float4 colorEndCenter;
+    
+    float z0_clip;
+    float w0_clip;
+    float z1_clip;
+    float w1_clip;
+    
+    int pathID;
+    short segIndex;
+    short totalSegs;
 };
 
 

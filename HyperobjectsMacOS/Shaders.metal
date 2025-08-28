@@ -257,7 +257,7 @@ inline void emitJoinDisk(float2 centerSS, float rad, float2 view,
     for (uint bx = bx0; bx <= bx1; ++bx) {
         float2 binMin = float2(bx, by) * binSizeVec;
         float2 binMax = binMin + binSizeVec;
-        // if (!lineIntersectsBox(centerSS, centerSS, binMin, binMax, rad)) continue;
+        if (!lineIntersectsBox(centerSS, centerSS, binMin, binMax, rad)) continue;
         uint bin = by * BIN_COLS + bx;
         uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
         binList[binOffsets[bin] + pos] = outIdx;
@@ -311,7 +311,6 @@ kernel void transformAndBinLinear(
     float4 original_p1c = p1c;
     
     // 2. Clip segment to the near plane (w > W_NEAR_CLIP)
-    // This is crucial for correctly handling lines that cross the w=0 plane.
     if (original_p0c.w < W_NEAR_CLIP) {
         float t = (W_NEAR_CLIP - original_p0c.w) / (original_p1c.w - original_p0c.w);
         p0c = mix(original_p0c, original_p1c, t);
@@ -359,24 +358,27 @@ kernel void transformAndBinLinear(
     outSegs[outIdx].aaPx = U.antiAliasPx;
     outSegs[outIdx].bboxMinSS = mn;
     outSegs[outIdx].bboxMaxSS = mx;
-    outSegs[outIdx].colorStart  = float4(1.0, 0.0, 0.0, 1.0);
-    outSegs[outIdx].colorEnd  = float4(0.0, 0.0, 1.0, 1.0);
-    outSegs[outIdx].colorStart  = float4(1.0, 1.0, 1.0, 1.0);
-    outSegs[outIdx].colorEnd  = float4(1.0, 1.0, 1.0, 1.0);
+    outSegs[outIdx].colorStartCenter  = S.colorStartCenter;
+    outSegs[outIdx].colorEndCenter  = S.colorEndCenter;
     
+    outSegs[outIdx].z0_clip = p0c.z;
+    outSegs[outIdx].w0_clip = p0c.w;
+    outSegs[outIdx].z1_clip = p1c.z;
+    outSegs[outIdx].w1_clip = p1c.w;
+    
+    outSegs[outIdx].pathID = gid;
+    outSegs[outIdx].segIndex = 0;
+    outSegs[outIdx].totalSegs = 1;
+ 
 
     // Bin by bbox only (simple & over-inclusive)
     uint BIN_COLS = (uint)((view.x + BIN_SIZE - 1) / BIN_SIZE);
-    float2 binSizeVec = float2(BIN_SIZE);
-    
-    
+        
     uint bx0,by0,bx1,by1;
     binRange(mn, mx, view, bx0,by0,bx1,by1);
     
     for (uint by = by0; by <= by1; ++by)
     for (uint bx = bx0; bx <= bx1; ++bx) {
-        float2 binMin = float2(bx, by) * binSizeVec;
-        
         uint bin  = by * BIN_COLS + bx;
         uint pos  = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
         binList[binOffsets[bin] + pos] = outIdx; // store index of outSegs
@@ -492,10 +494,17 @@ kernel void transformAndBinQuadratic(
                     outSegs[outIdx].aaPx = U.antiAliasPx;
                     outSegs[outIdx].bboxMinSS = mn;
                     outSegs[outIdx].bboxMaxSS = mx;
-                    outSegs[outIdx].colorStart  = float4(1.0, 0.0, 0.0, 1.0);
-                    outSegs[outIdx].colorEnd  = float4(0.0, 0.0, 1.0, 1.0);
-                    outSegs[outIdx].colorStart  = float4(1.0, 1.0, 1.0, 1.0);
-                    outSegs[outIdx].colorEnd  = float4(1.0, 1.0, 1.0, 1.0);
+                    outSegs[outIdx].colorStartCenter = float4(1.0, 1.0, 1.0, 1.0);
+                    outSegs[outIdx].colorEndCenter = float4(1.0, 1.0, 1.0, 1.0);
+                    
+                    outSegs[outIdx].z0_clip = c0.z;
+                    outSegs[outIdx].w0_clip = c0.w;
+                    outSegs[outIdx].z1_clip = c1.z;
+                    outSegs[outIdx].w1_clip = c1.w;
+                    
+                    outSegs[outIdx].pathID = gid;
+                    outSegs[outIdx].segIndex = i;
+                    outSegs[outIdx].totalSegs = N;
                     
                     uint bx0, by0, bx1, by1;
                     binRange(mn, mx, view, bx0, by0, bx1, by1);
@@ -598,9 +607,9 @@ kernel void transformAndBinCubic(
         
         if (liangBarskyClip(c0, c1, rad_ndc)) {
             // Direction rule: if exactly one endpoint is truly inside (no expansion), start from the inside
-            // const bool in0 = isInsideClipNoExpand(c0);
-            // const bool in1 = isInsideClipNoExpand(c1);
-            // if (!in0 && in1) { float4 tmp = c0; c0 = c1; c1 = tmp; }
+             const bool in0 = isInsideClipNoExpand(c0);
+             const bool in1 = isInsideClipNoExpand(c1);
+             if (!in0 && in1) { float4 tmp = c0; c0 = c1; c1 = tmp; }
 
             // Project clipped endpoints to screen space
             const float2 s0 = clipToScreen(c0, view);
@@ -624,11 +633,19 @@ kernel void transformAndBinCubic(
                     outSegs[outIdx].aaPx        = U.antiAliasPx;
                     outSegs[outIdx].bboxMinSS   = mn;
                     outSegs[outIdx].bboxMaxSS   = mx;
-                    outSegs[outIdx].colorStart  = float4(1.0, 0.0, 0.0, 1.0);
-                    outSegs[outIdx].colorEnd  = float4(0.0, 0.0, 1.0, 1.0);
-//                    outSegs[outIdx].colorStart  = float4(1.0, 1.0, 1.0, 1.0);
-//                    outSegs[outIdx].colorEnd  = float4(1.0, 1.0, 1.0, 1.0);
+                    outSegs[outIdx].colorStartCenter = mix(S.colorStartCenter, S.colorEndCenter, t);
+                    outSegs[outIdx].colorEndCenter  = mix(S.colorStartCenter, S.colorEndCenter, tn);
 
+                    outSegs[outIdx].z0_clip = c0.z;
+                    outSegs[outIdx].w0_clip = c0.w;
+                    outSegs[outIdx].z1_clip = c1.z;
+                    outSegs[outIdx].w1_clip = c1.w;
+                    
+                    outSegs[outIdx].pathID = gid;
+                    outSegs[outIdx].segIndex = i;
+                    outSegs[outIdx].totalSegs = N;
+                    
+                    
                     uint bx0, by0, bx1, by1;
                     binRange(mn, mx, view, bx0, by0, bx1, by1);
 
@@ -714,8 +731,8 @@ kernel void drawLines(
     threadgroup float2 tgMX[KMAX_PER_BIN];
     threadgroup float tgR0_2[KMAX_PER_BIN];
     threadgroup float tgR1_2[KMAX_PER_BIN];
-    threadgroup float4 tgColorStart[KMAX_PER_BIN];
-    threadgroup float4 tgColorEnd[KMAX_PER_BIN];
+    threadgroup float4 tgColorStartCenter[KMAX_PER_BIN];
+    threadgroup float4 tgColorEndCenter[KMAX_PER_BIN];
     
     float3 rgb = U.backgroundColor;
     float a = 0.0f;
@@ -764,14 +781,14 @@ kernel void drawLines(
             tgAA[i] = aa;
             tgR0_2[i] = r0 * r0;
             tgR1_2[i] = r1 * r1;
-            tgColorStart[i] = S->colorStart;
-            tgColorEnd[i] = S->colorEnd;
+            tgColorStartCenter[i] = S->colorStartCenter;
+            tgColorEndCenter[i] = S->colorEndCenter;
         }
         threadgroup_barrier(mem_flags::mem_threadgroup);
 
         // Process cached batch
         const uint C = batch;
-        for (uint i = 0; i < C && a < 0.99f; ++i) {
+        for (uint i = 0; i < C; ++i) {
             // Optimized bbox rejection using vector operations
             bool2 outside_min = p < tgMN[i];
             bool2 outside_max = p > tgMX[i];
@@ -816,38 +833,17 @@ kernel void drawLines(
             float finalSignedDistance = (ba_len2 < 1e-8) ? d : sClamped;
             
             
-            float4 color = mix(tgColorStart[i], tgColorEnd[i], tLine);
+            float4 color = mix(
+                               tgColorStartCenter[i],
+                               tgColorEndCenter[i],
+                               tLine) * U.lineColorStrength
+            + mix(float4(U.lineDebugGradientStartColor, 1.0),
+                  float4(U.lineDebugGradientEndColor, 1.0),
+                  tLine) * U.lineDebugGradientStrength;
             
             if(d > tgHW[i]) continue;
             
-            
-            // If fully inside: early O(1) fill
-//            if (d2 <= r0_2) {
-//                float contrib = (1.0f - a);
-//                rgb += float3(color.xyz) * contrib;
-//                a += contrib;
-//                continue;
-//            }
-//            
-//            // If fully outside: skip
-//            if (d2 > r1_2) {
-//                continue;
-//            }
-//            
-//            float alphaEdge = smoothstep(tgHW[i] + tgAA[i], tgHW[i] - tgAA[i], d);
-//
-//            if(alphaEdge <1e-3) continue;
-//            
-//            
-//            float smooth = t * t * (3.0f - 2.0f * t);
-//            float alpha = 1.0f - smooth;
-//
-//            float contrib = alpha * (1.0f - a);
-//            rgb += float3(color.xyz) * contrib;
-//            a += contrib;
-            
             float alpha = smoothstep(tgHW[i] + tgAA[i], tgHW[i] - tgAA[i], d);
-            if (alpha < 1e-3) continue;
 
             // Add this line's color, weighted by its alpha
             rgb += float3(color.xyz) * alpha;

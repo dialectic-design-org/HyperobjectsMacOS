@@ -19,6 +19,10 @@ class ColorInput: ObservableObject {
     @Published var hsvValue: Float = 1.0
     @Published var hsvAlpha: Float = 1.0
     
+    init(initialColor: Color = .black) {
+        color = initialColor
+    }
+    
     func updateFromRGB() {
         color = Color(.sRGB, red: Double(rgbRed), green: Double(rgbGreen), blue: Double(rgbBlue), opacity: Double(rgbAlpha))
         updateHSVFromRGB()
