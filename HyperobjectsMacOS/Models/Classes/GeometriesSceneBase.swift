@@ -15,6 +15,7 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     let id = UUID()
     let name: String
     @Published var inputs: [SceneInput]
+    @Published var inputGroups: [SceneInputGroup] = []
     @Published var geometryGenerators: [any GeometryGenerator]
     @Published var changedInputs: Set<String> = []
     @Published var cachedGeometries: [GeometryWrapped] = []
@@ -31,9 +32,23 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     
     private let maxAudioHistoryDuration: TimeInterval = 30.0
     
-    init(name: String, inputs: [SceneInput], geometryGenerators: [any GeometryGenerator]) {
+    init(name: String, inputs: [SceneInput], inputGroups: [SceneInputGroup] = [], geometryGenerators: [any GeometryGenerator]) {
         self.name = name
         self.inputs = inputs
+        
+        // Check if there are any inputs with an inputGroupName not in inputGroups, then add an input group for that.
+        var allInputGroupNames: Set<String> = []
+        var missingInputGroups: [SceneInputGroup] = []
+        for input in inputs {
+            allInputGroupNames.insert(input.inputGroupName ?? "")
+        }
+        for inputGroup in inputGroups {
+            allInputGroupNames.remove(inputGroup.name)
+        }
+        for groupName in allInputGroupNames {
+            missingInputGroups.append(SceneInputGroup(name: groupName))
+        }
+        self.inputGroups = inputGroups + missingInputGroups
         self.geometryGenerators = geometryGenerators
         if self.geometryGenerators.count == 0 {
             print("No geometries defined for scene \(name)")

@@ -11,6 +11,7 @@ class SceneInput: ObservableObject, Identifiable {
     var id: UUID = UUID()
     var name: String
     var type: InputType
+    var inputGroupName: String?
     var value: Any
     var presetValues: [String: Any] = [:]
     var range: ClosedRange<Float> = 0...1
@@ -31,6 +32,7 @@ class SceneInput: ObservableObject, Identifiable {
     
     init(name: String,
          type: InputType,
+         inputGroupName: String? = nil,
          value: Any = 0.0,
          presetValues: [String: Any] = [:],
          range: ClosedRange<Float> = 0...1,
@@ -49,6 +51,7 @@ class SceneInput: ObservableObject, Identifiable {
     ) {
         self.name = name
         self.type = type
+        self.inputGroupName = inputGroupName
         self.value = value
         self.presetValues = presetValues
         self.range = range

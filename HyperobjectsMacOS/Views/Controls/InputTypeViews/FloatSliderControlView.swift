@@ -16,24 +16,33 @@ struct FloatSliderControlView: View {
     @State private var mul: Float = 1.0
     @State private var offset: Float = 0.0
 
+    var labelWidth: CGFloat = 30
     var body: some View {
         VStack {
-            Slider(value: $userValue, in: input.range)
-                .onChange(of: userValue) { oldValue, newValue in
-                    input.value = newValue
-                }
-
             HStack {
-                VStack {
+                Text("\(String(format: "%.2f", input.valueAsFloat()).prefix(3))")
+                    .fontDesign(.monospaced)
+                    .frame(width: labelWidth)
+                Slider(value: $userValue, in: input.range)
+                    .controlSize(.mini)
+                    .onChange(of: userValue) { oldValue, newValue in
+                        input.value = newValue
+                    }
+            }
+            HStack {
+                HStack {
                     Text("+")
+                        .frame(width: labelWidth)
                     Slider(value: $add, in: input.audioAmplificationAdditionRange)
+                        .controlSize(.mini)
                         .onChange(of: add) { oldValue, newValue in
                             input.audioAmplificationAddition = newValue
                         }
                 }
                 
-                VStack {
+                HStack {
                     Text("x")
+                        .frame(width: labelWidth)
                     Slider(value: $mul, in: input.audioAmplificationMultiplicationRange)
                         .controlSize(.mini)
                         .onChange(of: mul) { oldValue, newValue in
@@ -41,7 +50,7 @@ struct FloatSliderControlView: View {
                         }
                 }
                 
-                VStack {
+                HStack {
                     Text("offset")
                     Slider(value: $offset, in: input.audioAmplificationMultiplicationOffsetRange)
                         .controlSize(.mini)

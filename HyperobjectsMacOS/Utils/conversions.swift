@@ -74,4 +74,17 @@ func colorToVector(_ color: Color) -> vector_float3 {
 }
 
 
+func mix(_ a: Float, _ b: Float, _ mixValue: Float) -> Float {
+    return a + mixValue * (b - a)
+}
+
+func mix(_ a: Double, _ b: Double, _ mixValue: Double) -> Double {
+    return a + mixValue * (b - a)
+}
+
+func mix(_ a: vector_float3, _ b: vector_float3, _ mixValue: Float) -> vector_float3 {
+    return a + mixValue * (b - a)
+}
+
+
 

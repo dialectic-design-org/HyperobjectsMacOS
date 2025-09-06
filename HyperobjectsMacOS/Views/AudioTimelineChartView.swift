@@ -41,6 +41,7 @@ struct AudioTimelineChartView: View {
                     Button("seconds: \(Int(option))") {
                         timeWindowSeconds = option
                     }.controlSize(.small)
+                        .fontDesign(.monospaced)
                 }
             }.padding(8)
             GeometryReader { geometry in

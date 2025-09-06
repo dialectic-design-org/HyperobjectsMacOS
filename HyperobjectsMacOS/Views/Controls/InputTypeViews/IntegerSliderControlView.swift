@@ -17,12 +17,14 @@ struct IntegerSliderControlView: View {
     
     var body: some View {
         VStack {
-            Text("\(input.value)")
-            Slider(value: $userValue,
-                   in: Double(input.range.lowerBound)...Double(input.range.upperBound),
-                   step: 1.0
-            ).onChange(of: userValue) { oldValue, newValue in
-                input.value = Int(newValue)
+            HStack {
+                Text("\(input.value)")
+                Slider(value: $userValue,
+                       in: Double(input.range.lowerBound)...Double(input.range.upperBound),
+                       step: 1.0
+                ).onChange(of: userValue) { oldValue, newValue in
+                    input.value = Int(newValue)
+                }
             }
         }
     }

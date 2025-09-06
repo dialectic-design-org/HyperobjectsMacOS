@@ -24,20 +24,24 @@ func generateGeometrySceneLine() -> GeometriesSceneBase {
                        audioAmplificationMultiplicationRange: 0...5
                       ),
             
-            SceneInput(name: "Start line width", type: .float, value: 5.0, range: 0...800),
-            SceneInput(name: "End line width", type: .float, value: 5.0, range: 0...800),
-            SceneInput(name: "Start color inner", type: .colorInput, value: Color.white),
-            SceneInput(name: "Start color outer left", type: .colorInput, value: Color.blue),
-            SceneInput(name: "Start color outer right", type: .colorInput, value: Color.red),
+            SceneInput(name: "Start line width", type: .float, inputGroupName: "P1 style", value: 5.0, range: 0...800),
+            SceneInput(name: "End line width", type: .float, inputGroupName: "P2 style", value: 5.0, range: 0...800),
             
-            SceneInput(name: "Start sigmoid steepness", type: .float, value: 5.0, range: 0...1000.0),
-            SceneInput(name: "Start sigmoid midpoint", type: .float, value: 0.5, range: 0...1),
+            SceneInput(name: "Start color inner", type: .colorInput, inputGroupName: "P1 style", value: Color.white),
+            SceneInput(name: "Start color outer left", type: .colorInput, inputGroupName: "P1 style", value: Color.blue),
+            SceneInput(name: "Start color outer right", type: .colorInput, inputGroupName: "P1 style", value: Color.red),
             
-            SceneInput(name: "End color inner", type: .colorInput, value: Color.white),
-            SceneInput(name: "End color outer left", type: .colorInput, value: Color.blue),
-            SceneInput(name: "End color outer right", type: .colorInput, value: Color.red),
-            SceneInput(name: "End sigmoid steepness", type: .float, value: 5.0, range: 0...1000.0),
-            SceneInput(name: "End sigmoid midpoint", type: .float, value: 0.5, range: 0...1),
+            SceneInput(name: "Start sigmoid steepness", type: .float, inputGroupName: "P1 style", value: 5.0, range: 0...1000.0),
+            SceneInput(name: "Start sigmoid midpoint", type: .float, inputGroupName: "P1 style", value: 0.5, range: 0...1),
+            
+            SceneInput(name: "End color inner", type: .colorInput, inputGroupName: "P2 style", value: Color.white),
+            SceneInput(name: "End color outer left", type: .colorInput, inputGroupName: "P2 style", value: Color.blue),
+            SceneInput(name: "End color outer right", type: .colorInput, inputGroupName: "P2 style", value: Color.red),
+            
+            SceneInput(name: "End sigmoid steepness", type: .float, inputGroupName: "P2 style", value: 5.0, range: 0...1000.0),
+            SceneInput(name: "End sigmoid midpoint", type: .float, inputGroupName: "P2 style", value: 0.5, range: 0...1),
+        ],
+        inputGroups: [
         ],
         geometryGenerators: [
             LineGenerator()

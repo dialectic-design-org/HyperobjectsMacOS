@@ -247,7 +247,8 @@ inline void emitJoinDisk(float2 centerSS, float rad, float2 view,
 
     outSegs[outIdx].p0_ss = centerSS; // degenerate: disk
     outSegs[outIdx].p1_ss = centerSS; // degenerate: disk
-    outSegs[outIdx].halfWidthPx = rad; // NOTE: use S.halfWidthPx
+    outSegs[outIdx].halfWidthStartPx = rad; // NOTE: use S.halfWidthPx
+    outSegs[outIdx].halfWidthEndPx = rad; // NOTE: use S.halfWidthPx
     outSegs[outIdx].aaPx = 0.0f; // NOTE: AA handled by the main shader band
     outSegs[outIdx].bboxMinSS = mn;
     outSegs[outIdx].bboxMaxSS = mx;
@@ -264,6 +265,75 @@ inline void emitJoinDisk(float2 centerSS, float rad, float2 view,
     }
 }
 
+static inline bool rectIntersectsSegmentLB(
+                                           float2 p0,
+                                           float2 d,
+                                           float inv_dx,
+                                           float inv_dy,
+                                           float x0,
+                                           float y0,
+                                           float x1,
+                                           float y1
+                                           ) {
+    float t0 = 0.0f;
+    float t1 = 1.0f;
+
+    // Left:  x >= x0
+    {
+        const float p = d.x;
+        const float q = x0 - p0.x;
+        if (p == 0.0f) { if (p0.x < x0) return false; }
+        else {
+            const float t = q * inv_dx; // q/p
+            if (p > 0.0f) { if (t > t1) return false; t0 = max(t0, t); }
+            else          { if (t < t0) return false; t1 = min(t1, t); }
+        }
+    }
+    // Right: x <= x1
+    {
+        const float p = d.x;
+        const float q = x1 - p0.x;
+        if (p == 0.0f) { if (p0.x > x1) return false; }
+        else {
+            const float t = q * inv_dx;
+            if (p < 0.0f) { if (t > t1) return false; t0 = max(t0, t); }
+            else          { if (t < t0) return false; t1 = min(t1, t); }
+        }
+    }
+    // Bottom: y >= y0
+    {
+        const float p = d.y;
+        const float q = y0 - p0.y;
+        if (p == 0.0f) { if (p0.y < y0) return false; }
+        else {
+            const float t = q * inv_dy;
+            if (p > 0.0f) { if (t > t1) return false; t0 = max(t0, t); }
+            else          { if (t < t0) return false; t1 = min(t1, t); }
+        }
+    }
+    // Top: y <= y1
+    {
+        const float p = d.y;
+        const float q = y1 - p0.y;
+        if (p == 0.0f) { if (p0.y > y1) return false; }
+        else {
+            const float t = q * inv_dy;
+            if (p < 0.0f) { if (t > t1) return false; t0 = max(t0, t); }
+            else          { if (t < t0) return false; t1 = min(t1, t); }
+        }
+    }
+    return t0 <= t1;
+}
+
+static inline bool diskIntersectsAABB(float2 c, float r, float x0, float y0, float x1, float y1)
+{
+    // Closest point on AABB to center
+    const float cx = clamp(c.x, x0, x1);
+    const float cy = clamp(c.y, y0, y1);
+    const float dx = c.x - cx;
+    const float dy = c.y - cy;
+    return (dx*dx + dy*dy) <= (r*r);
+}
 
 
 
@@ -299,18 +369,12 @@ kernel void transformAndBinLinear(
     float4 p0c = MVP * S.p0_world;
     float4 p1c = MVP * S.p1_world;
     
-    // ---------------------------------------------------------------------------------
-    // Culling and Clipping Pipeline
-    // ---------------------------------------------------------------------------------
-
-    // 1. Trivial reject if both points are behind the near plane (Requirement 1)
+    // [... existing clipping logic unchanged ...]
     if (p0c.w < W_NEAR_CLIP && p1c.w < W_NEAR_CLIP) return;
-
     
     float4 original_p0c = p0c;
     float4 original_p1c = p1c;
     
-    // 2. Clip segment to the near plane (w > W_NEAR_CLIP)
     if (original_p0c.w < W_NEAR_CLIP) {
         float t = (W_NEAR_CLIP - original_p0c.w) / (original_p1c.w - original_p0c.w);
         p0c = mix(original_p0c, original_p1c, t);
@@ -320,72 +384,131 @@ kernel void transformAndBinLinear(
         p1c = mix(original_p1c, original_p0c, t);
     }
 
-    // 3. Clip against view frustum sides (Requirements 2 & 3)
-    float rad = S.halfWidthPx + U.antiAliasPx;
+    float radMax = max(S.halfWidthStartPx, S.halfWidthEndPx) + U.antiAliasPx;
     float2 view = float2(U.viewWidth, U.viewHeight);
-    
-    // Convert screen-space radius to NDC-space radius for boundary expansion
-    float2 rad_ndc = rad * 2.0 / view;
+    float2 rad_ndc = radMax * 2.0 / view;
     
     if (!liangBarskyClip(p0c, p1c, rad_ndc)) {
-        return; // Line is fully outside the view
+        return;
     }
-
-    // ---------------------------------------------------------------------------------
-    // Continue with processing for the now-clipped line
-    // ---------------------------------------------------------------------------------
     
     float2 p0ss = clipToScreen(p0c, view);
     float2 p1ss = clipToScreen(p1c, view);
     
-    // Expanded bbox (width + aa)
-    float2 mn = floor(min(p0ss, p1ss) - rad);
-    float2 mx = ceil (max(p0ss, p1ss) + rad);
+    // Expanded bbox
+    float2 mn = floor(min(p0ss, p1ss) - radMax);
+    float2 mx = ceil (max(p0ss, p1ss) + radMax);
     
-    // Screen reject vectorized
     bool2 outside_min = mx < 0.0f;
     bool2 outside_max = mn >= view;
     if(any(outside_min) || any(outside_max)) return;
     
+    const float2 d = p1ss - p0ss;
+    const float line_len_sq = dot(d, d);
     
-    uint outIdx = atomic_fetch_add_explicit(&alloc->next, 1u, memory_order_relaxed);
-    if (outIdx >= alloc->capacity) return;
+    // Bin grid
+    const uint BIN_COLS = (uint)((view.x + BIN_SIZE - 1) / BIN_SIZE);
+    const uint BIN_ROWS = (uint)((view.y + BIN_SIZE - 1) / BIN_SIZE);
     
-    
-    outSegs[outIdx].p0_ss = p0ss;
-    outSegs[outIdx].p1_ss = p1ss;
-    outSegs[outIdx].halfWidthPx = S.halfWidthPx;
-    outSegs[outIdx].aaPx = U.antiAliasPx;
-    outSegs[outIdx].bboxMinSS = mn;
-    outSegs[outIdx].bboxMaxSS = mx;
-    outSegs[outIdx].colorStartCenter  = S.colorStartCenter;
-    outSegs[outIdx].colorEndCenter  = S.colorEndCenter;
-    
-    outSegs[outIdx].z0_clip = p0c.z;
-    outSegs[outIdx].w0_clip = p0c.w;
-    outSegs[outIdx].z1_clip = p1c.z;
-    outSegs[outIdx].w1_clip = p1c.w;
-    
-    outSegs[outIdx].pathID = gid;
-    outSegs[outIdx].segIndex = 0;
-    outSegs[outIdx].totalSegs = 1;
- 
+    // --- Single-emit state ---
+    bool emitted = false;
+    uint outIdx = 0;
 
-    // Bin by bbox only (simple & over-inclusive)
-    uint BIN_COLS = (uint)((view.x + BIN_SIZE - 1) / BIN_SIZE);
-        
-    uint bx0,by0,bx1,by1;
-    binRange(mn, mx, view, bx0,by0,bx1,by1);
+    auto emitOnce = [&](){
+        if (emitted) return;
+        const uint idx = atomic_fetch_add_explicit(&alloc->next, 1u, memory_order_relaxed);
+        if (idx >= alloc->capacity) return;
+        outIdx = idx;
+
+        outSegs[idx].p0_ss = p0ss;
+        outSegs[idx].p1_ss = p1ss;
+        outSegs[idx].halfWidthStartPx = S.halfWidthStartPx;
+        outSegs[idx].halfWidthEndPx = S.halfWidthEndPx;
+        outSegs[idx].aaPx = U.antiAliasPx;
+        outSegs[idx].bboxMinSS = mn;
+        outSegs[idx].bboxMaxSS = mx;
+        outSegs[idx].colorStartCenter = S.colorStartCenter;
+        outSegs[idx].colorEndCenter   = S.colorEndCenter;
+        outSegs[idx].z0_clip = p0c.z; outSegs[idx].w0_clip = p0c.w;
+        outSegs[idx].z1_clip = p1c.z; outSegs[idx].w1_clip = p1c.w;
+        outSegs[idx].pathID  = S.pathID;
+        outSegs[idx].segIndex = 0;
+        outSegs[idx].totalSegs = 1;
+
+        emitted = true;
+    };
+
+    auto pushToBin = [&](uint bx, uint by){
+        const uint bin = by * BIN_COLS + bx;
+        const uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
+        binList[binOffsets[bin] + pos] = outIdx;
+    };
+
+    // -------------------------------
+    // SIMPLE GRID SCAN APPROACH
+    // -------------------------------
+    
+    // Calculate bin bounds from the expanded bbox
+    uint bx0, by0, bx1, by1;
+    binRange(mn, mx, view, bx0, by0, bx1, by1);
+    
+    // Handle degenerate case (point/disk)
+    if (line_len_sq <= 1e-9f) {
+        for (uint by = by0; by <= by1; ++by)
+        for (uint bx = bx0; bx <= bx1; ++bx) {
+            // Test if bin intersects with disk at p0ss
+            const float x0 = float(bx * BIN_SIZE);
+            const float y0 = float(by * BIN_SIZE);
+            const float x1 = x0 + BIN_SIZE;
+            const float y1 = y0 + BIN_SIZE;
+            
+            if (diskIntersectsAABB(p0ss, radMax, x0, y0, x1, y1)) {
+                emitOnce();
+                if (!emitted) return;
+                pushToBin(bx, by);
+            }
+        }
+        return;
+    }
     
     for (uint by = by0; by <= by1; ++by)
     for (uint bx = bx0; bx <= bx1; ++bx) {
-        uint bin  = by * BIN_COLS + bx;
-        uint pos  = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
-        binList[binOffsets[bin] + pos] = outIdx; // store index of outSegs
+        // Bin AABB
+        const float x0 = float(bx * BIN_SIZE);
+        const float y0 = float(by * BIN_SIZE);
+        const float x1 = x0 + BIN_SIZE;
+        const float y1 = y0 + BIN_SIZE;
+        
+        // Test if this bin intersects with the rounded line (body + caps)
+        bool intersects = false;
+        
+        // 1. Check body intersection (segment vs expanded AABB)
+        const float eps = 1e-12f;
+        const float inv_dx = (fabs(d.x) > eps) ? fast::divide(1.0f, d.x) : (d.x >= 0.0f ? INFINITY : -INFINITY);
+        const float inv_dy = (fabs(d.y) > eps) ? fast::divide(1.0f, d.y) : (d.y >= 0.0f ? INFINITY : -INFINITY);
+        
+        if (rectIntersectsSegmentLB(p0ss, d, inv_dx, inv_dy, x0 - radMax, y0 - radMax, x1 + radMax, y1 + radMax)) {
+            intersects = true;
+        }
+        
+        // 2. If body doesn't intersect, check cap intersections
+        if (!intersects) {
+            // Start cap
+            if (diskIntersectsAABB(p0ss, radMax, x0, y0, x1, y1)) {
+                intersects = true;
+            }
+            // End cap
+            else if (diskIntersectsAABB(p1ss, radMax, x0, y0, x1, y1)) {
+                intersects = true;
+            }
+        }
+        
+        if (intersects) {
+            emitOnce();
+            if (!emitted) return;
+            pushToBin(bx, by);
+        }
     }
-    
-    // Flush threadgroup atomics to device memory
-    threadgroup_barrier(mem_flags::mem_threadgroup);
 };
 
 
@@ -416,7 +539,7 @@ kernel void transformAndBinQuadratic(
     const QuadraticSeg3D S = curves[gid];
     
     float2 view = float2(U.viewWidth, U.viewHeight);
-    float rad = S.halfWidthPx + U.antiAliasPx;
+    float rad = max(S.halfWidthStartPx, S.halfWidthEndPx) + U.antiAliasPx;
     
     // Control points to clips space
     float4 p0c = MVP * S.p0_world;
@@ -436,7 +559,6 @@ kernel void transformAndBinQuadratic(
     float4 prevC = p0c;
     
     uint BIN_COLS = (uint)((view.x + BIN_SIZE - 1) / BIN_SIZE);
-    float2 binSizeVec = float2(BIN_SIZE);
     
     const float2 rad_ndc = float2( (2.0f * rad) / max(view.x, 1.0f),
                                   (2.0f * rad) / max(view.y, 1.0f) );
@@ -490,7 +612,9 @@ kernel void transformAndBinQuadratic(
                 if (outIdx < alloc->capacity) {
                     outSegs[outIdx].p0_ss = s0;
                     outSegs[outIdx].p1_ss = s1;
-                    outSegs[outIdx].halfWidthPx = S.halfWidthPx;
+                    // TODO: INTERPOLATE
+                    outSegs[outIdx].halfWidthStartPx = mix(S.halfWidthStartPx, S.halfWidthEndPx, t);
+                    outSegs[outIdx].halfWidthEndPx = mix(S.halfWidthStartPx, S.halfWidthEndPx, tn);
                     outSegs[outIdx].aaPx = U.antiAliasPx;
                     outSegs[outIdx].bboxMinSS = mn;
                     outSegs[outIdx].bboxMaxSS = mx;
@@ -502,7 +626,7 @@ kernel void transformAndBinQuadratic(
                     outSegs[outIdx].z1_clip = c1.z;
                     outSegs[outIdx].w1_clip = c1.w;
                     
-                    outSegs[outIdx].pathID = gid;
+                    outSegs[outIdx].pathID = S.pathID;
                     outSegs[outIdx].segIndex = i;
                     outSegs[outIdx].totalSegs = N;
                     
@@ -519,7 +643,7 @@ kernel void transformAndBinQuadratic(
                 
                 if ((i > 0 && i < N) && EMIT_JOIN_DISK) { // FIX: one micro‑disk per interior joint
                     float2 jointSS = s0; // the shared endpoint of this and previous segment after clipping
-                    emitJoinDisk(jointSS, S.halfWidthPx, view, outSegs, alloc, binCounts, binOffsets, binList);
+                    emitJoinDisk(jointSS, S.halfWidthEndPx, view, outSegs, alloc, binCounts, binOffsets, binList);
                 }
             }
         }
@@ -551,7 +675,7 @@ kernel void transformAndBinCubic(
     const CubicSeg3D S = curves[gid];
     
     const float2 view = float2(U.viewWidth, U.viewHeight);
-    const float rad = S.halfWidthPx + U.antiAliasPx;
+    const float rad = max(S.halfWidthStartPx, S.halfWidthEndPx) + U.antiAliasPx;
     
     float4 p0c = MVP * S.p0_world;
     float4 p1c = MVP * S.p1_world;
@@ -575,7 +699,6 @@ kernel void transformAndBinCubic(
 
     // Bin grid invariants
     const uint   BIN_COLS   = (uint)((view.x + BIN_SIZE - 1) / BIN_SIZE);
-    const float2 binSizeVec = float2(BIN_SIZE);
 
     // March in clip space; clip each linear step with Liang–Barsky (expanded)
     float t  = 0.0f;
@@ -629,7 +752,9 @@ kernel void transformAndBinCubic(
                     // Emit the *clipped* linear piece in screen space
                     outSegs[outIdx].p0_ss       = s0;
                     outSegs[outIdx].p1_ss       = s1;
-                    outSegs[outIdx].halfWidthPx = S.halfWidthPx;
+                    // TODO: INTERPOLATE
+                    outSegs[outIdx].halfWidthStartPx = mix(S.halfWidthStartPx, S.halfWidthEndPx, t);
+                    outSegs[outIdx].halfWidthEndPx = mix(S.halfWidthStartPx, S.halfWidthEndPx, tn);
                     outSegs[outIdx].aaPx        = U.antiAliasPx;
                     outSegs[outIdx].bboxMinSS   = mn;
                     outSegs[outIdx].bboxMaxSS   = mx;
@@ -641,7 +766,7 @@ kernel void transformAndBinCubic(
                     outSegs[outIdx].z1_clip = c1.z;
                     outSegs[outIdx].w1_clip = c1.w;
                     
-                    outSegs[outIdx].pathID = gid;
+                    outSegs[outIdx].pathID = S.pathID;
                     outSegs[outIdx].segIndex = i;
                     outSegs[outIdx].totalSegs = N;
                     
@@ -662,7 +787,7 @@ kernel void transformAndBinCubic(
                     
                     if ((i > 0 && i < N) && EMIT_JOIN_DISK) { // FIX: one micro‑disk per interior joint
                         float2 jointSS = s0; // the shared endpoint of this and previous segment after clipping
-                        emitJoinDisk(jointSS, S.halfWidthPx, view, outSegs, alloc, binCounts, binOffsets, binList);
+                        emitJoinDisk(jointSS, S.halfWidthEndPx, view, outSegs, alloc, binCounts, binOffsets, binList);
                     }
                 }
             }
@@ -689,13 +814,24 @@ kernel void transformAndBinCubic(
 
 
 
-
-
+struct PathFragment {
+    float depth;
+    uint pathID;
+    float min_dist_sq;
+    float t_param;
+    
+    float4 colorStart;
+    float4 colorEnd;
+    float2 p0;
+    float2 p1;
+    float hwStart;
+    float hwEnd;
+    float aa;
+};
 
 
 kernel void drawLines(
     texture2d<half, access::write>      outTex      [[texture(0)]],
-                      
     device const LinearSegScreenSpace*  segs        [[buffer(0)]],
     device const atomic_uint*           binCounts   [[buffer(1)]],
     device const uint*                  binOffsets  [[buffer(2)]],
@@ -703,10 +839,11 @@ kernel void drawLines(
     constant Uniforms&                  U           [[buffer(4)]],
                       
     ushort2                             tid         [[thread_position_in_threadgroup]],
-    uint2                               gid         [[thread_position_in_grid]],
-    uint                                simd_lane   [[thread_index_in_simdgroup]],
-    uint                                simd_size   [[threads_per_simdgroup]]
+    uint2                               gid         [[thread_position_in_grid]]
 ) {
+    const uint K_BUFFER_SIZE = 4;
+    constexpr float Z_FIGHTING_EPSILON = 1e-5f;
+    
     const float2 p = float2(gid) + 0.5f;
     const float2 view = float2(U.viewWidth, U.viewHeight);
     
@@ -719,32 +856,38 @@ kernel void drawLines(
     uint base = binOffsets[bin];
     
     // Threadgroup staging buffers - keeping separate arrays for better access patterns
+    threadgroup uint tgPathID[KMAX_PER_BIN];
     threadgroup float2 tgP0[KMAX_PER_BIN];
     threadgroup float2 tgP1[KMAX_PER_BIN];
-    threadgroup float2 tgDir[KMAX_PER_BIN];
-    threadgroup float2 tgPerp[KMAX_PER_BIN];
-    threadgroup float tgLen[KMAX_PER_BIN];
-    threadgroup float tgInvLen[KMAX_PER_BIN];
-    threadgroup float tgHW[KMAX_PER_BIN];
+    threadgroup float tgInvW0[KMAX_PER_BIN];
+    threadgroup float tgInvW1[KMAX_PER_BIN];
+    threadgroup float tgZ_over_W0[KMAX_PER_BIN];
+    threadgroup float tgZ_over_W1[KMAX_PER_BIN];
+    threadgroup float tgHWStart[KMAX_PER_BIN];
+    threadgroup float tgHWEnd[KMAX_PER_BIN];
     threadgroup float tgAA[KMAX_PER_BIN];
     threadgroup float2 tgMN[KMAX_PER_BIN];
     threadgroup float2 tgMX[KMAX_PER_BIN];
-    threadgroup float tgR0_2[KMAX_PER_BIN];
-    threadgroup float tgR1_2[KMAX_PER_BIN];
+    threadgroup float2 tgB[KMAX_PER_BIN];
+    threadgroup float tgInvL2[KMAX_PER_BIN];
+    threadgroup float tgP0dotB[KMAX_PER_BIN];
+    threadgroup float tgR2[KMAX_PER_BIN];
     threadgroup float4 tgColorStartCenter[KMAX_PER_BIN];
     threadgroup float4 tgColorEndCenter[KMAX_PER_BIN];
     
-    float3 rgb = U.backgroundColor;
-    float a = 0.0f;
-    
-     if (((bin & 1u) == 0u)) rgb += U.debugBins * float3(0.1);
-
-     rgb += float3(float(total) / 10.0) * U.binVisibility;
+    PathFragment pathFragments[K_BUFFER_SIZE];
+    for (uint i = 0; i < K_BUFFER_SIZE; ++i) {
+        pathFragments[i].depth = FLT_MAX;
+    }
     
     
-    // Process batches
+    float3 final_rgb = U.backgroundColor;
+    
+    
+    
+    // Path aware fragment collection
     uint processed = 0;
-    while (processed < total && a < 0.99f) {
+    while (processed < total) {
         const uint batch = min(KMAX_PER_BIN, total - processed);
         const uint start = base + processed;
         
@@ -755,109 +898,208 @@ kernel void drawLines(
             const uint idx = binList[start + i];
             device const LinearSegScreenSpace* S = segs + idx;
 
-            float2 p0 = S->p0_ss;
-            float2 p1 = S->p1_ss;
-            float2 ba = p1 - p0;
-            float l2 = max(dot(ba, ba), 1e-12f);
-            float invLen = fast::rsqrt(l2);  // Optimization: use fast rsqrt
-            float len = l2 * invLen;      // Optimization: use fast sqrt instead of 1/invLen
-            float2 dir = ba * invLen;
-            float2 perp = float2(-dir.y, dir.x);
-
-            float hw = S->halfWidthPx;
+            float inv_w0 = 1.0f / S->w0_clip;
+            float inv_w1 = 1.0f / S->w1_clip;
+            
+            float hwStart = S->halfWidthStartPx;
+            float hwEnd = S->halfWidthEndPx;
+            float hwMax = max(hwStart,hwEnd);
             float aa = S->aaPx;
-            float r0 = max(hw - aa, 0.0f);
-            float r1 = hw + aa;
+            
+            float pad = hwMax + aa;
+            float2 mn = S->bboxMinSS;
+            float2 mx = S->bboxMaxSS;
+            mn -= float2(pad, pad);
+            mx += float2(pad, pad);
+            
+            float2 b = S->p1_ss - S-> p0_ss;
+            float l2 = max(dot(b, b), 1e-9f);
 
-            tgP0[i] = p0;
-            tgP1[i] = p1;
-            tgDir[i] = dir;
-            tgPerp[i] = perp;
-            tgLen[i] = len;
-            tgInvLen[i] = invLen;
-            tgMN[i] = S->bboxMinSS;
-            tgMX[i] = S->bboxMaxSS;
-            tgHW[i] = hw;
+            tgPathID[i] = S->pathID;
+            tgP0[i] = S->p0_ss;
+            tgP1[i] = S->p1_ss;
+            tgMN[i] = mn;
+            tgMX[i] = mx;
+            tgInvW0[i] = inv_w0;
+            tgInvW1[i] = inv_w1;
+            tgZ_over_W0[i] = S->z0_clip * inv_w0;
+            tgZ_over_W1[i] = S->z1_clip * inv_w1;
+            tgHWStart[i] = hwStart;
+            tgHWEnd[i] = hwEnd;
             tgAA[i] = aa;
-            tgR0_2[i] = r0 * r0;
-            tgR1_2[i] = r1 * r1;
+            tgB[i] = b;
+            tgInvL2[i] = 1.0f / l2;
+            tgP0dotB[i] = dot(S->p0_ss, b);
+            tgR2[i] = (hwMax + S->aaPx) * (hwMax + S->aaPx);
             tgColorStartCenter[i] = S->colorStartCenter;
             tgColorEndCenter[i] = S->colorEndCenter;
         }
         threadgroup_barrier(mem_flags::mem_threadgroup);
-
-        // Process cached batch
-        const uint C = batch;
-        for (uint i = 0; i < C; ++i) {
-            // Optimized bbox rejection using vector operations
-            bool2 outside_min = p < tgMN[i];
-            bool2 outside_max = p > tgMX[i];
-            if (any(outside_min) || any(outside_max)) continue;
-
+        
+        
+        
+        
+        // Extract into pathFragments
+        
+        for (uint i = 0; i < batch; ++i) {
+            // Discard if point is out of bounds
+            if (any (p < tgMN[i]) || any(p > tgMX[i])) continue;
+            
             // Bounding box debug
-            rgb += float3(0.0, 0.4, 1.0) * U.boundingBoxVisibility;
+            final_rgb += float3(0.0, 0.4, 1.0) * U.boundingBoxVisibility;
             
-            float2 pa = p - tgP0[i];
-
-            // Parallel & perpendicular components w.r.t. segment
-            float s = dot(pa, tgDir[i]);        // signed distance along the segment
-            float dp = dot(pa, tgPerp[i]);      // signed distance to the infinite line
+            float2 b = tgB[i];
+            float invL2 = tgInvL2[i];
+            float tLine = clamp((dot(p, b) - tgP0dotB[i]) * invL2, 0.0f, 1.0f);
+            float2 p_closest = tgP0[i] + tLine * b;
+            float2 dvec = p - p_closest;
+            float d2 = dot(dvec, dvec);
+            if(d2 > tgR2[i]) continue;
             
-
-            // Clamp to the finite segment
-            float overlap = tgHW[i] + tgAA[i]; // Allow capsules to overlap at joints
-            float sClamped = clamp(s, -overlap, tgLen[i] + overlap);
-
-            // Closest point q = p0 + dir * sClamped
-            float2 dq = pa - tgDir[i] * sClamped;
-
-            // Squared distance from pixel to segment
-            float d2 = dot(dq, dq);
-
-            // Alpha via squared smoothstep: smoothstep(r1^2, r0^2, d^2)
-            float r0_2 = tgR0_2[i];
-            float r1_2 = tgR1_2[i];
+            float inv_w = mix(tgInvW0[i], tgInvW1[i], tLine);
+            float z_over_w = mix(tgZ_over_W0[i], tgZ_over_W1[i], tLine);
             
-            // Edge band: r0^2 .. r1^2
-            float denom = max(r1_2 - r0_2, 1e-12f);
-            float t = clamp((d2 - r0_2) / denom, 0.0f, 1.0f);
+            float current_depth = z_over_w / inv_w;
+            uint current_pathID = tgPathID[i];
             
+            bool joined = false;
+            for (uint j = 0; j < K_BUFFER_SIZE; ++j) {
+                if(pathFragments[j].pathID == current_pathID
+                   && abs(pathFragments[j].depth - current_depth) < Z_FIGHTING_EPSILON) {
+                    pathFragments[j].min_dist_sq = min(pathFragments[j].min_dist_sq, d2);
+                    joined = true;
+                    break;
+                }
+            }
             
-            float2 ba = tgP1[i] - tgP0[i];
-            float ba_len2 = dot(ba, ba);
-            float tLine = clamp(dot(pa, ba) / ba_len2, 0.0, 1.0);
-            float2 pClosest = mix(tgP0[i], tgP1[i], tLine);
-            
-            float d = length(p - pClosest);
-            
-            float finalSignedDistance = (ba_len2 < 1e-8) ? d : sClamped;
-            
-            
-            float4 color = mix(
-                               tgColorStartCenter[i],
-                               tgColorEndCenter[i],
-                               tLine) * U.lineColorStrength
-            + mix(float4(U.lineDebugGradientStartColor, 1.0),
-                  float4(U.lineDebugGradientEndColor, 1.0),
-                  tLine) * U.lineDebugGradientStrength;
-            
-            if(d > tgHW[i]) continue;
-            
-            float alpha = smoothstep(tgHW[i] + tgAA[i], tgHW[i] - tgAA[i], d);
-
-            // Add this line's color, weighted by its alpha
-            rgb += float3(color.xyz) * alpha;
+            if(!joined) {
+                if (current_depth < pathFragments[K_BUFFER_SIZE - 1].depth) {
+                    bool inserted = false;
+                    // Shift fragments to make space
+                    for (uint j = K_BUFFER_SIZE - 1; j > 0; --j) {
+                        if (current_depth < pathFragments[j - 1].depth) {
+                            pathFragments[j] = pathFragments[j - 1];
+                        } else {
+                            pathFragments[j] = {
+                                current_depth,
+                                current_pathID,
+                                d2,
+                                tLine,
+                                tgColorStartCenter[i],
+                                tgColorEndCenter[i],
+                                tgP0[i],
+                                tgP1[i],
+                                tgHWStart[i],
+                                tgHWEnd[i],
+                                tgAA[i]
+                            };
+                            inserted = true;
+                            break;
+                        }
+                    }
+                    if (!inserted) {
+                        pathFragments[0] = {
+                            current_depth,
+                            current_pathID,
+                            d2,
+                            tLine,
+                            tgColorStartCenter[i],
+                            tgColorEndCenter[i],
+                            tgP0[i],
+                            tgP1[i],
+                            tgHWStart[i],
+                            tgHWEnd[i],
+                            tgAA[i]
+                        };
+                    }
+                }
+            }
         }
-
+        
         threadgroup_barrier(mem_flags::mem_threadgroup);
-        processed += C;
+        processed += batch;
+    }
+    
+    // TODO: KEEP GLITCH ART FUNCTIONALITIES BY RANDOMLY CONFIGURING COLOR FROM E.G. FIRST SEGMENT IN THE THREAD GROUP
 
-        // Group-wide early exit if everyone is opaque
-        if (simd_all(a >= 0.99f)) break;
+    
+    
+    if (((bin & 1u) == 0u)) final_rgb += U.debugBins * float3(0.1);
+    final_rgb += float3(float(total) / 10.0) * U.binVisibility;
+
+    // PASS 2A: Group fragments by pathID and blend within each path
+    float4 pathColors[K_BUFFER_SIZE];
+    uint uniquePathCount = 0;
+    uint processedPaths[K_BUFFER_SIZE];
+
+    // Initialize path tracking
+    for (uint i = 0; i < K_BUFFER_SIZE; ++i) {
+        pathColors[i] = float4(0.0, 0.0, 0.0, 0.0);
+        processedPaths[i] = UINT_MAX;
+    }
+
+    // Process each fragment and group by pathID
+    for (int i = K_BUFFER_SIZE - 1; i >= 0; --i) {
+        if (pathFragments[i].depth >= FLT_MAX) continue;
+        
+        PathFragment pf = pathFragments[i];
+        
+        // Calculate this fragment's color and alpha
+        float tLine = pf.t_param;
+        float4 fragmentColor = mix(pf.colorStart, pf.colorEnd, tLine);
+        
+        float dist = sqrt(pf.min_dist_sq);
+        
+        float hwAtT = mix(pf.hwStart, pf.hwEnd, tLine);
+        
+        // float alpha = smoothstep(pf.hw + pf.aa, pf.hw - pf.aa, dist);
+        float alpha = smoothstep(hwAtT + pf.aa, hwAtT - pf.aa, dist);
+        fragmentColor.a *= alpha;
+        
+        // Apply debug gradient if enabled
+        float4 debug_gradient = mix(float4(U.lineDebugGradientStartColor, 1.0),
+                                   float4(U.lineDebugGradientEndColor, 1.0),
+                                   tLine) * U.lineDebugGradientStrength;
+        fragmentColor.rgb = fragmentColor.rgb * U.lineColorStrength + debug_gradient.rgb;
+        
+        // Find or create path entry
+        int pathIndex = -1;
+        for (uint j = 0; j < uniquePathCount; ++j) {
+            if (processedPaths[j] == pf.pathID) {
+                pathIndex = int(j);
+                break;
+            }
+        }
+        
+        if (pathIndex == -1 && uniquePathCount < K_BUFFER_SIZE) {
+            pathIndex = int(uniquePathCount);
+            processedPaths[uniquePathCount] = pf.pathID;
+            uniquePathCount++;
+        }
+        
+        if (pathIndex >= 0) {
+            // Blend this fragment with existing path color using "over" blending
+            float4 existing = pathColors[pathIndex];
+            pathColors[pathIndex] = float4(
+                mix(existing.rgb, fragmentColor.rgb, fragmentColor.a),
+                existing.a + fragmentColor.a * (1.0 - existing.a)
+            );
+        }
+    }
+
+    // PASS 2B: Additively blend the path colors
+    for (uint i = 0; i < uniquePathCount; ++i) {
+        float4 pathColor = pathColors[i];
+        if (pathColor.a > 0.0) {
+            // Additive blending between paths
+            // final_rgb = min(final_rgb + pathColor.rgb * pathColor.a, float3(1.0));
+            final_rgb = mix(final_rgb, pathColor.rgb, pathColor.a);
+
+        }
     }
     
     // Use half precision for output (optimization)
-    outTex.write(half4(half3(rgb), half(saturate(a))), gid);
+    outTex.write(half4(half3(final_rgb), 1.0h), gid);
 };
 
 

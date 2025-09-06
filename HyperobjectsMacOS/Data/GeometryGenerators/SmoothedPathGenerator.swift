@@ -52,9 +52,10 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
     var randomPoints: [SIMD3<Float>] = []
     var sortedPoints: [SIMD3<Float>] = []
     var smoothedLines: [Line] = []
-    var previousSmoothingValue: Float = 0.0
     var pointT: Double = 0.0
     var prevTolerance: Float = 0.5
+    var prevLineWidthStart: Float = 0.0
+    var prevLineWidthEnd: Float = 0.0
     
     
     init() {
@@ -74,34 +75,66 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
         let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
         let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
         let toleranceInput = floatFromInputs(inputs, name: "Tolerance")
+        let pointsResetChance = floatFromInputs(inputs, name: "Points Reset Chance")
         
-        var startColor = colorFromInputs(inputs, name: "Color start")
-        var endColor = colorFromInputs(inputs, name: "Color end")
+        let lineWidthStart = floatFromInputs(inputs, name: "Line Width Start")
+        let lineWidthEnd = floatFromInputs(inputs, name: "Line Width End")
+        
+        let startColor = colorFromInputs(inputs, name: "Color start")
+        let endColor = colorFromInputs(inputs, name: "Color end")
         
         let pointsCount = intFromInputs(inputs, name: "Points count")
         
         
         var lines: [Line] = []
         
+        
+        
         let scale = ColorScale(colors: [startColor, endColor], mode: .hsl)
         
+        // Random value between 0 and 1
+        let randValue: Float = Float.random(in: 0...1)
+        
         var pointsUpdated: Bool = false
-        if pointsCount != randomPoints.count {
+        if pointsCount != randomPoints.count || pointsResetChance > randValue {
             pointsUpdated = true
             randomPoints = generateRandomPoints(count: pointsCount, size: 5.0)
             sortedPoints = greedyOrder(points: randomPoints)
             
         }
-        if prevTolerance != toleranceInput || pointsUpdated {
+                
+        var linesNeedUpdating: Bool = false
+        
+        if (pointsUpdated) {
+            linesNeedUpdating = true
+        }
+        
+        if (prevTolerance != toleranceInput) {
             prevTolerance = toleranceInput
+            linesNeedUpdating = true
+        }
+        
+        if (prevLineWidthStart != lineWidthStart) {
+            prevLineWidthStart = lineWidthStart
+            linesNeedUpdating = true
+        }
+        
+        if (prevLineWidthEnd != lineWidthEnd) {
+            prevLineWidthEnd = lineWidthEnd
+            linesNeedUpdating = true
+        }
+        
+        
+        
+        if linesNeedUpdating {
             smoothedLines = smoothedBezierPath(points: sortedPoints, tolerance: toleranceInput)
             
-            var tIncrement = 1.0 / Double(smoothedLines.count)
+            let tIncrement = 1.0 / Double(smoothedLines.count)
             for i in 0..<smoothedLines.count {
-                var lineT = Double(i) / Double(smoothedLines.count)
-                smoothedLines[i].lineWidthStart = 3.0
-                smoothedLines[i].lineWidthEnd = 3.0
-                smoothedLines[i].setBasicEndPointColors(
+                let lineT = Double(i) / Double(smoothedLines.count)
+                smoothedLines[i].lineWidthStart = mix(lineWidthStart, lineWidthEnd, Float(lineT))
+                smoothedLines[i].lineWidthEnd = mix(lineWidthStart, lineWidthEnd, Float(lineT + tIncrement))
+                smoothedLines[i] = smoothedLines[i].setBasicEndPointColors(
                     startColor: scale.color(at: lineT).toSIMD4(),
                     endColor: scale.color(at: lineT + tIncrement).toSIMD4()
                 )
@@ -112,11 +145,11 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
         pointT += 0.0001
         pointT = fmod(pointT, 1.0)
         
-        var smoothedPath = PathGeometry(lines: smoothedLines)
-        var smoothedPathPoint = smoothedPath.interpolate(t: pointT)
+        let smoothedPath = PathGeometry(lines: smoothedLines)
+        let smoothedPathPoint = smoothedPath.interpolate(t: pointT)
         
-        var pointLinesWidth: Float = 0.5
-        var lineExtension: Float = 1.0
+        let pointLinesWidth: Float = 0.7
+        let lineExtension: Float = 1.0
         
         var pointLines: [Line] = [
             Line(
@@ -139,18 +172,25 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
             ),
         ]
         for i in 0..<pointLines.count {
-            pointLines[i].setBasicEndPointColors(
+            pointLines[i] = pointLines[i].setBasicEndPointColors(
                 startColor: Color.green.toSIMD4(),
                 endColor: Color.green.toSIMD4()
             )
         }
-        lines += pointLines
+        // lines += pointLines
+        
+        let lineWidthLinearLines: Float = 1.0
         
         for i in stride(from: 0, to: randomPoints.count, by: 1) {
             let p1 = randomPoints[i]
             let p2 = randomPoints[(i + 1) % randomPoints.count]
             var line = Line(startPoint: p1, endPoint: p2)
-            line.setBasicEndPointColors(startColor: SIMD4<Float>(repeating: 0.2), endColor: SIMD4<Float>(repeating: 0.2))
+            line = line.setBasicEndPointColors(
+                startColor: SIMD4<Float>(SIMD3<Float>(repeating: 1.0), 0.1),
+                endColor: SIMD4<Float>(SIMD3<Float>(repeating: 1.0), 0.1)
+            )
+            line.lineWidthStart = lineWidthLinearLines
+            line.lineWidthEnd = lineWidthLinearLines
             lines.append(line)
         }
         
@@ -158,7 +198,12 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
             let p1 = sortedPoints[i]
             let p2 = sortedPoints[(i + 1) % sortedPoints.count]
             var line = Line(startPoint: p1, endPoint: p2)
-            line.setBasicEndPointColors(startColor: SIMD4<Float>(repeating: 0.6), endColor: SIMD4<Float>(repeating: 0.6))
+            line = line.setBasicEndPointColors(
+                startColor: SIMD4<Float>(SIMD3<Float>(repeating: 1.0), 0.1),
+                endColor: SIMD4<Float>(SIMD3<Float>(repeating: 1.0), 0.1)
+            )
+            line.lineWidthStart = lineWidthLinearLines
+            line.lineWidthEnd = lineWidthLinearLines
             lines.append(line)
         }
         
@@ -167,7 +212,7 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
         let textLines = textToBezierPaths("TEST", font: .custom("SF Mono", size: 48), size: 0.4, maxLineWidth: 5.0)
         
         for char in textLines {
-            lines += char
+            // lines += char
         }
         
         let rotationMatrixX = matrix_rotation(angle: statefulRotationX, axis: SIMD3<Float>(x: 1, y: 0, z: 0))

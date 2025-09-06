@@ -27,17 +27,35 @@ struct SceneInputsView: View {
         }
     }
     
-    let smoothingSampleCountOptions = [
-        2,
-        5,
-        10,
-        20,
-        50,
-        100
-    ]
+
+    
+    private var groupedInputs: [String: [SceneInput]] {
+        Dictionary(grouping: currentScene.inputs,
+                   by: { ($0.inputGroupName ?? "").trimmingCharacters(in: .whitespaces) })
+    }
+    
+    private func bindingForGroup(named name: String) -> Binding<SceneInputGroup> {
+        if let index = currentScene.inputGroups.firstIndex(where: { $0.name == name }) {
+            return $currentScene.inputGroups[index]
+        }
+        DispatchQueue.main.async {
+            if !currentScene.inputGroups.contains(where: {$0.name == name }) {
+                currentScene.inputGroups.insert(SceneInputGroup(name: name.isEmpty ? "" : name,
+                                                                note: name.isEmpty ? "Ungrouped inputs" : nil,
+                                                                background: .secondary,
+                                                                isVisible: true,
+                                                                isExpanded: true
+                                                               ), at: 0)
+            }
+        }
+        return .constant(SceneInputGroup(name: name, isVisible: true, isExpanded: true))
+    }
     
     
     var body: some View {
+        let generalInputs = groupedInputs[""] ?? []
+        let declaredGroups = currentScene.inputGroups.filter { !$0.name.isEmpty }
+        
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading) {
@@ -48,6 +66,7 @@ struct SceneInputsView: View {
                             brightness: Double(0.0 + audioMonitor.smoothedVolume)
                         ))
                         .frame(width: CGFloat(500 - (audioMonitor.smoothedVolume * 500)), height: 10)
+                        .cornerRadius(5.0)
                         .onAppear {
                             audioMonitor.startMonitoring()
                         }
@@ -55,72 +74,37 @@ struct SceneInputsView: View {
                             audioMonitor.stopMonitoring()
                         }
                     
+                    AudioTimelineView(currentScene: currentScene, audioMonitor: audioMonitor)
                     
-                    HStack {
-                        ForEach(smoothingSampleCountOptions, id: \.self) { count in
-                            Button("Smoothing \(count)") {
-                                audioMonitor.smoothingSampleCount = count
-                            }
-                        }
-                    }
                     
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Audio Timeline")
-                            .font(.headline)
-                        
-                        AudioTimelineChartView(historyData: currentScene.historyData)
-                            .frame(height: 220)
-                            .background(Color.gray.opacity(0.1))
-                            .cornerRadius(8)
-                        
-                        // Legend
-                        HStack(spacing: 20) {
-                            LegendItem(color: .red, label: "Raw")
-                            LegendItem(color: .orange, label: "Smoothed")
-                            LegendItem(color: .green, label: "Processed")
-                            
-                            Spacer()
-                            
-                            Text("\(currentScene.historyData.count) samples")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding()
-                    .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(8)
+                    
                     
                     HStack {
                         VStack {
-                            Text("Full")
                             AudioVisualizerView(
                                 currentVolume: Double(currentScene.audioSignalRaw),
                                 smoothedVolume: Double(currentScene.audioSignal),
-                                processedVolume: currentScene.audioSignalProcessed
+                                processedVolume: currentScene.audioSignalProcessed,
+                                title: "Full"
                             )
                         }
                         VStack {
-                            Text("Lowpass")
                             AudioVisualizerView(
                                 currentVolume: Double(currentScene.audioSignalLowpassRaw),
                                 smoothedVolume: Double(currentScene.audioSignalLowpassSmoothed),
-                                processedVolume: currentScene.audioSignalLowpassProcessed
+                                processedVolume: currentScene.audioSignalLowpassProcessed,
+                                title: "Lowpass"
                             )
                         }
                     }
                     
-                    Picker("Envelope Type", selection: $selectedEnvelopeType) {
-                        ForEach(EnvelopeType.allCases, id: \.self) { type in
-                            Text(type.rawValue).tag(type)
-                        }
-                    }.pickerStyle(.segmented)
-                        .frame(maxWidth: 500)
                     
-                    Button(action: {
-                        showSliders.toggle()
-                    }) {
-                        Text(showSliders ? "Hide Sliders" : "Show Sliders")
-                    }
+                    
+//                    Button(action: {
+//                        showSliders.toggle()
+//                    }) {
+//                        Text(showSliders ? "Hide Sliders" : "Show Sliders")
+//                    }
                     
                     VStack {
                         
@@ -129,53 +113,37 @@ struct SceneInputsView: View {
                             SigmoidEnvelopeView(
                                 envelope: sigmoidEnvelope,
                                 currentInput: Double(currentScene.audioSignal),
-                                currentOutput: currentScene.audioSignalProcessed
+                                currentOutput: currentScene.audioSignalProcessed,
+                                selectedEnvelopeType: $selectedEnvelopeType
                             )
                         case .freeform:
                             FreeformEnvelopeView(
                                 envelope: freeformEnvelope,
                                 currentInput: Double(currentScene.audioSignal),
-                                currentOutput: currentScene.audioSignalProcessed
+                                currentOutput: currentScene.audioSignalProcessed,
+                                selectedEnvelopeType: $selectedEnvelopeType
                             )
                         }
                     }
                     
                 }
-                if showSliders {
-                    ForEach(currentScene.inputs) { input in
-                        VStack(alignment: .leading) {
-                            let formattedString = String(format: "%.2f", input.valueAsFloat())
-                            Text("\(input.name) (value: \(formattedString)), type: \(input.type))")
-                                .frame(maxWidth:.infinity, alignment: .leading)
-                            switch input.type {
-                            case .float:
-                                HStack {
-                                    FloatSliderControlView(input: input)
-                                }.frame(maxWidth:.infinity, alignment: .leading)
-                            case .integer:
-                                HStack {
-                                    IntegerSliderControlView(input: input)
-                                }.frame(maxWidth: .infinity, alignment: .leading)
-                            case .statefulFloat:
-                                HStack {
-                                    StatefulFloatControlView(input: input)
-                                }.frame(maxWidth:.infinity, alignment: .leading)
-                            case .colorInput:
-                                HStack {
-                                    ColorPickerControlWrapperView(input: input)
-                                }.frame(maxWidth:.infinity, alignment: .leading)
-                            case .string:
-                                HStack {
-                                    StringInputControlView(input: input)
-                                }.frame(maxWidth:.infinity, alignment: .leading)
-                            default:
-                                Text("Default")
-                            }
-                        }.padding()
-                            .background(Color.secondary.opacity(0.2))
-                            .cornerRadius(5)
-                            .id(input.id)
-                        Text(" ")
+                HStack(alignment: .top, spacing: 4) {
+                    if !generalInputs.isEmpty || true {
+                        let gBinding = bindingForGroup(named: "")
+                        InputGroupColumn(group: gBinding,
+                                         inputs: generalInputs,
+                                         titleOverride: "General")
+                    }
+                
+                    ForEach($currentScene.inputGroups.indices.filter { currentScene.inputGroups[$0].name != ""}, id: \.self) { idx in
+                        let g = $currentScene.inputGroups[idx]
+                        let name = g.wrappedValue.name
+                        let inputs = groupedInputs[name] ?? []
+                        InputGroupColumn(
+                            group: g,
+                            inputs: inputs,
+                            titleOverride: nil
+                        )
                     }
                 }
                 Spacer()

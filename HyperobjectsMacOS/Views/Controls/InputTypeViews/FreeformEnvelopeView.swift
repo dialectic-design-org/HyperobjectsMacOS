@@ -11,11 +11,17 @@ struct FreeformEnvelopeView: View {
     @ObservedObject var envelope: FreeformEnvelope
     let currentInput: Double
     let currentOutput: Double
+    @Binding var selectedEnvelopeType: EnvelopeType
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Free Form Envelope")
-                .font(.headline)
+            HStack {
+                Text("Free Form Envelope")
+                    .font(.headline)
+                    .fontDesign(.monospaced)
+                Spacer()
+                EnvelopePicker(selectedEnvelopeType: $selectedEnvelopeType)
+            }
             
             FreeformCurveEditor(
                 envelope: envelope,

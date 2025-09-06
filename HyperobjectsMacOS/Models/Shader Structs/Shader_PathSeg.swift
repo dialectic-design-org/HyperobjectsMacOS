@@ -36,7 +36,8 @@ func createShaderLinearSeg(
         pathID: pathID,
         p0_world: SIMD4<Float>(p0_world, 1.0),
         p1_world: SIMD4<Float>(p1_world, 1.0),
-        halfWidthPx: (p0_width + p1_width) / 2.0,
+        halfWidthStartPx: p0_width,
+        halfWidthEndPx: p1_width,
         aaPx: 0.707,
         colorStartCenter: colorStartCenter,
         colorEndCenter: colorEndCenter

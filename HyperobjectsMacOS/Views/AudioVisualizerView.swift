@@ -11,11 +11,14 @@ struct AudioVisualizerView: View {
     let currentVolume: Double
     let smoothedVolume: Double
     let processedVolume: Double
+    let title: String
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Audio Levels")
+            Text(.init("Audio Levels: **\(title)**"))
                 .font(.headline)
+                .fontWeight(.regular)
+                .fontDesign(.monospaced)
             
             VStack(spacing: 8) {
                 AudioLevelBar(label: "Raw", value: currentVolume, color: .red)
@@ -26,5 +29,6 @@ struct AudioVisualizerView: View {
         .padding()
         .background(Color.secondary.opacity(0.1))
         .cornerRadius(8)
+        .fontDesign(.monospaced)
     }
 }

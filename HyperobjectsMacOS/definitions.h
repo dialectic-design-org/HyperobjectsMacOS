@@ -42,6 +42,9 @@ struct Uniforms {
     
     vector_float3 lineDebugGradientStartColor;
     vector_float3 lineDebugGradientEndColor;
+    
+    float blendRadius;
+    float blendIntensity;
 };
 
 
@@ -49,7 +52,8 @@ struct LinearSeg3D {
     int pathID;
     vector_float4 p0_world;
     vector_float4 p1_world;
-    float halfWidthPx;
+    float halfWidthStartPx;
+    float halfWidthEndPx;
     float aaPx;
     
     vector_float4 colorStartCenter;
@@ -61,7 +65,8 @@ struct QuadraticSeg3D {
     vector_float4 p0_world;
     vector_float4 p1_world;
     vector_float4 p2_world;
-    float halfWidthPx;
+    float halfWidthStartPx;
+    float halfWidthEndPx;
     float aaPx;
     
     vector_float4 colorStartCenter;
@@ -74,7 +79,8 @@ struct CubicSeg3D {
     vector_float4 p1_world;
     vector_float4 p2_world;
     vector_float4 p3_world;
-    float halfWidthPx;
+    float halfWidthStartPx;
+    float halfWidthEndPx;
     float aaPx;
     
     vector_float4 colorStartCenter;
@@ -84,7 +90,8 @@ struct CubicSeg3D {
 struct LinearSegScreenSpace {
     vector_float2 p0_ss;
     vector_float2 p1_ss;
-    float halfWidthPx;
+    float halfWidthStartPx;
+    float halfWidthEndPx;
     float aaPx;
     
     vector_float2 bboxMinSS;

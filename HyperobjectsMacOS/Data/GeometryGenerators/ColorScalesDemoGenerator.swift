@@ -15,9 +15,14 @@ class ColorScalesDemoGenerator: CachedGeometryGenerator {
             inputDependencies: [
                 "Color start",
                 "Color end",
-                "Rotation",
                 "Brightness",
-                "Saturation"
+                "Saturation",
+                "Rotation X",
+                "Rotation Y",
+                "Rotation Z",
+                "Stateful Rotation X",
+                "Stateful Rotation Y",
+                "Stateful Rotation Z"
             ]
         )
     }
@@ -29,6 +34,14 @@ class ColorScalesDemoGenerator: CachedGeometryGenerator {
         
         var brightness = floatFromInputs(inputs, name: "Brightness")
         var saturation = floatFromInputs(inputs, name: "Saturation")
+        
+        let rotationX = floatFromInputs(inputs, name: "Rotation X")
+        let rotationY = floatFromInputs(inputs, name: "Rotation Y")
+        let rotationZ = floatFromInputs(inputs, name: "Rotation Z")
+        
+        let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
+        let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
+        let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
         
         let scale = ColorScale(colors: [startColor, endColor], mode: .hsl)
         
@@ -50,6 +63,21 @@ class ColorScalesDemoGenerator: CachedGeometryGenerator {
             lines.append(
                 line
             )
+        }
+        
+        let rotationMatrixX = matrix_rotation(angle: rotationX + statefulRotationX, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
+        for i in 0..<lines.count {
+            lines[i] = lines[i].applyMatrix(rotationMatrixX)
+        }
+
+        let rotationMatrixY = matrix_rotation(angle: rotationY + statefulRotationY, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
+        for i in 0..<lines.count {
+            lines[i] = lines[i].applyMatrix(rotationMatrixY)
+        }
+
+        let rotationMatrixZ = matrix_rotation(angle: rotationZ + statefulRotationZ, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
+        for i in 0..<lines.count {
+            lines[i] = lines[i].applyMatrix(rotationMatrixZ)
         }
         
         

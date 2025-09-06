@@ -357,7 +357,8 @@ class MetalRenderer {
                             p0_world: SIMD4<Float>(line[0], 1.0),
                             p1_world: SIMD4<Float>(lineGeometry.controlPoints[0], 1.0),
                             p2_world: SIMD4<Float>(line[1], 1.0),
-                            halfWidthPx: lineGeometry.lineWidthStart,
+                            halfWidthStartPx: lineGeometry.lineWidthStart,
+                            halfWidthEndPx: lineGeometry.lineWidthEnd,
                             aaPx: 0.707,
                             colorStartCenter: lineGeometry.colorStart,
                             colorEndCenter: lineGeometry.colorEnd
@@ -375,7 +376,8 @@ class MetalRenderer {
                             p1_world: SIMD4<Float>(lineGeometry.controlPoints[0], 1.0),
                             p2_world: SIMD4<Float>(lineGeometry.controlPoints[1], 1.0),
                             p3_world: SIMD4<Float>(line[1], 1.0),
-                            halfWidthPx: lineGeometry.lineWidthStart,
+                            halfWidthStartPx: lineGeometry.lineWidthStart,
+                            halfWidthEndPx: lineGeometry.lineWidthEnd,
                             aaPx: 0.707,
                             colorStartCenter: lineGeometry.colorStart,
                             colorEndCenter: lineGeometry.colorEnd
@@ -485,7 +487,6 @@ class MetalRenderer {
         // Convert to vector_float3
         
         let binDepthSource = renderConfigs?.binDepth ?? 16
-        let binDepth = Int32(binDepthSource)
         
         var uniforms: Uniforms = Uniforms(
             viewWidth: Int32(viewW),
@@ -498,7 +499,9 @@ class MetalRenderer {
             lineColorStrength: renderConfigs?.lineColorStrength ?? 1.0,
             lineDebugGradientStrength: renderConfigs?.lineTimeDebugGradientStrength ?? 0.0,
             lineDebugGradientStartColor: colorToVector(lineDebugGradientStart.color),
-            lineDebugGradientEndColor: colorToVector(lineDebugGradientEnd.color)
+            lineDebugGradientEndColor: colorToVector(lineDebugGradientEnd.color),
+            blendRadius: renderConfigs?.blendRadius ?? 0.0,
+            blendIntensity: renderConfigs?.blendIntensity ?? 0.0
         )
         
         let renderPassDescriptor = MTLRenderPassDescriptor()

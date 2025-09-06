@@ -72,6 +72,11 @@ struct RenderConfigurationsView: View {
                 Text("Line Time Debug Gradient Color End")
                 ColorPickerControlView(colorInput: renderConfigurations.lineTimeDebugEndGradientColor)
                 
+                Text("Blend radius")
+                Slider(value: $renderConfigurations.blendRadius, in: 0...1.0)
+                
+                Text("Blend intensity")
+                Slider(value: $renderConfigurations.blendIntensity, in: 0...1.0)
                 
                 Text("Bin depth rendering")
                 Slider(value: $binDepth,

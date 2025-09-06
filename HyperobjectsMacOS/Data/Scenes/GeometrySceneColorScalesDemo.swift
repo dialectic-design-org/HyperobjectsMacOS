@@ -24,11 +24,14 @@ func generateColorScalesGemoScene() -> GeometriesSceneBase {
                        range: 0...10,
                        audioAmplificationMultiplicationRange: 0...5
                       ),
-            SceneInput(name: "Rotation", type: .statefulFloat,
-                       value: 0.0,
-                       range: 0...2,
-                       audioAmplificationMultiplicationRange: 0...5
-                      ),
+            
+            SceneInput(name: "Rotation X", type: .float, value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation Y", type: .float, value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation Z", type: .float, value: 0.0, range: 0.0...2 * .pi),
+            
+            SceneInput(name:"Stateful Rotation X", type: .statefulFloat, tickValueAdjustmentRange: 0.0...0.1),
+            SceneInput(name:"Stateful Rotation Y", type: .statefulFloat, tickValueAdjustmentRange: 0.0...0.1),
+            SceneInput(name:"Stateful Rotation Z", type: .statefulFloat, tickValueAdjustmentRange: 0.0...0.1)
         ],
         geometryGenerators: [
             ColorScalesDemoGenerator()

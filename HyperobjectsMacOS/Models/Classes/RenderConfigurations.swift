@@ -35,6 +35,10 @@ class RenderConfigurations: ObservableObject {
     
     @Published var lineTimeDebugGradientStrength: Float = 0.0
     
+    @Published var blendRadius: Float = 0.0;
+    
+    @Published var blendIntensity: Float = 0.0;
+    
     @Published var lineTimeDebugStartGradientColor: ColorInput = ColorInput(initialColor: Color.init(red: 1.0, green: 0.0, blue: 1.0))
     @Published var lineTimeDebugEndGradientColor: ColorInput = ColorInput(initialColor: Color.init(red: 0.0, green: 1.0, blue: 0.0))
     
