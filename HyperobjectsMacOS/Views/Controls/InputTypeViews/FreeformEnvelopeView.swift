@@ -31,7 +31,6 @@ struct FreeformEnvelopeView: View {
                 .frame(height: 200)
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(8)
-                .padding(8)
             
             HStack {
                 Button("Reset") {

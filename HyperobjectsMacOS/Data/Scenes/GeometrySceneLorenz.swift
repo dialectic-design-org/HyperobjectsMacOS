@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 func generateGeometrySceneLorenz() -> GeometriesSceneBase {
     return GeometriesSceneBase(
@@ -41,7 +42,23 @@ func generateGeometrySceneLorenz() -> GeometriesSceneBase {
                        tickValueAudioAdjustmentRange: 0.0...0.1),
             SceneInput(name:"Stateful Rotation Z", type: .statefulFloat,
                        tickValueAdjustmentRange: 0.0...0.1,
-                       tickValueAudioAdjustmentRange: 0.0...0.1)
+                       tickValueAudioAdjustmentRange: 0.0...0.1),
+            
+            SceneInput(name: "Line width base", type: .float, inputGroupName: "Shading", value: 0.0, range: 0...20.0,
+                       audioAmplificationAddition: 0.0,
+                       audioAmplificationAdditionRange: 0.0...20.0),
+            
+            SceneInput(name: "Line width start", type: .float, inputGroupName: "Shading", value: 0.8, range: 0...20.0,
+                       audioAmplificationAddition: 0.0,
+                       audioAmplificationAdditionRange: 0.0...20.0),
+            
+            SceneInput(name: "Line width end", type: .float, inputGroupName: "Shading", value: 0.8, range: 0...20.0,
+                       audioAmplificationAddition: 0.0,
+                       audioAmplificationAdditionRange: 0.0...20.0),
+            
+            
+            SceneInput(name: "Color start", type: .colorInput, inputGroupName: "Shading", value: Color.white),
+            SceneInput(name: "Color end", type: .colorInput, inputGroupName: "Shading", value: Color.white),
             
             
         ],

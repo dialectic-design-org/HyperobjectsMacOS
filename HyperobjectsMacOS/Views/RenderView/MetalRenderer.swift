@@ -345,7 +345,8 @@ class MetalRenderer {
                             p0_width: lineGeometry.lineWidthStart,
                             p1_width: lineGeometry.lineWidthEnd,
                             colorStartCenter: lineGeometry.colorStart,
-                            colorEndCenter: lineGeometry.colorEnd
+                            colorEndCenter: lineGeometry.colorEnd,
+                            line: lineGeometry
                         )
                         linearLinesIndex += 1
                         

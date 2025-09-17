@@ -31,6 +31,7 @@ func createShaderLinearSeg(
     p1_width: Float = 1.0,
     colorStartCenter: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0),
     colorEndCenter: SIMD4<Float> = SIMD4<Float>(1.0, 1.0, 1.0, 1.0),
+    line: Line
 ) -> LinearSeg3D {
     return LinearSeg3D(
         pathID: pathID,
@@ -39,8 +40,16 @@ func createShaderLinearSeg(
         halfWidthStartPx: p0_width,
         halfWidthEndPx: p1_width,
         aaPx: 0.707,
+        colorStartLeft: colorStartCenter,
         colorStartCenter: colorStartCenter,
-        colorEndCenter: colorEndCenter
+        colorStartRight: colorStartCenter,
+        transStartLeft: SIMD2<Float>(0.5, 0.25),
+        transStartRight: SIMD2<Float>(0.5, 0.25),
+        colorEndLeft: colorEndCenter,
+        colorEndCenter: colorEndCenter,
+        colorEndRight: colorEndCenter,
+        transEndLeft: SIMD2<Float>(0.5, 0.25),
+        transEndRight: SIMD2<Float>(0.5, 0.25),
     )
 }
 

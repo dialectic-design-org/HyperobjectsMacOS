@@ -7,7 +7,7 @@
 
 import Foundation
 import simd
-import SwiftUICore
+import SwiftUI
 
 class LineGenerator: CachedGeometryGenerator {
     init() {

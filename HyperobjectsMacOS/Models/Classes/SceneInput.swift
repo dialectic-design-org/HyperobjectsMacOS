@@ -13,6 +13,7 @@ class SceneInput: ObservableObject, Identifiable {
     var type: InputType
     var inputGroupName: String?
     var value: Any
+    var audioDelay: Float = 0.0
     var presetValues: [String: Any] = [:]
     var range: ClosedRange<Float> = 0...1
     var audioReactive: Bool = false

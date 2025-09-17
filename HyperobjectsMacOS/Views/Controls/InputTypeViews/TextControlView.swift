@@ -42,10 +42,7 @@ struct StringInputControlView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: 8) {
+                WrappingHStack() {
                     ForEach(presetOptions, id: \.self) { key in
                         Button(action: {
                             if let presetValue = input.presetValues[key] as? String {
@@ -57,6 +54,7 @@ struct StringInputControlView: View {
                                 .font(.caption)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
+                                .fixedSize(horizontal: true, vertical: false) // width from content
                                 .background(
                                     RoundedRectangle(cornerRadius: 6)
                                         .fill(isCurrentPreset(key: key) ? Color.accentColor : Color.secondary.opacity(0.2))

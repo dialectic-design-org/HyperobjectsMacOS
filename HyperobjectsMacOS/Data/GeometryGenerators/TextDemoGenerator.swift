@@ -8,7 +8,7 @@
 
 import Foundation
 import simd
-import SwiftUICore
+import SwiftUI
 
 // private var originalText = "SOCRATISM VISUALS"
 private var originalText = "SATISFACTION"
@@ -20,7 +20,8 @@ private func mutateString(
     current: String,
     pReplace: Double,
     pRestore: Double,
-    replacementMap: inout [Int: Character]
+    replacementMap: inout [Int: Character],
+    replacementCharacters: String
 ) -> String {
     var mutated = Array(current)
     let originalArray = Array(original)
@@ -38,7 +39,7 @@ private func mutateString(
         } else {
             // Not yet replaced
             if Double.random(in: 0...1) < pReplace {
-                let newChar = randomCharacter(excluding: origChar)
+                let newChar = randomCharacter(excluding: origChar, sampleSet: replacementCharacters)
                 mutated[i] = newChar
                 replacementMap[i] = newChar
             }
@@ -48,9 +49,9 @@ private func mutateString(
     return String(mutated)
 }
 
-private func randomCharacter(excluding excluded: Character) -> Character {
+private func randomCharacter(excluding excluded: Character, sampleSet: String = "$#%@*!+") -> Character {
     // let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-    let letters = Array("$#%@*!+")
+    let letters = Array(sampleSet)
     // let letters = Array("پ")
     var candidate: Character
     repeat {
@@ -75,11 +76,21 @@ class TextDemoGenerator: CachedGeometryGenerator {
         let replacementProbability = floatFromInputs(inputs, name: "Replacement probability")
         let restoreProbability = floatFromInputs(inputs, name: "Restore probability")
         var inputString = stringFromInputs(inputs, name: "Title text")
+        var replacementCharacters = stringFromInputs(inputs, name: "Replacement characters")
+        if replacementCharacters.count == 0 {
+            replacementCharacters = " "
+        }
         
         let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
         let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
         let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
         
+        let lineWidthBase = floatFromInputs(inputs, name: "Line width base")
+        
+        let startColor = colorFromInputs(inputs, name: "Start color")
+        let endColor = colorFromInputs(inputs, name: "End color")
+        
+        let colorScale = ColorScale(colors: [startColor, endColor], mode: .hsl)
         
         if inputString == "" {
             // inputString = "PLACEHOLDER"
@@ -107,11 +118,12 @@ class TextDemoGenerator: CachedGeometryGenerator {
                 current: currentText,
                 pReplace: Double(replacementProbability),
                 pRestore: Double(restoreProbability),
-                replacementMap: &map
+                replacementMap: &map,
+                replacementCharacters: replacementCharacters
             )
         
         
-        let textLines = textToBezierPaths(currentText, font: .custom("SF Mono", size: 48), size: 0.4, maxLineWidth: 5.0)
+        let textLines = textToBezierPaths(currentText, font: .custom("SF Mono", size: 48), size: 0.4, maxLineWidth: 10.0)
         
         var transformMatrix = matrix_translation(
             translation: SIMD3<Float>(
@@ -140,7 +152,13 @@ class TextDemoGenerator: CachedGeometryGenerator {
                     startPoint: line.startPoint,
                     endPoint: line.endPoint,
                     degree: line.degree,
-                    controlPoints: line.controlPoints
+                    controlPoints: line.controlPoints,
+                    lineWidthStart: lineWidthBase,
+                    lineWidthEnd: lineWidthBase
+                )
+                transformedLine = transformedLine.setBasicEndPointColors(
+                    startColor: colorScale.color(at: Double(charT)).toSIMD4(),
+                    endColor: colorScale.color(at: Double(charT)).toSIMD4()
                 )
                 transformedLine = transformedLine.applyMatrix(charTransform)
                 transformedLine = transformedLine.applyMatrix(rotationMatrixXYZ)

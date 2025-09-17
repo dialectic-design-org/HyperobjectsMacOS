@@ -45,6 +45,14 @@ class LorenzGenerator: CachedGeometryGenerator {
         let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
         let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
         
+        let lineWidthBase = floatFromInputs(inputs, name: "Line width base")
+        let lineWidthStart = floatFromInputs(inputs, name: "Line width start")
+        let lineWidthEnd = floatFromInputs(inputs, name: "Line width end")
+        
+        let startColor = colorFromInputs(inputs, name: "Color start")
+        let endColor = colorFromInputs(inputs, name: "Color end")
+        
+        let colorScale = ColorScale(colors: [startColor, endColor], mode: .hsl)
         
         // Initial conditions
         var x: Float = 1.0
@@ -54,6 +62,9 @@ class LorenzGenerator: CachedGeometryGenerator {
         // Generate points and connect with lines
         for i in 0..<steps {
             let currentPoint = SIMD3<Float>(x: x, y: y, z: z)
+            
+            let t = Float(i) / Float(steps)
+            let nextT = Float(i + 1) / Float(steps)
             
             let dx = sigma * (y - x)
             let dy = x * (rho - z) - y
@@ -65,12 +76,17 @@ class LorenzGenerator: CachedGeometryGenerator {
             
             let nextPoint = SIMD3<Float>(x: x, y: y, z: z)
             
-            lines.append(Line(
+            var line = Line(
                 startPoint: currentPoint,
                 endPoint: nextPoint,
-                lineWidthStart: 0.8,
-                lineWidthEnd: 0.8
-            ))
+                lineWidthStart: lineWidthBase + mix(lineWidthStart, lineWidthEnd, Float(t)),
+                lineWidthEnd: lineWidthBase + mix(lineWidthStart, lineWidthEnd, Float(nextT))
+            )
+            line = line.setBasicEndPointColors(
+                startColor: colorScale.color(at: Double(t)).toSIMD4(),
+                endColor: colorScale.color(at: Double(nextT)).toSIMD4()
+            )
+            lines.append(line)
         }
         let translationMatrixBefore = matrix_translation(translation: SIMD3<Float>(x: translationX, y: translationY, z: translationZ))
         for i in 0..<lines.count {

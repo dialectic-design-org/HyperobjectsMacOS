@@ -14,15 +14,16 @@ struct StatefulFloatControlView: View {
     @State private var tickValueAudioAdjustment: Double = 0.0
     @State private var tickValueAudioAdjustmentOffset: Double = 0.0
     
-    
-    var controlLabelWidth: CGFloat = 100
+    @State private var displayValue: String = "0.00"   // local, cheap UI state
+
+    var controlLabelWidth: CGFloat = 110
     var body: some View {
         VStack {
             HStack {
                 HStack {
                     Text("Tick:")
                     Spacer()
-                    Text("\(String(format: "%.2f", tickValueAdjustment))")
+                    Text("\(String(format: "%.3f", tickValueAdjustment))")
                 }.frame(width: controlLabelWidth, alignment: .leading)
                 Slider(value: $tickValueAdjustment, in: input.tickValueAdjustmentRange)
                     .controlSize(.mini)
@@ -34,7 +35,7 @@ struct StatefulFloatControlView: View {
                 HStack {
                     Text("Audio:")
                     Spacer()
-                    Text("\(String(format: "%.2f", tickValueAudioAdjustment))")
+                    Text("\(String(format: "%.3f", tickValueAudioAdjustment))")
                 }.frame(width: controlLabelWidth, alignment: .leading)
                 Slider(value: $tickValueAudioAdjustment, in: input.tickValueAudioAdjustmentRange)
                     .controlSize(.mini)
@@ -46,7 +47,7 @@ struct StatefulFloatControlView: View {
                 HStack {
                     Text("Offset:")
                     Spacer()
-                    Text("\(String(format: "%.2f", tickValueAudioAdjustmentOffset))")
+                    Text("\(String(format: "%.3f", tickValueAudioAdjustmentOffset))")
                 }.frame(width: controlLabelWidth, alignment: .leading)
                 Slider(value: $tickValueAudioAdjustmentOffset, in: input.tickValueAudioAdjustmentOffsetRange)
                     .controlSize(.mini)
@@ -58,6 +59,18 @@ struct StatefulFloatControlView: View {
                     tickValueAudioAdjustmentOffset = 0
                 }.buttonStyle(PlainButtonStyle())
             }
-        }
+            HStack {
+                Text("Current value: \(displayValue)")
+                Text("Value resets:")
+                Button("0") {
+                    input.value = Double(0)
+                }
+                Spacer()
+            }
+        }.onReceive(
+            Timer.publish(every: 0.12, on: .main, in: .common).autoconnect()
+                .map { _ in String(format: "%.2f", input.valueAsFloat()) }
+                .removeDuplicates()
+        ) { displayValue = $0 }
     }
 }

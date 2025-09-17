@@ -15,6 +15,7 @@ struct FloatSliderControlView: View {
     @State private var add: Float = 0.0
     @State private var mul: Float = 1.0
     @State private var offset: Float = 0.0
+    @State private var audioDelay: Float = 0.0
 
     var labelWidth: CGFloat = 30
     var body: some View {
@@ -29,6 +30,7 @@ struct FloatSliderControlView: View {
                         input.value = newValue
                     }
             }
+            
             HStack {
                 HStack {
                     Text("+")
@@ -58,6 +60,18 @@ struct FloatSliderControlView: View {
                             input.audioAmplificationMultiplicationOffset = newValue
                         }
                 }
+            }
+            HStack {
+                Text("\(String(format: "%.2f", audioDelay).prefix(3))")
+                    .fontDesign(.monospaced)
+                    .frame(width: labelWidth)
+                Slider(value: $audioDelay, in: 0...1)
+                    .controlSize(.mini)
+                    .tint(.gray)
+                    .onChange(of: audioDelay) { oldValue, newValue in
+                        input.audioDelay = newValue
+                    }
+                Text("Audio delay")
             }
         }
         .onAppear {

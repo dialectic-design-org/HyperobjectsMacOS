@@ -22,6 +22,7 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     @Published var audioSignal: Float = 0.0
     @Published var audioSignalRaw: Float = 0.0
     @Published var audioSignalProcessed: Double = 0.0
+    @Published var audioSignalProcessedHistory: [Double] = []
     
     @Published var audioSignalLowpassRaw: Double = 0.0
     @Published var audioSignalLowpassSmoothed: Double = 0.0
@@ -71,13 +72,41 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         }
     }
     
+    func extractHistoricAudioValue(for input: SceneInput) -> Double {
+        // Clamp historyData to latest 120 samples
+        let clampedHistory = Array(historyData.suffix(120))
+        
+        let historyLength = clampedHistory.count
+        guard historyLength > 0 else {
+            // Fallback to current signal if no history available
+            return audioSignalProcessed
+        }
+        
+        let maxHistoryIndex = historyLength - 1
+        
+        // Map audioDelay (0-1) to history array index (0 to current length - 1)
+        // audioDelay of 0 = most recent (last element), audioDelay of 1 = oldest available
+        let delayIndex = Int(input.audioDelay * Float(maxHistoryIndex))
+        let clampedIndex = min(max(0, delayIndex), maxHistoryIndex)
+        
+        // Get the historical audio signal value (index from end of array)
+        let arrayIndex = max(0, historyLength - 1 - clampedIndex)
+        return clampedHistory[arrayIndex].processedVolume
+    }
+    
     func generateAllGeometries() -> [any Geometry] {
         let startTime = DispatchTime.now()
         os_signpost(.begin, log: geometryGenerationLog, name: "generateAllGeometries")
 
         let inputDict: [String: Any] = Dictionary(uniqueKeysWithValues: inputs.map { input in
+            // Extract historic audio value based on input.audioDelay from historyData
+            
             if input.type == .float {
-                return (input.name, input.combinedValueAsFloat(audioSignal: Float(audioSignalProcessed)))
+                // Get historic audio value from historyData based on audioDelay
+                let historicAudioSignal = extractHistoricAudioValue(for: input)
+                return (input.name, input.combinedValueAsFloat(audioSignal: Float(historicAudioSignal)))
+            } else if input.type == .colorInput {
+                return (input.name, input.value)
             } else {
                 return (input.name, input.value)
             }

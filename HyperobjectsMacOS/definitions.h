@@ -56,8 +56,20 @@ struct LinearSeg3D {
     float halfWidthEndPx;
     float aaPx;
     
+    vector_float4 colorStartLeft;
     vector_float4 colorStartCenter;
+    vector_float4 colorStartRight;
+    
+    vector_float2 transStartLeft;
+    vector_float2 transStartRight;
+    
+    
+    vector_float4 colorEndLeft;
     vector_float4 colorEndCenter;
+    vector_float4 colorEndRight;
+    
+    vector_float2 transEndLeft;
+    vector_float2 transEndRight;
 };
 
 struct QuadraticSeg3D {

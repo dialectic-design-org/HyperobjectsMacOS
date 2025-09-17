@@ -1079,11 +1079,26 @@ kernel void drawLines(
         
         if (pathIndex >= 0) {
             // Blend this fragment with existing path color using "over" blending
+//            float4 existing = pathColors[pathIndex];
+//            pathColors[pathIndex] = float4(
+//                mix(existing.rgb, fragmentColor.rgb, fragmentColor.a),
+//                existing.a + fragmentColor.a * (1.0 - existing.a)
+//            );
+            // FIX: switch to premultiplied-alpha compositing within a path
             float4 existing = pathColors[pathIndex];
-            pathColors[pathIndex] = float4(
-                mix(existing.rgb, fragmentColor.rgb, fragmentColor.a),
-                existing.a + fragmentColor.a * (1.0 - existing.a)
-            );
+
+            // Convert fragment to premultiplied RGB
+            float  a_frag   = fragmentColor.a;
+            float3 rgb_prem = fragmentColor.rgb * a_frag;
+
+            // Premultiplied "over":
+            // C = Cs + Cd*(1 - As)
+            // A = As + Ad*(1 - As)
+            float3 out_rgb = existing.rgb + rgb_prem * (1.0 - existing.a);
+            float  out_a   = existing.a   + a_frag   * (1.0 - existing.a);
+
+            pathColors[pathIndex] = float4(out_rgb, out_a);
+            // END FIX
         }
     }
 
@@ -1093,7 +1108,12 @@ kernel void drawLines(
         if (pathColor.a > 0.0) {
             // Additive blending between paths
             // final_rgb = min(final_rgb + pathColor.rgb * pathColor.a, float3(1.0));
-            final_rgb = mix(final_rgb, pathColor.rgb, pathColor.a);
+            // final_rgb = mix(final_rgb, pathColor.rgb, pathColor.a);
+            
+            // FIX: paths are stored premultiplied; unpremultiply before straight-alpha mix
+            float3 src_straight = (pathColor.a > 1e-6f) ? (pathColor.rgb / pathColor.a) : pathColor.rgb;
+            final_rgb = mix(final_rgb, src_straight, pathColor.a);
+            // END FIX
 
         }
     }

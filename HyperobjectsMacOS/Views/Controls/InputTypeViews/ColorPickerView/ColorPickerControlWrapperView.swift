@@ -9,15 +9,21 @@ import SwiftUI
 
 struct ColorPickerControlWrapperView: View {
     @ObservedObject var input: SceneInput
-    
-    // Local state mirrors
-    @State private var userValue: ColorInput = ColorInput()
-    
+
+    // FIX #1: persistent observable owned here
+    @StateObject private var userValue = ColorInput()
+
     var body: some View {
         VStack {
             ColorPickerControlView(colorInput: userValue) { newColor in
-                input.value = newColor
+                // commit outward only on meaningful change
+                if input.value as! Color != newColor {
+                    input.value = newColor
+                }
             }
+        }
+        .onAppear {
+            userValue.updateFromColor(input.value as! Color) // one-time sync-in
         }
     }
 }
