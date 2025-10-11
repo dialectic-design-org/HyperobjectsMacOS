@@ -7,8 +7,10 @@
 
 import Foundation
 import simd
+import SwiftUI
 
 class ColorScalesDemoGenerator: CachedGeometryGenerator {
+    var historyValues: FloatInterpolator = FloatInterpolator()
     init() {
         super.init(
             name: "Color Scales Demo Generator",
@@ -25,6 +27,7 @@ class ColorScalesDemoGenerator: CachedGeometryGenerator {
                 "Stateful Rotation Z"
             ]
         )
+        historyValues.addAbs(1.0, at: CACurrentMediaTime(), monotonic: true);
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
@@ -39,11 +42,16 @@ class ColorScalesDemoGenerator: CachedGeometryGenerator {
         let rotationY = floatFromInputs(inputs, name: "Rotation Y")
         let rotationZ = floatFromInputs(inputs, name: "Rotation Z")
         
+        let length = floatFromInputs(inputs, name: "Length")
+        let historyDelay = floatFromInputs(inputs, name: "History delay (ms)")
+        
         let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
         let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
         let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
         
         let scale = ColorScale(colors: [startColor, endColor], mode: .hsl)
+        
+        historyValues.addAbs(Double(length), at: CACurrentMediaTime(), monotonic: true)
         
         
         for i in 0...100 {
@@ -51,8 +59,12 @@ class ColorScalesDemoGenerator: CachedGeometryGenerator {
             let color = scale.color(at: Double(t), saturation: Double(saturation), brightness: Double(brightness))
             
             var line = Line(
-                startPoint: SIMD3<Float>((t - 0.5) * 3.0, -1.0, 0.0),
-                endPoint: SIMD3<Float>((t - 0.5) * 3.0, 1.0, 0.0),
+                startPoint: SIMD3<Float>((t - 0.5) * 3.0,
+                                         -Float(historyValues.valueAbs(at: CACurrentMediaTime() - Double(i) * Double(historyDelay) / 1000.0 )!),
+                                         0.0),
+                endPoint: SIMD3<Float>((t - 0.5) * 3.0,
+                                       Float(historyValues.valueAbs(at: CACurrentMediaTime() - Double(i) * Double(historyDelay) / 1000.0 )!),
+                                       0.0),
                 lineWidthStart: 2.0,
                 lineWidthEnd: 2.0
             )

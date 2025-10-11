@@ -7,7 +7,11 @@
 
 import SwiftUI
 
-struct InputGroupColumn: View {
+struct InputGroupColumn: View, Equatable {
+    static func == (l: Self, r: Self) -> Bool {
+        return false
+    }
+    
     @Binding var group: SceneInputGroup
     let inputs: [SceneInput]
     let titleOverride: String?

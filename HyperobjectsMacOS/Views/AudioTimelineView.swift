@@ -12,6 +12,7 @@ struct AudioTimelineView: View {
     var audioMonitor: AudioInputMonitor
     
     let smoothingSampleCountOptions = [
+        1,
         2,
         5,
         10,

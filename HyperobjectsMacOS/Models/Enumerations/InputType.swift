@@ -14,6 +14,8 @@ enum InputType: String, CaseIterable, Identifiable {
     case vector2d = "vector2d"
     case colorInput = "colorInput"
     case audioReactiveColorInput = "audioReactiveColorInput"
+    case vectors2d = "vectors2d"
+    case vectors3d = "vectors3d"
     
     var id: String { self.rawValue }
 }

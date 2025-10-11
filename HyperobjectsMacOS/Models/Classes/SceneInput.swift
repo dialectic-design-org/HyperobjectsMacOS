@@ -6,8 +6,10 @@
 //
 
 import Foundation
+import SwiftUI
+import AppKit
 
-class SceneInput: ObservableObject, Identifiable {
+final class SceneInput: ObservableObject, Identifiable, Equatable {
     var id: UUID = UUID()
     var name: String
     var type: InputType
@@ -30,6 +32,49 @@ class SceneInput: ObservableObject, Identifiable {
     var tickValueAudioAdjustmentRange: ClosedRange<Double> = 0...1
     var tickValueAudioAdjustmentOffset: Double = 0.0
     var tickValueAudioAdjustmentOffsetRange: ClosedRange<Double> = -1...1
+    
+    static func == (l: SceneInput, r: SceneInput) -> Bool {
+        l.id == r.id &&
+        l.name == r.name &&
+        l.type == r.type &&
+        l.inputGroupName == r.inputGroupName &&
+        l.range == r.range &&
+        l.audioReactive == r.audioReactive &&
+        l.audioAmplificationAddition == r.audioAmplificationAddition &&
+        l.audioAmplificationMultiplication == r.audioAmplificationMultiplication &&
+        l.audioAmplificationMultiplicationOffset == r.audioAmplificationMultiplicationOffset &&
+        l.tickValueAdjustment == r.tickValueAdjustment &&
+        l.tickValueAudioAdjustment == r.tickValueAudioAdjustment &&
+        l.tickValueAudioAdjustmentOffset == r.tickValueAudioAdjustmentOffset &&
+        SceneInput.valueKey(l.value) == SceneInput.valueKey(r.value)
+    }
+    
+    // Normalize `Any` to a lightweight comparable key
+    private enum ValueKey: Equatable {
+        case num(Float), bool(Bool), str(String)
+        case color(r: Float, g: Float, b: Float, a: Float)
+        case none
+    }
+    
+    private static func valueKey(_ any: Any) -> ValueKey {
+        switch any {
+        case let v as Float:  return .num(v)
+        case let v as Double: return .num(Float(v))
+        case let v as Int:    return .num(Float(v))
+        case let v as Bool:   return .bool(v)
+        case let v as String: return .str(v)
+        case let v as Color:
+            let ns = NSColor(v).usingColorSpace(.sRGB) ?? NSColor.black
+            return .color(r: Float(ns.redComponent),
+                          g: Float(ns.greenComponent),
+                          b: Float(ns.blueComponent),
+                          a: Float(ns.alphaComponent))
+        default:
+            return .str(String(describing: any)) // safe fallback
+        }
+    }
+
+    
     
     init(name: String,
          type: InputType,
@@ -86,5 +131,18 @@ class SceneInput: ObservableObject, Identifiable {
         return self.valueAsFloat()
             * (audioAmplificationMultiplicationOffset + self.audioAmplificationMultiplication * audioSignal)
             + self.audioAmplificationAddition * audioSignal
+    }
+    
+    
+    func toStateValue() -> StateValue {
+        if self.type == .float {
+            if let floatValue = self.value as? Double {
+                return StateValue(value: .float(floatValue as! Double))
+            }
+            if let floatValue = self.value as? Float {
+                return StateValue(value: .float(Double(floatValue)))
+            }
+        }
+        return StateValue(value: .float(0.0))
     }
 }

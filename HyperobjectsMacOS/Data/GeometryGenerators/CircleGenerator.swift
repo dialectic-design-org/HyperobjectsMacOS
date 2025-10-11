@@ -17,7 +17,7 @@ class CircleGenerator: CachedGeometryGenerator {
     override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
         var lines: [Line] = []
         
-        let segmentsCount: Int = 512 // 512
+        let segmentsCount: Int = intFromInputs(inputs, name: "Segments count")// 128 // 512
         
         
         
@@ -38,12 +38,16 @@ class CircleGenerator: CachedGeometryGenerator {
         let lineWidthFrequencyShift = floatFromInputs(inputs, name: "Line Width Wave Frequency Shift")
         
         
-        let color = colorFromInputs(inputs, name: "StartColor")
+        let startColor = colorFromInputs(inputs, name: "StartColor")
+        let endColor = colorFromInputs(inputs, name: "EndColor")
+
+        let colorScale = ColorScale(colors: [startColor, endColor], mode: .hsl)
+
         
         for i in 0..<segmentsCount {
             let angle: Float = Float(i) / Float(segmentsCount) * 2.0 * .pi
             
-            
+            let segmentT = Float(i) / Float(segmentsCount)
             
             
             
@@ -58,16 +62,20 @@ class CircleGenerator: CachedGeometryGenerator {
             let lineWidthStart: Float = lineWidthBase + (1.0 + sin((angle + lineWidthFrequencyShift) * lineWidthFrequency)) * lineWidthAmplification
             let lineWidthEnd: Float = lineWidthBase + (1.0 + sin((nextAngle + lineWidthFrequencyShift) * lineWidthFrequency)) * lineWidthAmplification
             
-            lines.append(Line(
+            var line = Line(
                 startPoint: SIMD3<Float>(x: x, y: y, z: 0),
                 endPoint: SIMD3<Float>(x: nextX, y: nextY, z: 0),
-                colorStart: color.toSIMD4(),
                 colorStartOuterLeft: Color.blue.toSIMD4(),
-                colorEnd: color.toSIMD4(),
                 colorEndOuterLeft: Color.blue.toSIMD4(),
                 lineWidthStart: lineWidthStart,
                 lineWidthEnd: lineWidthEnd
-                ))
+                )
+            line = line.setBasicEndPointColors(
+                startColor: colorScale.color(at: Double(segmentT)).toSIMD4(),
+                endColor: colorScale.color(at: Double(segmentT)).toSIMD4()
+            )
+            lines.append(line)
+            
         }
         
         if statefulRotationX != 0 {

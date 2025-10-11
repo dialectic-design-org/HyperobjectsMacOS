@@ -5,7 +5,6 @@
 //  Created by Erwin Hoogerwoord on 02/08/2025.
 //
 
-
 import Foundation
 import simd
 import SwiftUI
@@ -26,9 +25,19 @@ private func mutateString(
     var mutated = Array(current)
     let originalArray = Array(original)
     
-    for i in 0..<originalArray.count {
+    // [HARDENING] Guard against length mismatches to prevent out-of-bounds.
+    let limit = min(originalArray.count, mutated.count)  // <-- CHANGE
+    
+    // [HARDENING] If previous indices exist beyond the current safe bound, drop them.
+    if !replacementMap.isEmpty {                          // <-- CHANGE
+        replacementMap.keys
+            .filter { $0 < 0 || $0 >= limit }
+            .forEach { replacementMap.removeValue(forKey: $0) }
+    }
+    
+    // Iterate only over the safe bound.
+    for i in 0..<limit {                                   // <-- CHANGE (used limit)
         let origChar = originalArray[i]
-        // let currChar = mutated[i]
         
         if replacementMap[i] != nil {
             // Already replaced
@@ -46,18 +55,29 @@ private func mutateString(
         }
     }
     
+    // If original is longer than current (shouldn’t normally happen), leave tail as-is.
+    // If current is longer than original, also untouched; rendering side already uses currentText’s glyphs.
     return String(mutated)
 }
 
+// [HARDENING] Eliminate force unwraps and infinite loop when sampleSet cannot differ from `excluded`.
 private func randomCharacter(excluding excluded: Character, sampleSet: String = "$#%@*!+") -> Character {
-    // let letters = Array("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
     let letters = Array(sampleSet)
-    // let letters = Array("پ")
-    var candidate: Character
-    repeat {
-        candidate = letters.randomElement()!
-    } while candidate == excluded
-    return candidate
+    
+    // Prefer any character different from `excluded`
+    let pool = letters.filter { $0 != excluded }
+    
+    if let pick = (pool.isEmpty ? letters.randomElement() : pool.randomElement()) {
+        // If pool was empty and letters contained only `excluded`, we still return `excluded` here.
+        // That keeps behavior stable while avoiding an infinite loop/crash.
+        return pick
+    }
+    
+    // Ultimate fallback if sampleSet is empty (shouldn’t happen, but safe).
+    // Pick a deterministic distinct fallback if possible.
+    if excluded != "?" { return "?" }
+    if excluded != "!" { return "!" }
+    return "#"  // last-resort fallback
 }
 
 class TextDemoGenerator: CachedGeometryGenerator {
@@ -77,6 +97,8 @@ class TextDemoGenerator: CachedGeometryGenerator {
         let restoreProbability = floatFromInputs(inputs, name: "Restore probability")
         var inputString = stringFromInputs(inputs, name: "Title text")
         var replacementCharacters = stringFromInputs(inputs, name: "Replacement characters")
+        
+        // Keep original intent: if empty, use a space.
         if replacementCharacters.count == 0 {
             replacementCharacters = " "
         }
@@ -101,7 +123,6 @@ class TextDemoGenerator: CachedGeometryGenerator {
             map.removeAll()
         }
         
-        
         var lines: [Line] = []
         
         // Line to protect against returning a 0 array
@@ -111,17 +132,14 @@ class TextDemoGenerator: CachedGeometryGenerator {
             )
         )
         
-        
-        
         currentText = mutateString(
-                original: originalText,
-                current: currentText,
-                pReplace: Double(replacementProbability),
-                pRestore: Double(restoreProbability),
-                replacementMap: &map,
-                replacementCharacters: replacementCharacters
-            )
-        
+            original: originalText,
+            current: currentText,
+            pReplace: Double(replacementProbability),
+            pRestore: Double(restoreProbability),
+            replacementMap: &map,
+            replacementCharacters: replacementCharacters
+        )
         
         let textLines = textToBezierPaths(currentText, font: .custom("SF Mono", size: 48), size: 0.4, maxLineWidth: 10.0)
         
@@ -137,7 +155,6 @@ class TextDemoGenerator: CachedGeometryGenerator {
         let rotationMatrixZ = matrix_rotation(angle: statefulRotationZ, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
 
         let rotationMatrixXYZ = rotationMatrixX * rotationMatrixY * rotationMatrixZ
-        
         
         var charIndex = 0
         var charT = 0.0

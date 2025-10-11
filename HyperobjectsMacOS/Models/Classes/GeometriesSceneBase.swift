@@ -10,6 +10,12 @@ import os
 
 let geometryGenerationLog = OSLog(subsystem: "com.yourapp.geometry", category: .pointsOfInterest)
 
+struct AudioSnapshot {
+    let raw: Float
+    let smoothed: Float
+    let lowpassRaw: Float
+    let lowpassSmoothed: Float
+}
 
 class GeometriesSceneBase: ObservableObject, GeometriesScene {
     let id = UUID()
@@ -27,6 +33,7 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     @Published var audioSignalLowpassRaw: Double = 0.0
     @Published var audioSignalLowpassSmoothed: Double = 0.0
     @Published var audioSignalLowpassProcessed: Double = 0.0
+    @Published var frameStamp: Int = 0
     
     
     @Published var historyData: [AudioDataPoint] = []
@@ -177,4 +184,18 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         self.cachedGeometries = self.generateAllGeometries().map { GeometryWrapped(geometry: $0) }
     }
     
+}
+
+
+extension GeometriesSceneBase {
+    @MainActor func applyAudioTick(_ m: AudioSnapshot, using processor: EnvelopeProcessor) {
+        audioSignal = m.smoothed
+        audioSignalRaw = m.raw
+        audioSignalProcessed = processor.process(Double(m.smoothed))
+        audioSignalLowpassRaw = Double(m.lowpassRaw)
+        audioSignalLowpassSmoothed = Double(m.lowpassSmoothed)
+        audioSignalLowpassProcessed = processor.process(Double(m.lowpassSmoothed))
+        
+        frameStamp &+= 1
+    }
 }

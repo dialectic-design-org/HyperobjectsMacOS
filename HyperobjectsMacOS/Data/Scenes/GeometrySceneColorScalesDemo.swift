@@ -25,6 +25,18 @@ func generateColorScalesGemoScene() -> GeometriesSceneBase {
                        audioAmplificationMultiplicationRange: 0...5
                       ),
             
+            SceneInput(name: "Length", type: .float,
+                       value: 1.0,
+                       range: 0...10,
+                       audioAmplificationMultiplicationRange: 0...5
+                      ),
+            
+            SceneInput(name: "History delay (ms)", type: .float,
+                       value: 0.0,
+                       range: 0...100,
+                       audioAmplificationMultiplicationRange: 0...5
+                      ),
+            
             SceneInput(name: "Rotation X", type: .float, value: 0.0, range: 0.0...2 * .pi),
             SceneInput(name: "Rotation Y", type: .float, value: 0.0, range: 0.0...2 * .pi),
             SceneInput(name: "Rotation Z", type: .float, value: 0.0, range: 0.0...2 * .pi),

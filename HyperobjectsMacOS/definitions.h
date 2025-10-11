@@ -45,6 +45,7 @@ struct Uniforms {
     
     float blendRadius;
     float blendIntensity;
+    float previousColorVisibility;
 };
 
 

@@ -21,11 +21,11 @@ func generateGeometrySceneSmoothedPath() -> GeometriesSceneBase {
             SceneInput(name:"Line Width End", type: .float, value: 25.0, range: 0.0...200.0),
             
             SceneInput(name:"Points Reset Chance", type: .float, value: 0.0, range: 0.0...1.0),
-            SceneInput(name: "Color start", type: .colorInput, value: Color.red),
-            SceneInput(name: "Color end", type: .colorInput, value: Color.blue),
-            SceneInput(name:"Stateful Rotation X", type: .statefulFloat, tickValueAdjustmentRange: 0.0...0.1),
-            SceneInput(name:"Stateful Rotation Y", type: .statefulFloat, tickValueAdjustmentRange: 0.0...0.1),
-            SceneInput(name:"Stateful Rotation Z", type: .statefulFloat, tickValueAdjustmentRange: 0.0...0.1)
+            SceneInput(name: "Color start", type: .colorInput, inputGroupName: "Shading", value: Color.red),
+            SceneInput(name: "Color end", type: .colorInput, inputGroupName: "Shading", value: Color.blue),
+            SceneInput(name:"Stateful Rotation X", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: 0.0...0.1),
+            SceneInput(name:"Stateful Rotation Y", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: 0.0...0.1),
+            SceneInput(name:"Stateful Rotation Z", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: 0.0...0.1)
         ],
         geometryGenerators: [
             SmoothedPathGenerator()

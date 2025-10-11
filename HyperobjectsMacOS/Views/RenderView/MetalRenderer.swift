@@ -502,7 +502,8 @@ class MetalRenderer {
             lineDebugGradientStartColor: colorToVector(lineDebugGradientStart.color),
             lineDebugGradientEndColor: colorToVector(lineDebugGradientEnd.color),
             blendRadius: renderConfigs?.blendRadius ?? 0.0,
-            blendIntensity: renderConfigs?.blendIntensity ?? 0.0
+            blendIntensity: renderConfigs?.blendIntensity ?? 0.0,
+            previousColorVisibility: renderConfigs?.previousColorVisibility ?? 0.0
         )
         
         let renderPassDescriptor = MTLRenderPassDescriptor()

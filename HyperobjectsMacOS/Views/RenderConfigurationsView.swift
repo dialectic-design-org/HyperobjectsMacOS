@@ -38,6 +38,11 @@ struct RenderConfigurationsView: View {
                     isOn: $renderConfigurations.showOverlay
                 )
                 
+                Toggle(
+                    "Run script on timer",
+                    isOn: $renderConfigurations.runScriptOnFrameChange
+                )
+                
                 Text("Projection mix")
                 Slider(value: $renderConfigurations.projectionMix, in: 0...1.0)
                 
@@ -49,6 +54,9 @@ struct RenderConfigurationsView: View {
                 
                 Text("FOV Division: \(String(format: "%.1f", renderConfigurations.FOVDivision))")
                 Slider(value: $renderConfigurations.FOVDivision, in: 0...10.0)
+                
+                Text("Previous color visibility: \(String(format: "%.2f", renderConfigurations.previousColorVisibility))")
+                Slider(value: $renderConfigurations.previousColorVisibility, in: 0...1.0)
                 
                 
                 Text("Bin visibility")

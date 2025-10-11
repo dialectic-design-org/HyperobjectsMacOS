@@ -23,7 +23,11 @@ class RenderConfigurations: ObservableObject {
     
     @Published var showOverlay: Bool = true
     
+    @Published var runScriptOnFrameChange: Bool = false
+    
     @Published var cameraDistance: Float = 1.7320508075688772
+    
+    @Published var previousColorVisibility: Float = 0.0
     
     @Published var binVisibility: Float = 0.0
     
@@ -51,5 +55,7 @@ class RenderConfigurations: ObservableObject {
     @Published var orthographicProjectionHeight: Float = 2.0
     
     @Published var backgroundColor: ColorInput = ColorInput(initialColor: .black)
+    
+    
 }
 

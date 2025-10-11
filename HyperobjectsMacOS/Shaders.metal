@@ -831,13 +831,12 @@ struct PathFragment {
 
 
 kernel void drawLines(
-    texture2d<half, access::write>      outTex      [[texture(0)]],
+    texture2d<half, access::read_write>      outTex      [[texture(0)]],
     device const LinearSegScreenSpace*  segs        [[buffer(0)]],
     device const atomic_uint*           binCounts   [[buffer(1)]],
     device const uint*                  binOffsets  [[buffer(2)]],
     device const uint*                  binList     [[buffer(3)]],
     constant Uniforms&                  U           [[buffer(4)]],
-                      
     ushort2                             tid         [[thread_position_in_threadgroup]],
     uint2                               gid         [[thread_position_in_grid]]
 ) {
@@ -880,9 +879,9 @@ kernel void drawLines(
         pathFragments[i].depth = FLT_MAX;
     }
     
-    
+    half4 prev = outTex.read(gid);
     float3 final_rgb = U.backgroundColor;
-    
+    final_rgb = final_rgb + float3(prev.rgb) * U.previousColorVisibility;
     
     
     // Path aware fragment collection
