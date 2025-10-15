@@ -14,9 +14,25 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             SceneInput(name: "LineWidth", type: .float, value: 1.0, range: 0.0...40.0),
             
             SceneInput(name: "Size", type: .float, value: 0.5, range: 0.0...2.0),
+            
             SceneInput(name: "Width", type: .float, value: 0.5, range: 0.0...3.0),
+            SceneInput(name: "Width delay", type: .float, value: 0.0, range: 0.0...3.0),
+            
             SceneInput(name: "Height", type: .float, value: 0.5, range: 0.0...3.0),
+            SceneInput(name: "Height delay", type: .float, value: 0.0, range: 0.0...3.0),
+            
             SceneInput(name: "Depth", type: .float, value: 0.5, range: 0.0...3.0),
+            SceneInput(name: "Depth delay", type: .float, value: 0.0, range: 0.0...3.0),
+            
+            SceneInput(name: "Face offset", type: .float, value: 0.0, range: -2.0...2.0),
+            
+            SceneInput(name: "Inner cubes count", type: .integer,
+                       value: 1,
+                       range: 1...100,
+                      ),
+            
+            
+            SceneInput(name: "InnerCubesScaling", type: .float, value: -0.5, range: -3.0...3.0),
             
             SceneInput(name:"Stateful Width", type: .statefulFloat),
             SceneInput(name:"Stateful Height", type: .statefulFloat),

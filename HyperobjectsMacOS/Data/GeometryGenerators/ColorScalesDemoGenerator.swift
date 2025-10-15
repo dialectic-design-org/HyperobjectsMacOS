@@ -30,7 +30,7 @@ class ColorScalesDemoGenerator: CachedGeometryGenerator {
         historyValues.addAbs(1.0, at: CACurrentMediaTime(), monotonic: true);
     }
     
-    override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase?) -> [any Geometry] {
         var lines: [Line] = []
         var startColor = colorFromInputs(inputs, name: "Color start")
         var endColor = colorFromInputs(inputs, name: "Color end")

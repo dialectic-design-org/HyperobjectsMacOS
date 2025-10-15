@@ -13,7 +13,7 @@ var lastTickTime: Float = 0
 
 struct SceneInputsView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
-    @StateObject private var audioMonitor = AudioInputMonitor()
+    @EnvironmentObject var audioMonitor: AudioInputMonitor
     @StateObject private var sigmoidEnvelope = SigmoidEnvelope()
     @StateObject private var freeformEnvelope = FreeformEnvelope()    
     @State private var selectedEnvelopeType: EnvelopeType = .sigmoid

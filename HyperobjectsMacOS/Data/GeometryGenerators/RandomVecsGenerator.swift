@@ -18,7 +18,7 @@ class RandomVecsGenerator: CachedGeometryGenerator {
         )
     }
     
-    override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {
         var lines: [Line] = []
         
         lines.append(

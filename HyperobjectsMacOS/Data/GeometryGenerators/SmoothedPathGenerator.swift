@@ -69,7 +69,7 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
                    ])
     }
     
-    override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {
         
         let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
         let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")

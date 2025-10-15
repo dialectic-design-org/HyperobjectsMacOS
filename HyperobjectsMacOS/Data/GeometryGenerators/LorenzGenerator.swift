@@ -22,7 +22,7 @@ class LorenzGenerator: CachedGeometryGenerator {
     
     
     
-    override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {
         var lines: [Line] = []
         
         // Extract parameters with defaults

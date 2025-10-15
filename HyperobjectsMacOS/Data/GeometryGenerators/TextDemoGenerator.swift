@@ -90,7 +90,7 @@ class TextDemoGenerator: CachedGeometryGenerator {
                    ])
     }
     
-    override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {
         
         let spacing = floatFromInputs(inputs, name: "Spacing")
         let replacementProbability = floatFromInputs(inputs, name: "Replacement probability")

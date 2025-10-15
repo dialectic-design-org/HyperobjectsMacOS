@@ -20,7 +20,7 @@ class CrossGenerator: CachedGeometryGenerator {
                    ])
     }
     
-    override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase?) -> [any Geometry] {
         var lines: [Line] = []
         
         let size = floatFromInputs(inputs, name: "Size")

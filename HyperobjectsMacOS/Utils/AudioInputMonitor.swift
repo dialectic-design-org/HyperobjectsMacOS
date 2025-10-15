@@ -42,37 +42,61 @@ class AudioInputMonitor: ObservableObject {
         sinkNode = AVAudioSinkNode { [weak self] (_, frameCount, audioBufferListPointer) -> OSStatus in
             guard let self = self else { return noErr }
 
-            let mutableABLPointer = UnsafeMutablePointer(mutating: audioBufferListPointer)
-            let ablPointer = UnsafeMutableAudioBufferListPointer(mutableABLPointer)
-
-            guard let firstBuffer = ablPointer.first,
-                  let dataPtr = firstBuffer.mData?.assumingMemoryBound(to: Float.self) else {
+            // Access the interleaved/non-interleaved first channel directly; no copy.
+            let ablPtr = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: audioBufferListPointer))
+            guard let buf = ablPtr.first,
+                  let base = buf.mData?.assumingMemoryBound(to: Float.self) else {
                 return noErr
             }
 
             let count = Int(frameCount)
-            let samples = Array(UnsafeBufferPointer(start: dataPtr, count: count))
 
-            var sum: Float = 0.0
-            vDSP_measqv(samples, 1, &sum, vDSP_Length(count))
-            let rms = sqrt(sum)
-            let avgPower = 20 * log10(rms)
-            let normalizedVolume = min(max((avgPower + 80) / 80, 0), 1)
+            // Compute mean square (vDSP_measqv) then sqrt for RMS, directly on the buffer.
+            var ms: Float = 0
+            vDSP_measqv(base, 1, &ms, vDSP_Length(count))
+            var rms = sqrtf(ms)
 
-            // --- Lowpass filter as one-pole IIR ---
+            // --- FIX 1: guard against silence producing -∞/NaN ---
+            if !rms.isFinite || rms <= 0 {
+                rms = 0
+            }
+
+            // Compute a normalized linear volume robustly.
+            // If you want a "VU" style with dB mapping, keep it but make it safe:
+            var normalizedVolume: Float
+            if rms <= 0 {
+                normalizedVolume = 0
+            } else {
+                //  --- FIX 2: safe dB mapping (avoid -∞) ---
+                // Reference floor at -80 dB, clamp to [0,1].
+                let db = 20 * log10f(max(rms, 1e-12))   // epsilon prevents -∞
+                normalizedVolume = min(max((db + 80) / 80, 0), 1)
+                
+            }
+            
+            if normalizedVolume == 0.0 {
+                normalizedVolume = Float.random(in: 0..<1) / 10000.0
+            }
+
+            // --- One-pole low-pass (per callback), correct dt ---
             let cutoff = max(self.lowpassCutoffFrequency, 1.0)
-            let dt = 1.0 / self.sampleRate
+            let dt = Float(frameCount) / self.sampleRate          // FIX 3: use frameCount
             let rc = 1.0 / (2 * Float.pi * cutoff)
             let alpha = dt / (rc + dt)
 
-            // For metering, lowpass the normalizedVolume, or you could filter the RMS directly.
-            let filtered: Double = self.lastLowpass + Double(alpha) * (Double(normalizedVolume) - self.lastLowpass)
-            self.lastLowpass = filtered
+            var filtered = self.lastLowpass + Double(alpha) * (Double(normalizedVolume) - self.lastLowpass)
 
+            // --- FIX 4: sanitize non-finite state ---
+            if !filtered.isFinite { filtered = 0 }
+            self.lastLowpass = filtered
+            
+
+            // Publish on main.
             DispatchQueue.main.async {
-                self.volume = normalizedVolume
-                self.lowpassVolume = filtered
-                self.updateSmoothedVolume(newVolume: normalizedVolume)
+                // Extra paranoia: sanitize before publishing to UI.
+                self.volume = normalizedVolume.isFinite ? normalizedVolume : 0
+                self.lowpassVolume = filtered.isFinite ? filtered : 0
+                self.updateSmoothedVolume(newVolume: self.volume) // uses finite value only
             }
 
             return noErr

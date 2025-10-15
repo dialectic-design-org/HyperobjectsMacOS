@@ -8,13 +8,30 @@
 import Foundation
 import SwiftUI
 import AppKit
+import QuartzCore
 
 final class SceneInput: ObservableObject, Identifiable, Equatable {
     var id: UUID = UUID()
     var name: String
     var type: InputType
     var inputGroupName: String?
-    var value: Any
+    
+    private struct HistoryEntry {
+        let t: CFTimeInterval
+        let value: Any
+    }
+    
+    private var history: [HistoryEntry] = []
+    private let historyWindow: CFTimeInterval = 30.0
+    
+    
+    var value: Any {
+        didSet {
+            if SceneInput.valueKey(oldValue) != SceneInput.valueKey(value) {
+                recordValueChange()
+            }
+        }
+    }
     var audioDelay: Float = 0.0
     var presetValues: [String: Any] = [:]
     var range: ClosedRange<Float> = 0...1
@@ -33,6 +50,27 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
     var tickValueAudioAdjustmentOffset: Double = 0.0
     var tickValueAudioAdjustmentOffsetRange: ClosedRange<Double> = -1...1
     
+    private enum ValueKey: Equatable {
+        case num(Float), bool(Bool), str(String)
+        case color(r: Float, g: Float, b: Float, a: Float)
+        case none
+    }
+    
+    private static func valueKey(_ any: Any) -> ValueKey {
+        switch any {
+        case let v as Float: return .num(v)
+        case let v as Double: return .num(Float(v))
+        case let v as Int: return .num(Float(v))
+        case let v as Bool: return .bool(v)
+        case let v as String: return .str(v)
+        case let v as Color: let ns = NSColor(v).usingColorSpace(.sRGB) ?? NSColor.black
+            return .color(r: Float(ns.redComponent), g: Float(ns.greenComponent), b: Float(ns.blueComponent), a: Float(ns.alphaComponent))
+        default:
+            return .str(String(describing: any))
+        }
+    }
+    
+    
     static func == (l: SceneInput, r: SceneInput) -> Bool {
         l.id == r.id &&
         l.name == r.name &&
@@ -49,31 +87,6 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
         SceneInput.valueKey(l.value) == SceneInput.valueKey(r.value)
     }
     
-    // Normalize `Any` to a lightweight comparable key
-    private enum ValueKey: Equatable {
-        case num(Float), bool(Bool), str(String)
-        case color(r: Float, g: Float, b: Float, a: Float)
-        case none
-    }
-    
-    private static func valueKey(_ any: Any) -> ValueKey {
-        switch any {
-        case let v as Float:  return .num(v)
-        case let v as Double: return .num(Float(v))
-        case let v as Int:    return .num(Float(v))
-        case let v as Bool:   return .bool(v)
-        case let v as String: return .str(v)
-        case let v as Color:
-            let ns = NSColor(v).usingColorSpace(.sRGB) ?? NSColor.black
-            return .color(r: Float(ns.redComponent),
-                          g: Float(ns.greenComponent),
-                          b: Float(ns.blueComponent),
-                          a: Float(ns.alphaComponent))
-        default:
-            return .str(String(describing: any)) // safe fallback
-        }
-    }
-
     
     
     init(name: String,
@@ -114,7 +127,62 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
         self.tickValueAudioAdjustment = tickValueAudioAdjustment
         self.tickValueAudioAdjustmentRange = tickValueAudioAdjustmentRange
         self.tickValueAudioAdjustmentOffset = tickValueAudioAdjustmentOffset
+        
+        recordValueChange(force: true)
     }
+    
+    func getHistoryValue(millisecondsAgo ms: Double) -> Any {
+        let target = CACurrentMediaTime() - (ms / 1000.0)
+        guard let idx = indexOfClosestTimestamp(to: target) else {
+            return value
+        }
+        return history[idx].value
+    }
+    
+    private func recordValueChange(force: Bool = false) {
+        let t = CACurrentMediaTime()
+        if !force, let last = history.last, SceneInput.valueKey(last.value) == SceneInput.valueKey(value) {
+            return
+        }
+        history.append(HistoryEntry(t: t, value: value))
+        trimHistory(olderThan: t - historyWindow)
+    }
+    
+    func addValueChange(value: Any) {
+        let t = CACurrentMediaTime()
+        history.append(HistoryEntry(t: t, value: value))
+    }
+    
+    private func trimHistory(olderThan cutoff: TimeInterval) {
+        if let firstKeep = history.firstIndex(where: { $0.t >= cutoff }) {
+            if firstKeep > 0 { history.removeFirst(firstKeep) }
+        } else {
+            history.removeAll(keepingCapacity: true)
+        }
+    }
+    
+    private func indexOfClosestTimestamp(to target: CFTimeInterval) -> Int? {
+        guard !history.isEmpty else { return nil }
+        
+        var lo = 0
+        var hi = history.count
+        while lo < hi {
+            let mid = (lo + hi) >> 1
+            if history[mid].t < target {
+                lo = mid + 1
+            } else {
+                hi = mid
+            }
+        }
+        
+        if lo == 0 { return 0 }
+        if lo == history.count { return history.count - 1 }
+        
+        let prev = history[lo - 1].t
+        let next = history[lo].t
+        return (target - prev) <= (next - target) ? (lo - 1) : lo
+    }
+    
     
     func valueAsFloat() -> Float {
         if self.value is Float {

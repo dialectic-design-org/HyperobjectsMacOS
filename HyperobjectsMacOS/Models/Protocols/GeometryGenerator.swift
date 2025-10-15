@@ -13,6 +13,6 @@ protocol GeometryGenerator: Identifiable, ObservableObject {
     var inputDependencies: [String] { get }
     var pythonCode: String { get set }
     
-    func generateGeometries(inputs: [String: Any], overrideCache: Bool) -> [any Geometry]
+    func generateGeometries(inputs: [String: Any], overrideCache: Bool, withScene: GeometriesSceneBase) -> [any Geometry]
     func needsRecalculation(changedInputs: Set<String>) -> Bool
 }

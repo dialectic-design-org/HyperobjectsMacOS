@@ -111,7 +111,9 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
             if input.type == .float {
                 // Get historic audio value from historyData based on audioDelay
                 let historicAudioSignal = extractHistoricAudioValue(for: input)
-                return (input.name, input.combinedValueAsFloat(audioSignal: Float(historicAudioSignal)))
+                let combinedValueAsFloat = input.combinedValueAsFloat(audioSignal: Float(historicAudioSignal))
+                input.addValueChange(value: combinedValueAsFloat)
+                return (input.name, combinedValueAsFloat)
             } else if input.type == .colorInput {
                 return (input.name, input.value)
             } else {
@@ -121,9 +123,9 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
 
         let geometries = geometryGenerators.flatMap { generator in
             if generator.needsRecalculation(changedInputs: changedInputs) {
-                return generator.generateGeometries(inputs: inputDict, overrideCache: true)
+                return generator.generateGeometries(inputs: inputDict, overrideCache: true, withScene: self)
             } else if let cachedGenerator = generator as? CachedGeometryGenerator {
-                return cachedGenerator.generateGeometries(inputs: inputDict, overrideCache: false)
+                return cachedGenerator.generateGeometries(inputs: inputDict, overrideCache: false, withScene: self)
             }
             return []
         }
@@ -143,7 +145,8 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         
         for (index, input) in inputs.enumerated() where input.type == .float {
             // Only update if the value actually changed significantly
-            if abs(input.valueAsFloat() - audioValue) > 0.001 {
+            // if abs(input.valueAsFloat() - audioValue) > 0.001 {
+            if true {
                 changedInputNames.append(input.name)
             }
         }
@@ -177,6 +180,13 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         if !changedInputs.contains(name) {
             changedInputs.insert(name)
         }
+    }
+    
+    func getInputWithName(name: String) -> SceneInput {
+        guard let input = inputs.first(where: { $0.name == name }) else {
+            fatalError("SceneInput named \(name) not found in inputs.")
+        }
+        return input
     }
     
     

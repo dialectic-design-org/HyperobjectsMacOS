@@ -28,7 +28,7 @@ class LineGenerator: CachedGeometryGenerator {
                    ])
     }
     
-    override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {
         var lines: [Line] = []
         
         let length = floatFromInputs(inputs, name: "Length")

@@ -29,7 +29,7 @@ class ThreeBodyGenerator: CachedGeometryGenerator {
         inputDependencies: ["Trail length", "Fading"])
     }
     
-    override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {
         var lines: [Line] = [
             Line(
                 startPoint: .zero,

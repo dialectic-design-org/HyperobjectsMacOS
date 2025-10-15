@@ -14,7 +14,7 @@ class CircleGenerator: CachedGeometryGenerator {
         super.init(name: "Circle Generator", inputDependencies: ["Radius", "Segments"])
     }
     
-    override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase?) -> [any Geometry] {
         var lines: [Line] = []
         
         let segmentsCount: Int = intFromInputs(inputs, name: "Segments count")// 128 // 512

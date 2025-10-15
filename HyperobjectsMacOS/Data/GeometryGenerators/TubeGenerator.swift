@@ -23,7 +23,7 @@ class TubeGenerator: CachedGeometryGenerator {
         )
     }
     
-    override func generateGeometriesFromInputs(inputs: [String : Any]) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase?) -> [any Geometry] {
         var lines: [Line] = []
         
         lines.append(

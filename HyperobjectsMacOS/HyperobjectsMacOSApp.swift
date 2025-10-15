@@ -13,6 +13,7 @@ struct HyperobjectsMacOSApp: App {
     @StateObject private var renderConfigurations = RenderConfigurations()
     @StateObject private var jsEngine = JSEngineManager()
     @StateObject private var fileMonitor = FileMonitor()
+    @StateObject private var audioMonitor = AudioInputMonitor()
     @State private var selectedFile: URL?
     @State private var isFilePickerPresented = false
     @State private var appTime: Double = 0
@@ -77,10 +78,10 @@ struct HyperobjectsMacOSApp: App {
                                 switch (inVal.value, outVal.value) {
                                 case (.float(let a), .float(let b)):
                                     if abs(Double(a) - Double(b)) > epsilon {
-                                        print("[State Change] \(key): \(a) -> \(b)")
+                                        // print("[State Change] \(key): \(a) -> \(b)")
                                         // Update the matching input safely by name, avoiding optional-call and enum ambiguity
                                         if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
-                                            print("updating input value for \(key)")
+                                            // print("updating input value for \(key)")
                                             input.value = Double(b)
                                         }
                                     }
@@ -95,54 +96,53 @@ struct HyperobjectsMacOSApp: App {
                     
                     
                     if timer == nil {
-                        let newTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { _ in
-                            appTime += 1.0 / 120.0
-                            timeBox.value = appTime
-                            if renderConfigurations.runScriptOnFrameChange && latestScript.isEmpty == false {
-                                var inputState: [String: StateValue] = [
-                                    "time": StateValue(value: .float(timeBox.value)),
-                                    "width": StateValue(value: .float(800.0)),
-                                    "height": StateValue(value: .float(600.0))
-                                ]
-                                let currentSceneInputs = sceneManager.currentScene.inputs
-                                for input in currentSceneInputs {
-                                    inputState[input.name] = input.toStateValue()
-                                }
-                                _ = jsEngine.executeScript(latestScript, inputState: inputState)
-                                
-                                DispatchQueue.main.async {
-                                    let outputState = jsEngine.outputState
-                                    // print("output state: \(outputState)")
-                                    
-                                    // Compare outputState to inputState and print changes only (no scene mutation yet)
-                                    let epsilon: Double = 1e-6
-                                    for (key, outVal) in outputState {
-                                        // print("Evaluating \(key)")
-                                        guard let inVal = inputState[key] else {
-                                            // print("[State Change] New key in output not present in input: \(key) => \(outVal)")
-                                            continue
-                                        }
-                                        switch (inVal.value, outVal.value) {
-                                        case (.float(let a), .float(let b)):
-                                            if abs(Double(a) - Double(b)) > epsilon {
-                                                print("[State Change] \(key): \(a) -> \(b)")
-                                                // Update the matching input safely by name, avoiding optional-call and enum ambiguity
-                                                if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
-                                                    print("updating input value for \(key)")
-                                                    input.value = Double(b)
-                                                }
-                                            }
-                                        default:
-                                            // Different types or unhandled types
-                                            print("[State Change] Type or value changed for key \(key): \(inVal) -> \(outVal)")
-                                        }
-                                    }
-                                }
-                            }
-                            
-                        }
-                        RunLoop.current.add(newTimer, forMode: .common)
-                        timer = newTimer
+//                        let newTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { _ in
+//                            appTime += 1.0 / 120.0
+//                            timeBox.value = appTime
+//                            if renderConfigurations.runScriptOnFrameChange && latestScript.isEmpty == false {
+//                                var inputState: [String: StateValue] = [
+//                                    "time": StateValue(value: .float(timeBox.value)),
+//                                    "width": StateValue(value: .float(800.0)),
+//                                    "height": StateValue(value: .float(600.0))
+//                                ]
+//                                let currentSceneInputs = sceneManager.currentScene.inputs
+//                                for input in currentSceneInputs {
+//                                    inputState[input.name] = input.toStateValue()
+//                                }
+//                                _ = jsEngine.executeScript(latestScript, inputState: inputState)
+//                                
+//                                DispatchQueue.main.async {
+//                                    let outputState = jsEngine.outputState
+//                                    // print("output state: \(outputState)")
+//                                    
+//                                    // Compare outputState to inputState and print changes only (no scene mutation yet)
+//                                    let epsilon: Double = 1e-6
+//                                    for (key, outVal) in outputState {
+//                                        // print("Evaluating \(key)")
+//                                        guard let inVal = inputState[key] else {
+//                                            // print("[State Change] New key in output not present in input: \(key) => \(outVal)")
+//                                            continue
+//                                        }
+//                                        switch (inVal.value, outVal.value) {
+//                                        case (.float(let a), .float(let b)):
+//                                            if abs(Double(a) - Double(b)) > epsilon {
+//                                                print("[State Change] \(key): \(a) -> \(b)")
+//                                                // Update the matching input safely by name, avoiding optional-call and enum ambiguity
+//                                                if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
+//                                                    print("updating input value for \(key)")
+//                                                    input.value = Double(b)
+//                                                }
+//                                            }
+//                                        default:
+//                                            // Different types or unhandled types
+//                                            print("[State Change] Type or value changed for key \(key): \(inVal) -> \(outVal)")
+//                                        }
+//                                    }
+//                                }
+//                            }
+//                        }
+//                        RunLoop.current.add(newTimer, forMode: .common)
+//                        timer = newTimer
                     }
                     
                     sceneManager.currentScene.setWrappedGeometries()
@@ -169,6 +169,7 @@ struct HyperobjectsMacOSApp: App {
             sceneInputsWindowConfig.content.environmentObject(sceneManager.currentScene)
                 .environmentObject(jsEngine)
                 .environmentObject(fileMonitor)
+                .environmentObject(audioMonitor)
         }
 
         Window("\(renderConfigurationsWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: renderConfigurationsWindowConfig.id) {

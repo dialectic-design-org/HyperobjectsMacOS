@@ -31,6 +31,17 @@ func floatFromInputs(_ inputs: [String: Any], name: String) -> Float {
     }
 }
 
+func ensureValueIsFloat(_ inputValue: Any) -> Float {
+    if let inputValue: Double = inputValue as? Double {
+        return Float(inputValue)
+    } else if let inputValue: Float = inputValue as? Float {
+        return inputValue
+    } else {
+        return Float(0.0)
+    }
+}
+
+
 func intFromInputs(_ inputs: [String: Any], name: String) -> Int {
     if let inputValue: Int = inputs[name] as? Int {
         return inputValue

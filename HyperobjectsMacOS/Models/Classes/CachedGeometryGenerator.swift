@@ -22,18 +22,18 @@ class CachedGeometryGenerator: GeometryGenerator {
         self.pythonCode = pythonCode
     }
     
-    func generateGeometries(inputs: [String: Any], overrideCache: Bool = false) -> [any Geometry] {
+    func generateGeometries(inputs: [String: Any], overrideCache: Bool = false, withScene: GeometriesSceneBase) -> [any Geometry] {
         if let cached = cachedGeometries {
             if overrideCache == false {
                 return cached
             } else {
             }
         }
-        cachedGeometries = generateGeometriesFromInputs(inputs: inputs)
+        cachedGeometries = generateGeometriesFromInputs(inputs: inputs, withScene: withScene)
         return cachedGeometries ?? []
     }
     
-    func generateGeometriesFromInputs(inputs: [String: Any]) -> [any Geometry] {
+    func generateGeometriesFromInputs(inputs: [String: Any], withScene: GeometriesSceneBase) -> [any Geometry] {
         fatalError("generateGeometriesFromInputs must be implemented by subclasses")
     }
     
