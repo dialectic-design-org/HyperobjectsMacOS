@@ -18,6 +18,13 @@ class CubeGenerator: CachedGeometryGenerator {
         
         
         let lineWidth = floatFromInputs(inputs, name: "LineWidth")
+        
+        let startColor = colorFromInputs(inputs, name: "Color start")
+        let endColor = colorFromInputs(inputs, name: "Color end")
+        let colorScale = ColorScale(colors: [startColor, endColor], mode: .hsl)
+
+        
+        
         let size = floatFromInputs(inputs, name: "Size")
         let width = floatFromInputs(inputs, name: "Width")
         let height = floatFromInputs(inputs, name: "Height")
@@ -131,25 +138,22 @@ class CubeGenerator: CachedGeometryGenerator {
             let scalingMatrix = matrix_scale(scale: SIMD3<Float>(repeating: 1.0))
             let combinedMatrix = scalingMatrix * secondCubeRotation * secondCubeRotationY
             
+            
+            
             for i in 0..<secondCube.count {
                 secondCube[i] = secondCube[i].applyMatrix(combinedMatrix)
                 secondCube[i].lineWidthStart = delayedLineWidthFloat
                 secondCube[i].lineWidthEnd = delayedLineWidthFloat
+                
+                secondCube[i] = secondCube[i].setBasicEndPointColors(
+                    startColor: colorScale.color(at: Double(cubeTime)).toSIMD4(),
+                    endColor: colorScale.color(at: Double(cubeTime)).toSIMD4()
+                )
             }
             
             lines += secondCube
         }
         
-        
-        
-        
-        
-        
-        
-        for i in 0..<lines.count {
-//            lines[i].lineWidthStart = lineWidth
-//            lines[i].lineWidthEnd = lineWidth
-        }
         
         return lines
     }
@@ -158,7 +162,8 @@ class CubeGenerator: CachedGeometryGenerator {
 
 func makeCube(size: Float = 1.0, offset: Float = 0.0) -> [Line] {
     var cubeLines: [Line] = []
-
+    
+    
     if offset == 0.0 {
         // Standard cube: draw front/back perimeters and vertical connecting edges
         // Front (z = -size)
