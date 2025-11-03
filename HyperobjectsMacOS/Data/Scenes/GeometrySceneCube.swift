@@ -47,10 +47,11 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             SceneInput(name:"Stateful Rotation X", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: 0.0...0.1),
             SceneInput(name:"Stateful Rotation Y", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: 0.0...0.1),
             SceneInput(name:"Stateful Rotation Z", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: 0.0...0.1),
-            
+                        
             
             SceneInput(name: "Color start", type: .colorInput, inputGroupName: "Shading", value: Color.white),
             SceneInput(name: "Color end", type: .colorInput, inputGroupName: "Shading", value: Color.white),
+            SceneInput(name: "Stateful Color Shift", type: .statefulFloat, inputGroupName: "Shading", tickValueAdjustmentRange: 0.0...0.1),
         ],
         geometryGenerators: [
             CubeGenerator()

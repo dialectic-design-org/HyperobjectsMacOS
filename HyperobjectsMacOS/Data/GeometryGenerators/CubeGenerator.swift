@@ -63,6 +63,8 @@ class CubeGenerator: CachedGeometryGenerator {
         let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
         let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
         
+        let statefulColorShift = floatFromInputs(inputs, name: "Stateful Color Shift")
+        
         lines = []
         
         let cubeCounts: Int = innerCubesCount
@@ -138,16 +140,20 @@ class CubeGenerator: CachedGeometryGenerator {
             let scalingMatrix = matrix_scale(scale: SIMD3<Float>(repeating: 1.0))
             let combinedMatrix = scalingMatrix * secondCubeRotation * secondCubeRotationY
             
-            
+            let colorTime = (Double(cubeTime) + Double(statefulColorShift)).truncatingRemainder(dividingBy: 1.0)
             
             for i in 0..<secondCube.count {
                 secondCube[i] = secondCube[i].applyMatrix(combinedMatrix)
                 secondCube[i].lineWidthStart = delayedLineWidthFloat
                 secondCube[i].lineWidthEnd = delayedLineWidthFloat
                 
+//                secondCube[i] = secondCube[i].setBasicEndPointColors(
+//                    startColor: colorScale.color(at: Double(cubeTime)).toSIMD4(),
+//                    endColor: colorScale.color(at: Double(cubeTime)).toSIMD4()
+//                )
                 secondCube[i] = secondCube[i].setBasicEndPointColors(
-                    startColor: colorScale.color(at: Double(cubeTime)).toSIMD4(),
-                    endColor: colorScale.color(at: Double(cubeTime)).toSIMD4()
+                    startColor: colorScale.color(at: Double(colorTime)).toSIMD4(),
+                    endColor: colorScale.color(at: Double(colorTime)).toSIMD4()
                 )
             }
             
