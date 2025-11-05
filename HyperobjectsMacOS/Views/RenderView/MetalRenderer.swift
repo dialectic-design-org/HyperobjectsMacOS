@@ -395,6 +395,16 @@ class MetalRenderer {
             gIndex += 1
         }
         
+        if (testPoints.count == 0) {
+            print("TEST POINTS IS ZERO!")
+            // Temporarily set to ensure buffer isn't empty
+            testPoints = [
+                SIMD3<Float>(0.0, 0.0, 0.0),
+                SIMD3<Float>(-0.1, 0.0, 0.0),
+                SIMD3<Float>(-0.05, 0.1, 0.0)
+            ]
+        }
+        
         let viewW = Int(drawable.texture.width)
         let viewH = Int(drawable.texture.height)
         

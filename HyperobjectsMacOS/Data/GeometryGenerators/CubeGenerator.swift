@@ -48,6 +48,7 @@ class CubeGenerator: CachedGeometryGenerator {
         let rotationXInput = scene.getInputWithName(name: "Rotation X")
         let rotationYInput = scene.getInputWithName(name: "Rotation Y")
         let lineWidthInput = scene.getInputWithName(name: "LineWidth")
+        let lineWidthInputDelay = scene.getInputWithName(name: "LineWidth delay")
         
         let widthInput = scene.getInputWithName(name: "Width")
         let widthInputDelay = scene.getInputWithName(name: "Width delay")
@@ -76,7 +77,8 @@ class CubeGenerator: CachedGeometryGenerator {
             
             let delayedRotation = rotationXInput.getHistoryValue(millisecondsAgo: 500 * Double(cubeTime))
             let delayedRotationY = rotationYInput.getHistoryValue(millisecondsAgo: 500 * Double(1.0 - cubeTime))
-            let delayedLineWidth = lineWidthInput.getHistoryValue(millisecondsAgo: 500 * Double(cubeTime))
+            let lineWidthDelayFloat: Float = ensureValueIsFloat(lineWidthInputDelay.getHistoryValue(millisecondsAgo: 0))
+            let delayedLineWidth = lineWidthInput.getHistoryValue(millisecondsAgo: Double(lineWidthDelayFloat) * Double(cubeTime) * 1000)
             
             let delayedWidthDelay = widthInputDelay.getHistoryValue(millisecondsAgo: 0)
             let widthDelayFloat: Float = ensureValueIsFloat(delayedWidthDelay)
