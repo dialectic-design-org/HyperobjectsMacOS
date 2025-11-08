@@ -56,6 +56,7 @@ struct LinearSeg3D {
     float halfWidthStartPx;
     float halfWidthEndPx;
     float aaPx;
+    float noiseFloor;
     
     vector_float4 colorStartLeft;
     vector_float4 colorStartCenter;
@@ -71,6 +72,7 @@ struct LinearSeg3D {
     
     vector_float2 transEndLeft;
     vector_float2 transEndRight;
+    
 };
 
 struct QuadraticSeg3D {
@@ -81,6 +83,7 @@ struct QuadraticSeg3D {
     float halfWidthStartPx;
     float halfWidthEndPx;
     float aaPx;
+    float noiseFloor;
     
     vector_float4 colorStartCenter;
     vector_float4 colorEndCenter;
@@ -95,6 +98,7 @@ struct CubicSeg3D {
     float halfWidthStartPx;
     float halfWidthEndPx;
     float aaPx;
+    float noiseFloor;
     
     vector_float4 colorStartCenter;
     vector_float4 colorEndCenter;
@@ -106,6 +110,7 @@ struct LinearSegScreenSpace {
     float halfWidthStartPx;
     float halfWidthEndPx;
     float aaPx;
+    float noiseFloor;
     
     vector_float2 bboxMinSS;
     vector_float2 bboxMaxSS;

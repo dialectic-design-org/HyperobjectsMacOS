@@ -41,6 +41,7 @@ struct Line: Geometry {
     
     var lineWidthStart: Float = 0.6
     var lineWidthEnd: Float = 0.6
+    var noiseFloor: Float = 1.0
     
     init(startPoint: SIMD3<Float>,
          endPoint: SIMD3<Float>,
@@ -57,7 +58,8 @@ struct Line: Geometry {
          sigmoidSteepness1: Float = 6.0,
          sigmoidMidpoint1: Float = 0.5,
          lineWidthStart: Float = 0.6,
-         lineWidthEnd: Float = 0.6) {
+         lineWidthEnd: Float = 0.6,
+         noiseFloor: Float = 1.0) {
         self.pathID = idIncrement
         self.startPoint = startPoint
         self.endPoint = endPoint
@@ -75,6 +77,7 @@ struct Line: Geometry {
         self.sigmoidMidpoint1 = sigmoidMidpoint1
         self.lineWidthStart = lineWidthStart
         self.lineWidthEnd = lineWidthEnd
+        self.noiseFloor = noiseFloor
         
         idIncrement += 1
     }

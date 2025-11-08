@@ -44,6 +44,37 @@ private let BIN_SIZE: UInt32 = 1 << BIN_POW
 private let lineCount: UInt32 = 10000
 
 
+// ADD: helper to compute a legal, efficient threadsPerThreadgroup for this pipeline
+private func safeThreadsPerThreadgroup(_ pso: MTLComputePipelineState,
+                                       preferred: MTLSize = MTLSize(width: 32, height: 32, depth: 1)) -> MTLSize {
+    // Keep width a multiple of SIMD width for best occupancy.
+    var w = max(1, pso.threadExecutionWidth)
+    var maxTotal = max(1, pso.maxTotalThreadsPerThreadgroup) // e.g. 896 for your kernel
+
+    // If the kernel is so heavy that maxTotal < threadExecutionWidth, clamp width to maxTotal.
+    if maxTotal < w { w = maxTotal }
+
+    // Start from preferred height but clamp to what fits under the cap.
+    let hCap = max(1, maxTotal / w)                // maximum legal height for chosen width
+    var h = min(preferred.height, hCap)
+
+    // Also respect per-dimension limits that some GPUs enforce (defensive).
+    let perDimLimit = 1024                         // safe conservative cap per axis on Apple GPUs
+    w = min(w, perDimLimit)
+    h = min(h, perDimLimit)
+
+    // If preferred width was smaller than SIMD width (unlikely), lift it to SIMD width.
+    var width = max(w, preferred.width - (preferred.width % w == 0 ? 0 : preferred.width % w))
+    if width == 0 { width = w }                    // ensure non-zero and multiple of SIMD width
+
+    // Ensure total threads <= cap; reduce height if needed.
+    while width * h > maxTotal && h > 1 { h -= 1 }
+    if h < 1 { h = 1 }                             // final guard
+
+    return MTLSize(width: width, height: h, depth: 1)
+}
+
+
 class MetalRenderer {
     let device: MTLDevice
     let commandQueue: MTLCommandQueue
@@ -68,11 +99,14 @@ class MetalRenderer {
     private var cubicCurvesBuffer: MTLBuffer!
     
     private var linearLinesScreenSpaceBuffer: MTLBuffer!
+    private var randomValuesBuffer: MTLBuffer!
     
     private var binCounts: MTLBuffer!
     private var binOffsets: MTLBuffer!
     private var binList: MTLBuffer!
     private var segAllocBuffer: MTLBuffer!
+    
+    
     
     private var currentTextureWidth: Int = 0
     private var currentTextureHeight: Int = 0
@@ -161,6 +195,8 @@ class MetalRenderer {
         binCounts = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
         binOffsets = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
         binList = device.makeBuffer(length: MemoryLayout<UInt32>.stride * Int(lineCount) * totalBins, options: .storageModeShared)!
+        
+        randomValuesBuffer = device.makeBuffer(length:MemoryLayout<SIMD4<Float>>.stride * Int(1000), options: .storageModeShared)!
         
         // TODO: IMPLEMENT DYNAMIC CAPACITY ALLOCATION!
         
@@ -307,6 +343,8 @@ class MetalRenderer {
         
         let cubicCurvesPtr = cubicCurvesBuffer.contents().bindMemory(to: CubicSeg3D.self, capacity: Int(lineCount))
         
+        let randomValuesPtr = randomValuesBuffer.contents().bindMemory(to: SIMD4<Float>.self, capacity: Int(1000))
+        
         // Wipe all lines in the buffer so new ones can be set.
         let byteCount = linesBuffer.length
         memset(linesBuffer.contents(), 0, byteCount)
@@ -361,8 +399,9 @@ class MetalRenderer {
                             halfWidthStartPx: lineGeometry.lineWidthStart,
                             halfWidthEndPx: lineGeometry.lineWidthEnd,
                             aaPx: 0.707,
+                            noiseFloor: lineGeometry.noiseFloor,
                             colorStartCenter: lineGeometry.colorStart,
-                            colorEndCenter: lineGeometry.colorEnd
+                            colorEndCenter: lineGeometry.colorEnd,
                         )
                         
                         quadraticLinesIndex += 1
@@ -380,8 +419,9 @@ class MetalRenderer {
                             halfWidthStartPx: lineGeometry.lineWidthStart,
                             halfWidthEndPx: lineGeometry.lineWidthEnd,
                             aaPx: 0.707,
+                            noiseFloor: lineGeometry.noiseFloor,
                             colorStartCenter: lineGeometry.colorStart,
-                            colorEndCenter: lineGeometry.colorEnd
+                            colorEndCenter: lineGeometry.colorEnd,
                         )
                         
                         cubicLinesIndex += 1
@@ -413,6 +453,7 @@ class MetalRenderer {
             currentTextureWidth = viewW
             currentTextureHeight = viewH
         }
+        
         
         // Clear binning data
         let binCols = (viewW + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
@@ -499,6 +540,15 @@ class MetalRenderer {
         
         let binDepthSource = renderConfigs?.binDepth ?? 16
         
+        
+        for i in 0..<1000 {
+            let r = {
+                Float(arc4random_uniform(10000)) / 10000.0
+            }
+            // randomVecs = vector_float4(r(), r(), r(), r())
+            randomValuesPtr[i] = SIMD4<Float>(r(), r(), r(), r())
+        }
+        
         var uniforms: Uniforms = Uniforms(
             viewWidth: Int32(viewW),
             viewHeight: Int32(viewH),
@@ -544,7 +594,8 @@ class MetalRenderer {
                 transformLinearEncoder.setBuffer(binOffsets,    offset:0, index:5)
                 transformLinearEncoder.setBuffer(binList,       offset:0, index:6)
                 transformLinearEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
-                transformLinearEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8);
+                transformLinearEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8)
+                transformLinearEncoder.setBuffer(randomValuesBuffer, offset: 0, index: 9)
                 
                 let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
                                  height: 1,
@@ -565,7 +616,8 @@ class MetalRenderer {
                 transformQuadraticEncoder.setBuffer(binOffsets,    offset:0, index:5)
                 transformQuadraticEncoder.setBuffer(binList,       offset:0, index:6)
                 transformQuadraticEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
-                transformQuadraticEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8);
+                transformQuadraticEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8)
+                transformQuadraticEncoder.setBuffer(randomValuesBuffer, offset: 0, index: 9)
                 
                 let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
                                  height: 1,
@@ -586,7 +638,8 @@ class MetalRenderer {
                 transformCubicEncoder.setBuffer(binOffsets,    offset:0, index:5)
                 transformCubicEncoder.setBuffer(binList,       offset:0, index:6)
                 transformCubicEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
-                transformCubicEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8);
+                transformCubicEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8)
+                transformCubicEncoder.setBuffer(randomValuesBuffer, offset: 0, index: 9)
                 
                 let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
                                  height: 1,
@@ -608,6 +661,7 @@ class MetalRenderer {
                 drawLinesEncoder.setBuffer(binOffsets,    offset:0, index:2)
                 drawLinesEncoder.setBuffer(binList,       offset:0, index:3)
                 drawLinesEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:4)
+                drawLinesEncoder.setBuffer(randomValuesBuffer, offset: 0, index: 5)
                 
                 let w  = renderPSO!.threadExecutionWidth
                 let h  = renderPSO!.maxTotalThreadsPerThreadgroup / w
@@ -616,8 +670,11 @@ class MetalRenderer {
                 
                 let tgsDrawLines = MTLSize(width: Int(BIN_SIZE), height: Int(BIN_SIZE), depth: 1)
                 
-                drawLinesEncoder.dispatchThreads(MTLSize(width: viewW, height: viewH, depth: 1),
-                                                 threadsPerThreadgroup: tgsDrawLines)
+                let tptg = safeThreadsPerThreadgroup(renderPSO!, preferred: MTLSize(width: 32, height: 32, depth: 1))
+
+                
+                // drawLinesEncoder.dispatchThreads(MTLSize(width: viewW, height: viewH, depth: 1), threadsPerThreadgroup: tgsDrawLines)
+                drawLinesEncoder.dispatchThreads(MTLSize(width: viewW, height: viewH, depth: 1), threadsPerThreadgroup: tptg)
                 drawLinesEncoder.endEncoding()
             }
         }

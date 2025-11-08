@@ -15,6 +15,7 @@ class LineGenerator: CachedGeometryGenerator {
                    inputDependencies: [
                     "Length",
                     "Rotation",
+                    "NoiseFloor",
                     "Start line width",
                     "End line width",
                     
@@ -33,6 +34,8 @@ class LineGenerator: CachedGeometryGenerator {
         
         let length = floatFromInputs(inputs, name: "Length")
         let rotation = floatFromInputs(inputs, name: "Rotation")
+        
+        let noiseFloor = floatFromInputs(inputs, name: "NoiseFloor")
         
         let startLineWidth = floatFromInputs(inputs, name: "Start line width")
         let endLineWidth = floatFromInputs(inputs, name: "End line width")
@@ -67,6 +70,7 @@ class LineGenerator: CachedGeometryGenerator {
             
             lineWidthStart: startLineWidth,
             lineWidthEnd: endLineWidth,
+            noiseFloor: noiseFloor
         ))
         
         return lines

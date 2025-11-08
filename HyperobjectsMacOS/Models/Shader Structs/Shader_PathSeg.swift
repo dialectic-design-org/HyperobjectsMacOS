@@ -40,6 +40,7 @@ func createShaderLinearSeg(
         halfWidthStartPx: p0_width,
         halfWidthEndPx: p1_width,
         aaPx: 0.707,
+        noiseFloor: line.noiseFloor,
         colorStartLeft: colorStartCenter,
         colorStartCenter: colorStartCenter,
         colorStartRight: colorStartCenter,

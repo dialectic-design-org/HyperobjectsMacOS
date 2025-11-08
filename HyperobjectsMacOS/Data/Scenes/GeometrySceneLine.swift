@@ -23,6 +23,11 @@ func generateGeometrySceneLine() -> GeometriesSceneBase {
                        range: 0...2,
                        audioAmplificationMultiplicationRange: 0...5
                       ),
+            SceneInput(name: "NoiseFloor", type: .float,
+                       value: 0.0,
+                       range: -1.0...1.0,
+                       audioAmplificationMultiplicationRange: -1.0...1.0
+                      ),
             
             SceneInput(name: "Start line width", type: .float, inputGroupName: "P1 style", value: 5.0, range: 0...800),
             SceneInput(name: "End line width", type: .float, inputGroupName: "P2 style", value: 5.0, range: 0...800),

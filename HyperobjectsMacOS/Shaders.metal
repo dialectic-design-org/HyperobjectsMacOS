@@ -335,7 +335,48 @@ static inline bool diskIntersectsAABB(float2 c, float r, float x0, float y0, flo
     return (dx*dx + dy*dy) <= (r*r);
 }
 
+inline float bellRemapPower(float u, float k) {
+    float s = smoothstep(0.0, 1.0, u);
+    s = pow(s, k);
+    return s * 2.0 - 1.0;
+}
 
+inline uint hashCombine(uint a, uint b) {
+    a ^= b + 0x9e3779b9u + (a<<6) + (a>>b);
+    return a;
+}
+
+inline uint hashStep(uint x) {
+    x ^= x >> 17;
+    x *= 0xed5ad4bbu;
+    x ^= x >> 11;
+    x *= 0xac4c1b51u;
+    x ^= x >> 15;
+    x *= 0x31848babu;
+    x ^= x >> 14;
+    return x;
+}
+
+inline float hash2D_uint(uint2 p, uint seed) {
+    uint h = hashCombine(p.x * 0x85ebca6bu ^ p.y * 0xc2b2ae35u, seed);
+    h = hashStep(h);
+    return (float(h) / 4294967295.0f); // [0,1]
+}
+inline float2 rand2_uint(uint2 p, uint seed) {
+    return float2(hash2D_uint(p, seed),
+                  hash2D_uint(p ^ uint2(0x68e31d4u, 0x27d4eb2du), seed ^ 0x165667b1u));
+}
+
+
+
+uint hash3(uint x, uint y, uint p) {
+    uint h = x * 73856093u ^ y * 19349663u ^ p * 83492791u;
+    // Optional avalanching
+    h ^= h >> 13;
+    h *= 0x5bd1e995u;
+    h ^= h >> 15;
+    return h;
+}
 
 
 
@@ -357,6 +398,7 @@ kernel void transformAndBinLinear(
     device uint*                            binList         [[buffer(6)]],
     constant uint&                          segCount        [[buffer(7)]],
     device SegAlloc*                        alloc           [[buffer(8)]],
+    device float4*                          randomValues    [[buffer(9)]],
     uint                                    gid             [[thread_position_in_grid]]
 ) {
     if (gid >= segCount) return;
@@ -392,12 +434,18 @@ kernel void transformAndBinLinear(
         return;
     }
     
+    const float4 randomVec = randomValues[gid % 1000];
+    
+    // TODO: SAVING THIS FOR LATER FUN!
+//    float2 p0ss = clipToScreen(p0c + randomVec * 0.1, view);
+//    float2 p1ss = clipToScreen(p1c + randomVec * 0.1, view);
     float2 p0ss = clipToScreen(p0c, view);
     float2 p1ss = clipToScreen(p1c, view);
     
     // Expanded bbox
     float2 mn = floor(min(p0ss, p1ss) - radMax);
     float2 mx = ceil (max(p0ss, p1ss) + radMax);
+
     
     bool2 outside_min = mx < 0.0f;
     bool2 outside_max = mn >= view;
@@ -413,6 +461,8 @@ kernel void transformAndBinLinear(
     // --- Single-emit state ---
     bool emitted = false;
     uint outIdx = 0;
+    
+    
 
     auto emitOnce = [&](){
         if (emitted) return;
@@ -425,6 +475,7 @@ kernel void transformAndBinLinear(
         outSegs[idx].halfWidthStartPx = S.halfWidthStartPx;
         outSegs[idx].halfWidthEndPx = S.halfWidthEndPx;
         outSegs[idx].aaPx = U.antiAliasPx;
+        outSegs[outIdx].noiseFloor = S.noiseFloor;
         outSegs[idx].bboxMinSS = mn;
         outSegs[idx].bboxMaxSS = mx;
         outSegs[idx].colorStartCenter = S.colorStartCenter;
@@ -616,6 +667,7 @@ kernel void transformAndBinQuadratic(
                     outSegs[outIdx].halfWidthStartPx = mix(S.halfWidthStartPx, S.halfWidthEndPx, t);
                     outSegs[outIdx].halfWidthEndPx = mix(S.halfWidthStartPx, S.halfWidthEndPx, tn);
                     outSegs[outIdx].aaPx = U.antiAliasPx;
+                    outSegs[outIdx].noiseFloor = S.noiseFloor;
                     outSegs[outIdx].bboxMinSS = mn;
                     outSegs[outIdx].bboxMaxSS = mx;
                     outSegs[outIdx].colorStartCenter = float4(1.0, 1.0, 1.0, 1.0);
@@ -756,6 +808,7 @@ kernel void transformAndBinCubic(
                     outSegs[outIdx].halfWidthStartPx = mix(S.halfWidthStartPx, S.halfWidthEndPx, t);
                     outSegs[outIdx].halfWidthEndPx = mix(S.halfWidthStartPx, S.halfWidthEndPx, tn);
                     outSegs[outIdx].aaPx        = U.antiAliasPx;
+                    outSegs[outIdx].noiseFloor = S.noiseFloor;
                     outSegs[outIdx].bboxMinSS   = mn;
                     outSegs[outIdx].bboxMaxSS   = mx;
                     outSegs[outIdx].colorStartCenter = mix(S.colorStartCenter, S.colorEndCenter, t);
@@ -769,6 +822,7 @@ kernel void transformAndBinCubic(
                     outSegs[outIdx].pathID = S.pathID;
                     outSegs[outIdx].segIndex = i;
                     outSegs[outIdx].totalSegs = N;
+                    
                     
                     
                     uint bx0, by0, bx1, by1;
@@ -827,23 +881,39 @@ struct PathFragment {
     float hwStart;
     float hwEnd;
     float aa;
+    float noiseFloor;
 };
 
 
 kernel void drawLines(
-    texture2d<half, access::read_write>      outTex      [[texture(0)]],
-    device const LinearSegScreenSpace*  segs        [[buffer(0)]],
-    device const atomic_uint*           binCounts   [[buffer(1)]],
-    device const uint*                  binOffsets  [[buffer(2)]],
-    device const uint*                  binList     [[buffer(3)]],
-    constant Uniforms&                  U           [[buffer(4)]],
-    ushort2                             tid         [[thread_position_in_threadgroup]],
-    uint2                               gid         [[thread_position_in_grid]]
+    texture2d<half, access::read_write>     outTex          [[texture(0)]],
+    device const LinearSegScreenSpace*      segs            [[buffer(0)]],
+    device const atomic_uint*               binCounts       [[buffer(1)]],
+    device const uint*                      binOffsets      [[buffer(2)]],
+    device const uint*                      binList         [[buffer(3)]],
+    constant Uniforms&                      U               [[buffer(4)]],
+    device float4*                          randomValues    [[buffer(5)]],
+    ushort2                                 tid             [[thread_position_in_threadgroup]],
+    uint2                                   gid             [[thread_position_in_grid]]
 ) {
     const uint K_BUFFER_SIZE = 4;
     constexpr float Z_FIGHTING_EPSILON = 1e-5f;
     
-    const float2 p = float2(gid) + 0.5f;
+    const int pxIndex = int(gid.x) + int(gid.y);
+    float4 randomVec = randomValues[pxIndex % 1000];
+    
+    float2 randomVecXY = randomVec.xy;
+    float2 randomVecXYMapped = float2(
+                                      bellRemapPower(randomVecXY.x, 1),
+                                      bellRemapPower(randomVecXY.y, 1)
+                                      );
+    
+    float2 p = float2(gid) + 0.5f;
+    
+//    p -= randomVecXYMapped * 25.0;
+//    p.x = clamp(p.x, 0.0, float(gid.x) + 0.5f);
+//    p.y = clamp(p.y, 0.0, float(gid.y) + 0.5f);
+    
     const float2 view = float2(U.viewWidth, U.viewHeight);
     
     // Bin lookup
@@ -873,6 +943,8 @@ kernel void drawLines(
     threadgroup float tgR2[KMAX_PER_BIN];
     threadgroup float4 tgColorStartCenter[KMAX_PER_BIN];
     threadgroup float4 tgColorEndCenter[KMAX_PER_BIN];
+    
+    threadgroup float tgNoiseFloor[KMAX_PER_BIN];
     
     PathFragment pathFragments[K_BUFFER_SIZE];
     for (uint i = 0; i < K_BUFFER_SIZE; ++i) {
@@ -932,6 +1004,7 @@ kernel void drawLines(
             tgR2[i] = (hwMax + S->aaPx) * (hwMax + S->aaPx);
             tgColorStartCenter[i] = S->colorStartCenter;
             tgColorEndCenter[i] = S->colorEndCenter;
+            tgNoiseFloor[i] = S->noiseFloor;
         }
         threadgroup_barrier(mem_flags::mem_threadgroup);
         
@@ -947,11 +1020,20 @@ kernel void drawLines(
             // Bounding box debug
             final_rgb += float3(0.0, 0.4, 1.0) * U.boundingBoxVisibility;
             
+            
             float2 b = tgB[i];
             float invL2 = tgInvL2[i];
+            
+            
             float tLine = clamp((dot(p, b) - tgP0dotB[i]) * invL2, 0.0f, 1.0f);
+            // float tLine = clamp((dot(p_sample, b) - tgP0dotB[i]) * invL2, 0.0f, 1.0f);
+
+        
             float2 p_closest = tgP0[i] + tLine * b;
+            
             float2 dvec = p - p_closest;
+
+            
             float d2 = dot(dvec, dvec);
             if(d2 > tgR2[i]) continue;
             
@@ -990,7 +1072,8 @@ kernel void drawLines(
                                 tgP1[i],
                                 tgHWStart[i],
                                 tgHWEnd[i],
-                                tgAA[i]
+                                tgAA[i],
+                                tgNoiseFloor[i]
                             };
                             inserted = true;
                             break;
@@ -1008,7 +1091,8 @@ kernel void drawLines(
                             tgP1[i],
                             tgHWStart[i],
                             tgHWEnd[i],
-                            tgAA[i]
+                            tgAA[i],
+                            tgNoiseFloor[i]
                         };
                     }
                 }
@@ -1051,6 +1135,9 @@ kernel void drawLines(
         
         float hwAtT = mix(pf.hwStart, pf.hwEnd, tLine);
         
+        float r = dist / (hwAtT + pf.aa + 1e-6f);
+        r = clamp(r, 0.0, 1.0);
+        
         // float alpha = smoothstep(pf.hw + pf.aa, pf.hw - pf.aa, dist);
         float alpha = smoothstep(hwAtT + pf.aa, hwAtT - pf.aa, dist);
         fragmentColor.a *= alpha;
@@ -1087,7 +1174,14 @@ kernel void drawLines(
             float4 existing = pathColors[pathIndex];
 
             // Convert fragment to premultiplied RGB
-            float  a_frag   = fragmentColor.a;
+            uint hashedIndex = hash3(gid.x, gid.y, pxIndex);
+            uint moduloHashedIndex = hashedIndex % 1000u;
+            float randomBoolValue = clamp(round(pf.noiseFloor + randomValues[moduloHashedIndex % 1000].x
+                                          * (0.5 +
+                                             (1.0 - pow(smoothstep(0.0, 1.0, r), 1.0))
+                                             * 0.5)), 0.0, 1.0);
+
+            float  a_frag   = fragmentColor.a * randomBoolValue;
             float3 rgb_prem = fragmentColor.rgb * a_frag;
 
             // Premultiplied "over":

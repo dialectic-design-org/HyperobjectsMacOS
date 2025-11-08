@@ -32,7 +32,7 @@ class CubeGenerator: CachedGeometryGenerator {
         let facesOffset = floatFromInputs(inputs, name: "Face offset")
         
         let innerCubesCount: Int = intFromInputs(inputs, name: "Inner cubes count")// 1 to 100
-        
+        let innerInnerCubesCount: Int = intFromInputs(inputs, name: "Inner inner cubes count")
         
         
         let innerCubesScaling = floatFromInputs(inputs, name: "InnerCubesScaling")
@@ -60,108 +60,173 @@ class CubeGenerator: CachedGeometryGenerator {
         let depthInputDelay = scene.getInputWithName(name: "Depth delay")
         
         
+        let innerCubesSpreadXInput = scene.getInputWithName(name: "Inner cubes spread x")
+        let innerCubesSpreadXDelayInput = scene.getInputWithName(name: "Inner cubes spread x delay")
+        
+        let innerInnerCubesSpreadYInput = scene.getInputWithName(name: "Inner inner cubes spread y")
+        let innerInnerCubesSpreadYDelayInput = scene.getInputWithName(name: "Inner inner cubes spread y delay")
+        
+        
+        
+        
         let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
         let statefulRotationY = floatFromInputs(inputs, name: "Stateful Rotation Y")
         let statefulRotationZ = floatFromInputs(inputs, name: "Stateful Rotation Z")
         
+        let sceneStatefulRotationX = floatFromInputs(inputs, name: "Scene Stateful Rotation X")
+        let sceneStatefulRotationY = floatFromInputs(inputs, name: "Scene Stateful Rotation Y")
+        let sceneStatefulRotationZ = floatFromInputs(inputs, name: "Scene Stateful Rotation Z")
+        
         let statefulColorShift = floatFromInputs(inputs, name: "Stateful Color Shift")
+        
+        
         
         lines = []
         
         let cubeCounts: Int = innerCubesCount
+        let innerCubeCounts: Int = innerInnerCubesCount
+        let totalCubesCount: Int = cubeCounts * innerCubeCounts
         
         for cubeCounter in 1...cubeCounts {
-            var cubeTime = Float(cubeCounter - 1) / Float(cubeCounts)
-
-            var secondCube = makeCube(size:  1.0 + cubeTime * innerCubesScaling, offset: facesOffset)
-            
-            let delayedRotation = rotationXInput.getHistoryValue(millisecondsAgo: 500 * Double(cubeTime))
-            let delayedRotationY = rotationYInput.getHistoryValue(millisecondsAgo: 500 * Double(1.0 - cubeTime))
-            let lineWidthDelayFloat: Float = ensureValueIsFloat(lineWidthInputDelay.getHistoryValue(millisecondsAgo: 0))
-            let delayedLineWidth = lineWidthInput.getHistoryValue(millisecondsAgo: Double(lineWidthDelayFloat) * Double(cubeTime) * 1000)
-            
-            let delayedWidthDelay = widthInputDelay.getHistoryValue(millisecondsAgo: 0)
-            let widthDelayFloat: Float = ensureValueIsFloat(delayedWidthDelay)
-            let delayedWidth = widthInput.getHistoryValue(millisecondsAgo: Double(widthDelayFloat) * Double(cubeTime) * 1000)
-            
-            let heightDelay = heightInputDelay.getHistoryValue(millisecondsAgo: 0)
-            let heightDelayFloat: Float = ensureValueIsFloat(heightDelay)
-            let delayedHeight = heightInput.getHistoryValue(millisecondsAgo: Double(heightDelayFloat) * Double(cubeTime) * 1000)
-            
-            let depthDelay = depthInputDelay.getHistoryValue(millisecondsAgo: 0)
-            let depthDelayFloat: Float = ensureValueIsFloat(depthDelay)
-            let delayedDepth = depthInput.getHistoryValue(millisecondsAgo: Double(depthDelayFloat) * Double(cubeTime) * 1000)
-            
-            // Enforce delayed rotation to be a float
-            let delayedRotationFloat: Float = ensureValueIsFloat(delayedRotation)
-            let delayedRotationYFloat: Float = ensureValueIsFloat(delayedRotationY)
-            let delayedLineWidthFloat: Float = ensureValueIsFloat(delayedLineWidth)
-            
-            
-            
-            for i in 0..<secondCube.count {
-                secondCube[i].lineWidthStart = delayedLineWidthFloat
-                secondCube[i].lineWidthEnd = delayedLineWidthFloat
-            }
-            
-            // Apply width, height, depth transforms
-            for i in 0..<secondCube.count {
-                secondCube[i].startPoint.y *= ensureValueIsFloat(delayedHeight)
-                secondCube[i].endPoint.y *= ensureValueIsFloat(delayedHeight)
+            let cubeOuterTime = Float(cubeCounter - 1) / Float(cubeCounts - 1)
+            for innerCubeCounter in 1...innerCubeCounts {
+                let cubeInnerTime = Float(innerCubeCounter - 1) / Float(innerCubeCounts - 1)
                 
-                secondCube[i].startPoint.x *= ensureValueIsFloat(delayedWidth)
-                secondCube[i].endPoint.x *= ensureValueIsFloat(delayedWidth)
+                let cubeTime = Float((cubeCounter + innerCubeCounter) - 1) / Float(totalCubesCount)
                 
-                secondCube[i].startPoint.z *= ensureValueIsFloat(delayedDepth)
-                secondCube[i].endPoint.z *= ensureValueIsFloat(delayedDepth)
-            }
-            
-            // Apply size and rotation
-            for i in 0..<secondCube.count {
-                secondCube[i].startPoint *= size
-                secondCube[i].endPoint *= size
-            }
-            
-            let rotationMatrixX = matrix_rotation(angle: rotationX * 0.0 + statefulRotationX, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
-            for i in 0..<secondCube.count {
-                secondCube[i] = secondCube[i].applyMatrix(rotationMatrixX)
-            }
-
-            let rotationMatrixY = matrix_rotation(angle: rotationY * 0.0 + statefulRotationY, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
-            for i in 0..<secondCube.count {
-                secondCube[i] = secondCube[i].applyMatrix(rotationMatrixY)
-            }
-
-            let rotationMatrixZ = matrix_rotation(angle: rotationZ * 0.0 + statefulRotationZ, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
-            for i in 0..<secondCube.count {
-                secondCube[i] = secondCube[i].applyMatrix(rotationMatrixZ)
-            }
-            
-            let secondCubeRotation = matrix_rotation(angle: .pi * Float(delayedRotationFloat) * 0.1, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
-            let secondCubeRotationY = matrix_rotation(angle: .pi * Float(delayedRotationYFloat) * 0.1, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
-            let scalingMatrix = matrix_scale(scale: SIMD3<Float>(repeating: 1.0))
-            let combinedMatrix = scalingMatrix * secondCubeRotation * secondCubeRotationY
-            
-            let colorTime = (Double(cubeTime) + Double(statefulColorShift)).truncatingRemainder(dividingBy: 1.0)
-            
-            for i in 0..<secondCube.count {
-                secondCube[i] = secondCube[i].applyMatrix(combinedMatrix)
-                secondCube[i].lineWidthStart = delayedLineWidthFloat
-                secondCube[i].lineWidthEnd = delayedLineWidthFloat
+                var secondCube = makeCube(size:  1.0 + cubeTime * innerCubesScaling, offset: facesOffset)
                 
-//                secondCube[i] = secondCube[i].setBasicEndPointColors(
-//                    startColor: colorScale.color(at: Double(cubeTime)).toSIMD4(),
-//                    endColor: colorScale.color(at: Double(cubeTime)).toSIMD4()
-//                )
-                secondCube[i] = secondCube[i].setBasicEndPointColors(
-                    startColor: colorScale.color(at: Double(colorTime)).toSIMD4(),
-                    endColor: colorScale.color(at: Double(colorTime)).toSIMD4()
+                let delayedRotation = rotationXInput.getHistoryValue(millisecondsAgo: 500 * Double(cubeTime))
+                let delayedRotationY = rotationYInput.getHistoryValue(millisecondsAgo: 500 * Double(1.0 - cubeTime))
+                let lineWidthDelayFloat: Float = ensureValueIsFloat(lineWidthInputDelay.getHistoryValue(millisecondsAgo: 0))
+                let delayedLineWidth = lineWidthInput.getHistoryValue(millisecondsAgo: Double(lineWidthDelayFloat) * Double(cubeTime) * 1000)
+                
+                let delayedWidthDelay = widthInputDelay.getHistoryValue(millisecondsAgo: 0)
+                let widthDelayFloat: Float = ensureValueIsFloat(delayedWidthDelay)
+                let delayedWidth = widthInput.getHistoryValue(millisecondsAgo: Double(widthDelayFloat) * Double(cubeTime) * 1000)
+                
+                let heightDelay = heightInputDelay.getHistoryValue(millisecondsAgo: 0)
+                let heightDelayFloat: Float = ensureValueIsFloat(heightDelay)
+                let delayedHeight = heightInput.getHistoryValue(millisecondsAgo: Double(heightDelayFloat) * Double(cubeTime) * 1000)
+                
+                let depthDelay = depthInputDelay.getHistoryValue(millisecondsAgo: 0)
+                let depthDelayFloat: Float = ensureValueIsFloat(depthDelay)
+                let delayedDepth = depthInput.getHistoryValue(millisecondsAgo: Double(depthDelayFloat) * Double(cubeTime) * 1000)
+                
+                // Enforce delayed rotation to be a float
+                let delayedRotationFloat: Float = ensureValueIsFloat(delayedRotation)
+                let delayedRotationYFloat: Float = ensureValueIsFloat(delayedRotationY)
+                let delayedLineWidthFloat: Float = ensureValueIsFloat(delayedLineWidth)
+                
+                
+                
+                for i in 0..<secondCube.count {
+                    secondCube[i].lineWidthStart = delayedLineWidthFloat
+                    secondCube[i].lineWidthEnd = delayedLineWidthFloat
+                }
+                
+                // Apply width, height, depth transforms
+                for i in 0..<secondCube.count {
+                    secondCube[i].startPoint.y *= ensureValueIsFloat(delayedHeight)
+                    secondCube[i].endPoint.y *= ensureValueIsFloat(delayedHeight)
+                    
+                    secondCube[i].startPoint.x *= ensureValueIsFloat(delayedWidth)
+                    secondCube[i].endPoint.x *= ensureValueIsFloat(delayedWidth)
+                    
+                    secondCube[i].startPoint.z *= ensureValueIsFloat(delayedDepth)
+                    secondCube[i].endPoint.z *= ensureValueIsFloat(delayedDepth)
+                }
+                
+                // Apply size and rotation
+                for i in 0..<secondCube.count {
+                    secondCube[i].startPoint *= size
+                    secondCube[i].endPoint *= size
+                }
+                
+                let rotationMatrixX = matrix_rotation(angle: rotationX * 0.0 + statefulRotationX, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
+                for i in 0..<secondCube.count {
+                    secondCube[i] = secondCube[i].applyMatrix(rotationMatrixX)
+                }
+                
+                let rotationMatrixY = matrix_rotation(angle: rotationY * 0.0 + statefulRotationY, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
+                for i in 0..<secondCube.count {
+                    secondCube[i] = secondCube[i].applyMatrix(rotationMatrixY)
+                }
+                
+                let rotationMatrixZ = matrix_rotation(angle: rotationZ * 0.0 + statefulRotationZ, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
+                for i in 0..<secondCube.count {
+                    secondCube[i] = secondCube[i].applyMatrix(rotationMatrixZ)
+                }
+                
+                let secondCubeRotation = matrix_rotation(angle: .pi * Float(delayedRotationFloat) * 0.1, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
+                let secondCubeRotationY = matrix_rotation(angle: .pi * Float(delayedRotationYFloat) * 0.1, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
+                let scalingMatrix = matrix_scale(scale: SIMD3<Float>(repeating: 1.0))
+                
+                var xTranslate: Float = 0.0
+                if cubeCounts > 1 {
+                    xTranslate = (cubeOuterTime - 0.5)
+                }
+                
+                var yTranslate: Float = 0.0
+                if innerCubeCounts > 1 {
+                    yTranslate = (cubeInnerTime - 0.5)
+                }
+                
+                let translateDelay = depthInputDelay.getHistoryValue(millisecondsAgo: 0)
+                
+                let delayedXTranslate = innerCubesSpreadXInput.getHistoryValue(
+                    millisecondsAgo: Double(ensureValueIsFloat(
+                        innerCubesSpreadXDelayInput.getHistoryValue(millisecondsAgo: 0))
+                                            * cubeOuterTime * 1000
+                                           )
                 )
+                
+                let delayedInnerYTranslate = innerInnerCubesSpreadYInput.getHistoryValue(
+                    millisecondsAgo: Double(ensureValueIsFloat(
+                        innerInnerCubesSpreadYDelayInput.getHistoryValue(millisecondsAgo: 0))
+                                            * cubeInnerTime * 1000
+                                           )
+                )
+                
+                var matrixTranslate = matrix_translation(translation: SIMD3<Float>(
+                    xTranslate * ensureValueIsFloat(delayedXTranslate),
+                    yTranslate * ensureValueIsFloat(delayedInnerYTranslate),
+                    0.0
+                ))
+                
+                
+                let combinedMatrix = matrixTranslate * scalingMatrix * secondCubeRotation * secondCubeRotationY
+                
+                let colorTime = (Double(cubeTime) + Double(statefulColorShift)).truncatingRemainder(dividingBy: 1.0)
+                
+                for i in 0..<secondCube.count {
+                    secondCube[i] = secondCube[i].applyMatrix(combinedMatrix)
+                    secondCube[i].lineWidthStart = delayedLineWidthFloat
+                    secondCube[i].lineWidthEnd = delayedLineWidthFloat
+                    
+                    //                secondCube[i] = secondCube[i].setBasicEndPointColors(
+                    //                    startColor: colorScale.color(at: Double(cubeTime)).toSIMD4(),
+                    //                    endColor: colorScale.color(at: Double(cubeTime)).toSIMD4()
+                    //                )
+                    secondCube[i] = secondCube[i].setBasicEndPointColors(
+                        startColor: colorScale.color(at: Double(colorTime)).toSIMD4(),
+                        endColor: colorScale.color(at: Double(colorTime)).toSIMD4()
+                    )
+                }
+                
+                lines += secondCube
             }
-            
-            lines += secondCube
         }
         
+        let sceneRotationMatrixX = matrix_rotation(angle: sceneStatefulRotationX, axis: SIMD3<Float>(1.0, 0.0, 0.0))
+        let sceneRotationMatrixY = matrix_rotation(angle: sceneStatefulRotationY, axis: SIMD3<Float>(0.0, 1.0, 0.0))
+        let sceneRotationMatrixZ = matrix_rotation(angle: sceneStatefulRotationZ, axis: SIMD3<Float>(0.0, 0.0, 1.0))
+        
+        let combinedSceneRotationMatrix = sceneRotationMatrixX * sceneRotationMatrixY * sceneRotationMatrixZ
+        
+        for i in 0..<lines.count {
+            lines[i] = lines[i].applyMatrix(combinedSceneRotationMatrix)
+        }
         
         return lines
     }
