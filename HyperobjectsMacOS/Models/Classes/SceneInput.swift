@@ -210,7 +210,34 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
             if let floatValue = self.value as? Float {
                 return StateValue(value: .float(Double(floatValue)))
             }
+        } else if self.type == .colorInput {
+            let color = self.value as! Color
+            let colorVec = color.asSIMD4()
+            return StateValue(value: .vector4(colorVec))
         }
         return StateValue(value: .float(0.0))
+    }
+}
+
+
+extension Color {
+    /// Converts a SwiftUI Color to a SIMD4<Double> [r, g, b, a] vector on macOS.
+    func asSIMD4() -> SIMD4<Double> {
+        // Convert SwiftUI Color → NSColor in a calibrated RGB color space
+        let nsColor = NSColor(self).usingColorSpace(.deviceRGB) ?? .black
+        
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        
+        nsColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        
+        return SIMD4<Double>(
+            Double(red),
+            Double(green),
+            Double(blue),
+            Double(alpha)
+        )
     }
 }

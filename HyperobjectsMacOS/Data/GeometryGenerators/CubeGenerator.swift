@@ -30,13 +30,16 @@ class CubeGenerator: CachedGeometryGenerator {
         let height = floatFromInputs(inputs, name: "Height")
         let depth = floatFromInputs(inputs, name: "Depth")
         let facesOffset = floatFromInputs(inputs, name: "Face offset")
+        let facesOffsetInput = scene.getInputWithName(name: "Face offset")
+        let facesOffsetInputDelay = scene.getInputWithName(name: "Face offset delay")
         
         let innerCubesCount: Int = intFromInputs(inputs, name: "Inner cubes count")// 1 to 100
         let innerInnerCubesCount: Int = intFromInputs(inputs, name: "Inner inner cubes count")
         
         
         let innerCubesScaling = floatFromInputs(inputs, name: "InnerCubesScaling")
-        
+        let innerCubesScalingInput = scene.getInputWithName(name: "InnerCubesScaling")
+        let innerCubesScalingDelay = scene.getInputWithName(name: "InnerCubesScaling delay")
         
         
         
@@ -67,6 +70,8 @@ class CubeGenerator: CachedGeometryGenerator {
         let innerInnerCubesSpreadYDelayInput = scene.getInputWithName(name: "Inner inner cubes spread y delay")
         
         
+        let brightnessInput = scene.getInputWithName(name: "Brightness")
+        let brightnessInputDelay = scene.getInputWithName(name: "Brightness delay")
         
         
         let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
@@ -94,7 +99,15 @@ class CubeGenerator: CachedGeometryGenerator {
                 
                 let cubeTime = Float((cubeCounter + innerCubeCounter) - 1) / Float(totalCubesCount)
                 
-                var secondCube = makeCube(size:  1.0 + cubeTime * innerCubesScaling, offset: facesOffset)
+                let facesOffsetDelayed = facesOffsetInput.getHistoryValue(millisecondsAgo:
+                                                                            Double(ensureValueIsFloat(facesOffsetInputDelay.getHistoryValue(millisecondsAgo: 0))
+                                                                                   * cubeTime) * 1000)
+                
+                var innerCubesScalingValue = innerCubesScalingInput.getHistoryValue(millisecondsAgo:
+                                                                                        Double(ensureValueIsFloat(innerCubesScalingDelay.getHistoryValue(millisecondsAgo: 0)) * cubeTime * 1000)
+                )
+                
+                var secondCube = makeCube(size:  1.0 + cubeTime * ensureValueIsFloat(innerCubesScalingValue), offset: facesOffsetDelayed as! Float)
                 
                 let delayedRotation = rotationXInput.getHistoryValue(millisecondsAgo: 500 * Double(cubeTime))
                 let delayedRotationY = rotationYInput.getHistoryValue(millisecondsAgo: 500 * Double(1.0 - cubeTime))
@@ -208,9 +221,17 @@ class CubeGenerator: CachedGeometryGenerator {
                     //                    startColor: colorScale.color(at: Double(cubeTime)).toSIMD4(),
                     //                    endColor: colorScale.color(at: Double(cubeTime)).toSIMD4()
                     //                )
+                    
+                    let brightnessValue = brightnessInput.getHistoryValue(
+                        millisecondsAgo: Double(ensureValueIsFloat(
+                            brightnessInputDelay.getHistoryValue(millisecondsAgo: 0))
+                                                * cubeTime * 1000
+                                               )
+                    )
+                    let color = colorScale.color(at: Double(colorTime), brightness: Double(ensureValueIsFloat(brightnessValue))).toSIMD4()
                     secondCube[i] = secondCube[i].setBasicEndPointColors(
-                        startColor: colorScale.color(at: Double(colorTime)).toSIMD4(),
-                        endColor: colorScale.color(at: Double(colorTime)).toSIMD4()
+                        startColor: color,
+                        endColor: color
                     )
                 }
                 

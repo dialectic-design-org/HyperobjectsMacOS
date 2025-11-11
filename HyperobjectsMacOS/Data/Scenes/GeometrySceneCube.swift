@@ -26,7 +26,8 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             SceneInput(name: "Depth", type: .float, value: 0.5, range: 0.0...3.0),
             SceneInput(name: "Depth delay", type: .float, value: 0.0, range: 0.0...3.0),
             
-            SceneInput(name: "Face offset", type: .float, value: 0.0, range: -2.0...2.0),
+            SceneInput(name: "Face offset", type: .float, value: 0.0, range: -4.0...4.0),
+            SceneInput(name: "Face offset delay", type: .float, value: 0.0, range: 0.0...3.0),
             
             SceneInput(name: "Inner cubes count", type: .integer,
                        inputGroupName: "Cubes",
@@ -41,6 +42,9 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             
             SceneInput(name: "InnerCubesScaling", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: -6.0...6.0),
+            
+            SceneInput(name: "InnerCubesScaling delay", type: .float,
+                       inputGroupName: "Cubes", value: 0.0, range: 0.0...3.0),
             
             SceneInput(name: "Inner cubes spread x", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...5.0),
@@ -92,10 +96,43 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             SceneInput(name:"Scene Stateful Rotation Y", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: -0.1...0.1),
             SceneInput(name:"Scene Stateful Rotation Z", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: -0.1...0.1),
                         
-            
+            SceneInput(name: "Color mode",
+                       type: .string,
+                       inputGroupName: "Shading",
+                       value: "Picker",
+                       presetValues: [
+                        "Picker":"Picker",
+                        "RGB":"RGB"
+                       ]
+                      ),
             SceneInput(name: "Color start", type: .colorInput, inputGroupName: "Shading", value: Color.white),
             SceneInput(name: "Color end", type: .colorInput, inputGroupName: "Shading", value: Color.white),
             SceneInput(name: "Stateful Color Shift", type: .statefulFloat, inputGroupName: "Shading", tickValueAdjustmentRange: 0.0...0.1),
+            
+            SceneInput(name: "Red start", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...1),
+            SceneInput(name: "Red start delay", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...3),
+            
+            SceneInput(name: "Green start", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...1),
+            SceneInput(name: "Green start delay", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...3),
+            
+            SceneInput(name: "Blue start", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...1),
+            SceneInput(name: "Blue start delay", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...3),
+            
+            SceneInput(name: "Red end", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...1),
+            SceneInput(name: "Red end delay", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...1),
+            
+            SceneInput(name: "Green end", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...1),
+            SceneInput(name: "Green end delay", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...3),
+            
+            SceneInput(name: "Blue end", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...1),
+            SceneInput(name: "Blue end delay", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...3),
+            
+            SceneInput(name: "Brightness", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
+            SceneInput(name: "Brightness delay", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
+            
+            SceneInput(name: "Saturation", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
+            SceneInput(name: "Saturation delay", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
+            
         ],
         geometryGenerators: [
             CubeGenerator()

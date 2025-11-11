@@ -15,6 +15,7 @@ struct StateValue {
     enum Value {
         case float(Double)
         case vector3(SIMD3<Double>)
+        case vector4(SIMD4<Double>)
         case object([String: Value])
     }
     
@@ -28,6 +29,8 @@ extension StateValue {
             return f
         case .vector3(let v):
             return ["x": v.x, "y": v.y, "z": v.z]
+        case .vector4(let v):
+            return ["x": v.x, "y": v.y, "z": v.z, "w": v.w]
         case .object(let dict):
             return dict.mapValues { value -> Any in
                 return StateValue(value: value).toJSONValue()
@@ -61,6 +64,13 @@ extension StateValue {
                 array[0],
                 array[1],
                 array[2]
+            )))
+        } else if let array = jsonValue as? [Double], array.count == 4 {
+            return StateValue(value: .vector4(SIMD4<Double>(
+                array[0],
+                array[1],
+                array[2],
+                array[3]
             )))
         }
         return nil
