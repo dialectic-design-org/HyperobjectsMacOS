@@ -13,6 +13,7 @@ let geometryGenerationLog = OSLog(subsystem: "com.yourapp.geometry", category: .
 struct AudioSnapshot {
     let raw: Float
     let smoothed: Float
+    let smoothedPerStep: [Int:Float]
     let lowpassRaw: Float
     let lowpassSmoothed: Float
 }
@@ -26,8 +27,10 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     @Published var changedInputs: Set<String> = []
     @Published var cachedGeometries: [GeometryWrapped] = []
     @Published var audioSignal: Float = 0.0
+    @Published var audioSignalsSmoothed: [Int:Float] = [:]
     @Published var audioSignalRaw: Float = 0.0
     @Published var audioSignalProcessed: Double = 0.0
+    @Published var audioSignalsSmoothedProcessed: [Int:Double] = [:]
     @Published var audioSignalProcessedHistory: [Double] = []
     
     @Published var audioSignalLowpassRaw: Double = 0.0
@@ -98,7 +101,14 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         
         // Get the historical audio signal value (index from end of array)
         let arrayIndex = max(0, historyLength - 1 - clampedIndex)
-        return clampedHistory[arrayIndex].processedVolume
+        if input.audioSmoothedSource == -1 {
+            return clampedHistory[arrayIndex].processedVolume
+        } else {
+            if let val = clampedHistory[arrayIndex].smoothedProcessedVolumes[input.audioSmoothedSource] {
+                return val
+            }
+        }
+        return Double(0.0)
     }
     
     func generateAllGeometries() -> [any Geometry] {
@@ -140,8 +150,9 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         return geometries
     }
     
-    func updateFloatInputsWithAudio(_ audioValue: Float) {
+    func updateFloatInputsWithAudio(_ audioValue: Float, audioMonitor: AudioInputMonitor) {
         var changedInputNames: [String] = []
+
         
         for (index, input) in inputs.enumerated() where input.type == .float {
             // Only update if the value actually changed significantly
@@ -158,11 +169,19 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         
         
         let currentTime = Date().timeIntervalSince1970
+        
+        var smoothedVolumesAsDouble: [Int: Double] = [:]
+        for (index, input) in audioMonitor.smoothedVolumes.enumerated() {
+            smoothedVolumesAsDouble[input.key] = Double(input.value)
+        }
+        
         let dataPoint = AudioDataPoint(
             timestamp: currentTime,
             rawVolume: Double(self.audioSignalRaw),
             smoothedVolume: Double(self.audioSignal),
-            processedVolume: Double(self.audioSignalProcessed)
+            smoothedVolumes: smoothedVolumesAsDouble,
+            processedVolume: Double(self.audioSignalProcessed),
+            smoothedProcessedVolumes: self.audioSignalsSmoothedProcessed
         )
         self.historyData.append(dataPoint)
         
@@ -200,11 +219,16 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
 extension GeometriesSceneBase {
     @MainActor func applyAudioTick(_ m: AudioSnapshot, using processor: EnvelopeProcessor) {
         audioSignal = m.smoothed
+        audioSignalsSmoothed = m.smoothedPerStep
         audioSignalRaw = m.raw
         audioSignalProcessed = processor.process(Double(m.smoothed))
         audioSignalLowpassRaw = Double(m.lowpassRaw)
         audioSignalLowpassSmoothed = Double(m.lowpassSmoothed)
         audioSignalLowpassProcessed = processor.process(Double(m.lowpassSmoothed))
+        for (_, val) in audioSignalsSmoothed.enumerated() {
+            audioSignalsSmoothedProcessed[val.key] = processor.process(Double(val.value))
+        }
+        
         
         frameStamp &+= 1
     }

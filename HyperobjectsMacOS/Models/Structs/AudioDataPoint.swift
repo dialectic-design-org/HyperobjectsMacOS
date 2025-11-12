@@ -11,5 +11,7 @@ struct AudioDataPoint {
     let timestamp: TimeInterval
     let rawVolume: Double
     let smoothedVolume: Double
+    let smoothedVolumes: [Int:Double]
     let processedVolume: Double
+    let smoothedProcessedVolumes: [Int:Double]
 }

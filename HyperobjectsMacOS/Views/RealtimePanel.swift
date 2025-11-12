@@ -61,6 +61,7 @@ struct RealtimePanel: View {
             let snap = AudioSnapshot(
                 raw: audioMonitor.volume,
                 smoothed: audioMonitor.smoothedVolume,
+                smoothedPerStep: audioMonitor.smoothedVolumes,
                 lowpassRaw: Float(audioMonitor.lowpassVolume),
                 lowpassSmoothed: Float(audioMonitor.lowpassVolume)
             )

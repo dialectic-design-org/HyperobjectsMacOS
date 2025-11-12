@@ -32,6 +32,7 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
             }
         }
     }
+    var audioSmoothedSource: Int = -1 // Negative 1 is the main source, others are specific smoothings
     var audioDelay: Float = 0.0
     var presetValues: [String: Any] = [:]
     var range: ClosedRange<Float> = 0...1

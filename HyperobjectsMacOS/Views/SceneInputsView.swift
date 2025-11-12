@@ -132,7 +132,7 @@ struct SceneInputsView: View {
                 }
             }
 //            
-            currentScene.updateFloatInputsWithAudio(newValue)
+            currentScene.updateFloatInputsWithAudio(newValue, audioMonitor: audioMonitor)
             currentScene.setWrappedGeometries()
 //            
             let endTime = DispatchTime.now()

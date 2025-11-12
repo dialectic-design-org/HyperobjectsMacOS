@@ -156,6 +156,7 @@ private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox) ->
         inputState["audio_multiply_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationAddition)))
         inputState["audio_multiply_offset_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationAddition)))
         inputState["audio_delay_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationAddition)))
+        inputState["audio_smoothed_source_\(input.name)"] = StateValue(value: .float(Double(input.audioSmoothedSource)))
         
     }
     return inputState
@@ -203,6 +204,11 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
                     let audioKey = String(key.dropFirst("audio_delay_".count))
                     if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
                         input.audioDelay = Float(b)
+                    }
+                } else if key.isEmpty == false, key.hasPrefix("audio_smoothed_source_") {
+                    let audioKey = String(key.dropFirst("audio_smoothed_source_".count))
+                    if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
+                        input.audioSmoothedSource = Int(b)
                     }
                 } else {
                     // Update the matching input safely by name, avoiding optional-call and enum ambiguity

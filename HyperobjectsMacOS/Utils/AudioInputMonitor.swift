@@ -14,6 +14,7 @@ class AudioInputMonitor: ObservableObject {
 
     @Published var volume: Float = 0.0
     @Published var smoothedVolume: Float = 0.0
+    @Published var smoothedVolumes: [Int:Float] = [:]
     @Published var lowpassVolume: Double = 0.0
     @Published var lowpassVolumeSmoothed: Double = 0.0
 
@@ -26,12 +27,20 @@ class AudioInputMonitor: ObservableObject {
     @Published var lowpassCutoffFrequency: Float = 200.0 // in Hz
 
     private var recentVolumes: [Float] = []
+    @Published var recentVolumesPerSmoothing: [Int:[Float]] = [:]
+    
+    private var smoothingSteps: [Int] = [1, 2, 5, 20, 50]
+    
     private var lastLowpass: Double = 0.0
     private var sampleRate: Float = 44100.0
 
     init() {
         audioEngine = AVAudioEngine()
         setupAudioSinkNode()
+        for step in smoothingSteps {
+            recentVolumesPerSmoothing[step] = []
+            smoothedVolumes[step] = 0.0
+        }
     }
 
     private func setupAudioSinkNode() {
@@ -109,12 +118,24 @@ class AudioInputMonitor: ObservableObject {
     }
 
     private func updateSmoothedVolume(newVolume: Float) {
+        // print("updateSmoothedVolume")
         recentVolumes.append(newVolume)
         if recentVolumes.count > smoothingSampleCount {
             recentVolumes.removeFirst()
         }
         let total = recentVolumes.reduce(0, +)
         smoothedVolume = total / Float(recentVolumes.count)
+        
+        for (index, volumeDict) in recentVolumesPerSmoothing.enumerated() {
+            // print("index \(index), key: \(volumeDict.key) volumes \(volumeDict.value)")
+            // print(recentVolumesPerSmoothing[index])
+            recentVolumesPerSmoothing[volumeDict.key]!.append(newVolume)
+            if volumeDict.value.count > volumeDict.key {
+                recentVolumesPerSmoothing[volumeDict.key]!.removeFirst()
+            }
+            let total = recentVolumesPerSmoothing[volumeDict.key]!.reduce(0, +)
+            smoothedVolumes[volumeDict.key] = total / Float(volumeDict.key)
+        }
     }
 
     func startMonitoring() {
