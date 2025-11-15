@@ -157,6 +157,7 @@ private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox) ->
         inputState["audio_multiply_offset_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationAddition)))
         inputState["audio_delay_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationAddition)))
         inputState["audio_smoothed_source_\(input.name)"] = StateValue(value: .float(Double(input.audioSmoothedSource)))
+        inputState["frame_tick_\(input.name)"] = StateValue(value: .float(Double(input.tickValueAdjustment)))
         
     }
     return inputState
@@ -174,10 +175,11 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
             print("inVal not available for key \(key)")
             continue
         }
+        
         switch (inVal.value, outVal.value) {
         case (.float(let a), .float(let b)):
             // Only apply state change above certain difference
-            if abs(Double(a) - Double(b)) > epsilon {
+            // if abs(Double(a) - Double(b)) > epsilon {
                 // print("[State Change] \(key): \(a) -> \(b)")
                 // if prefixed with audio_add
                 if key.isEmpty == false, key.hasPrefix("audio_add_") {
@@ -205,6 +207,11 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
                     if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
                         input.audioDelay = Float(b)
                     }
+                } else if key.isEmpty == false, key.hasPrefix("frame_tick_") {
+                    let audioKey = String(key.dropFirst("frame_tick_".count))
+                    if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
+                        input.tickValueAdjustment = Double(b)
+                    }
                 } else if key.isEmpty == false, key.hasPrefix("audio_smoothed_source_") {
                     let audioKey = String(key.dropFirst("audio_smoothed_source_".count))
                     if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
@@ -213,17 +220,16 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
                 } else {
                     // Update the matching input safely by name, avoiding optional-call and enum ambiguity
                     if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
+                        
                         if input.type == .float {
+                            input.value = Double(b)
+                        } else if input.type == .statefulFloat {
                             input.value = Double(b)
                         } else if input.type == .integer {
                             input.value = Int(b)
                         }
                     }
                 }
-                
-                
-                
-            }
         case (.vector4(let a), .vector4(let b)):
             if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
                 if input.type == .colorInput {
@@ -234,7 +240,7 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
             
         default:
             // Different types or unhandled types
-            print("[State Change] Type or value changed for key \(key): \(inVal) -> \(outVal)")
+            print("[State Change] Type or value changed unhandled for key \(key): \(inVal) -> \(outVal)")
         }
     }
 }

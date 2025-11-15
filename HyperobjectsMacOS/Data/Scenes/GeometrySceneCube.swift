@@ -29,12 +29,12 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             SceneInput(name: "Face offset", type: .float, value: 0.0, range: -4.0...4.0),
             SceneInput(name: "Face offset delay", type: .float, value: 0.0, range: 0.0...3.0),
             
-            SceneInput(name: "Inner cubes count", type: .integer,
+            SceneInput(name: "Outer Loop Cubes Count", type: .integer,
                        inputGroupName: "Cubes",
                        value: 1,
                        range: 1...20
                       ),
-            SceneInput(name: "Inner inner cubes count", type: .integer,
+            SceneInput(name: "Inner Loop Cubes Count", type: .integer,
                        inputGroupName: "Cubes",
                        value: 1,
                        range: 1...20,
@@ -45,48 +45,55 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             
             SceneInput(name: "InnerCubesScaling delay", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...3.0),
+
             
-            SceneInput(name: "Inner cubes spread x", type: .float,
+            SceneInput(name: "Outer Loop Cubes spread x", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...5.0),
-            SceneInput(name: "Inner cubes spread x delay", type: .float,
+            SceneInput(name: "Outer Loop Cubes spread x delay", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...3.0),
             
-            SceneInput(name: "Inner cubes spread y", type: .float,
+            SceneInput(name: "Outer Loop Cubes spread y", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...5.0),
-            SceneInput(name: "Inner cubes spread y delay", type: .float,
+            SceneInput(name: "Outer Loop Cubes spread y delay", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...3.0),
             
-            SceneInput(name: "Inner cubes spread z", type: .float,
+            SceneInput(name: "Outer Loop Cubes spread z", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...5.0),
-            SceneInput(name: "Inner cubes spread z delay", type: .float,
+            SceneInput(name: "Outer Loop Cubes spread z delay", type: .float,
+                       inputGroupName: "Cubes", value: 0.0, range: 0.0...3.0),
+
+            
+            SceneInput(name: "Inner Loop Cubes spread x", type: .float,
+                       inputGroupName: "Cubes", value: 0.0, range: 0.0...5.0),
+            SceneInput(name: "Inner Loop Cubes spread x delay", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...3.0),
             
-            SceneInput(name: "Inner inner cubes spread x", type: .float,
+            SceneInput(name: "Inner Loop Cubes spread y", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...5.0),
-            SceneInput(name: "Inner inner cubes spread x delay", type: .float,
+            SceneInput(name: "Inner Loop Cubes spread y delay", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...3.0),
             
-            SceneInput(name: "Inner inner cubes spread y", type: .float,
+            SceneInput(name: "Inner Loop Cubes spread z", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...5.0),
-            SceneInput(name: "Inner inner cubes spread y delay", type: .float,
+            SceneInput(name: "Inner Loop Cubes spread z delay", type: .float,
                        inputGroupName: "Cubes", value: 0.0, range: 0.0...3.0),
             
-            SceneInput(name: "Inner inner cubes spread z", type: .float,
-                       inputGroupName: "Cubes", value: 0.0, range: 0.0...5.0),
-            SceneInput(name: "Inner inner cubes spread z delay", type: .float,
-                       inputGroupName: "Cubes", value: 0.0, range: 0.0...3.0),
-            
-            
-            
-            
-//            SceneInput(name:"Stateful Width", type: .statefulFloat),
-//            SceneInput(name:"Stateful Height", type: .statefulFloat),
-//            SceneInput(name:"Stateful Depth", type: .statefulFloat),
             
             
             SceneInput(name: "Rotation X", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation X Delay", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation X Offset", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation X Offset Delay", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            
             SceneInput(name: "Rotation Y", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation Y Delay", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation Y Offset", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation Y Offset Delay", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            
             SceneInput(name: "Rotation Z", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation Z Delay", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation Z Offset", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            SceneInput(name: "Rotation Z Offset Delay", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
             
             SceneInput(name:"Stateful Rotation X", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: -0.1...0.1),
             SceneInput(name:"Stateful Rotation Y", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: -0.1...0.1),
@@ -107,8 +114,16 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
                       ),
             SceneInput(name: "Color start", type: .colorInput, inputGroupName: "Shading", value: Color.white),
             SceneInput(name: "Color end", type: .colorInput, inputGroupName: "Shading", value: Color.white),
+            
             SceneInput(name: "Stateful Color Shift", type: .statefulFloat, inputGroupName: "Shading", tickValueAdjustmentRange: 0.0...0.1),
             
+            SceneInput(name: "Brightness", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
+            SceneInput(name: "Brightness delay", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
+            
+            SceneInput(name: "Saturation", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
+            SceneInput(name: "Saturation delay", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
+            
+
             SceneInput(name: "Red start", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...1),
             SceneInput(name: "Red start delay", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...3),
             
@@ -127,12 +142,7 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             SceneInput(name: "Blue end", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...1),
             SceneInput(name: "Blue end delay", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...3),
             
-            SceneInput(name: "Brightness", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
-            SceneInput(name: "Brightness delay", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
-            
-            SceneInput(name: "Saturation", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
-            SceneInput(name: "Saturation delay", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
-            
+
         ],
         geometryGenerators: [
             CubeGenerator()

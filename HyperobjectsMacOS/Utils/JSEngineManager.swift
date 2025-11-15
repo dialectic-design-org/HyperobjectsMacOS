@@ -85,8 +85,12 @@ class JSEngineManager: ObservableObject {
     
     private var context: JSContext?
     
+    private let jsQueue = DispatchQueue(label: "JSEngineManager.JSQueue")
+    
     init() {
-        setupContext()
+        jsQueue.async { [weak self] in
+            self?.setupContext()
+        }
     }
     
     func setupContext() {
@@ -109,60 +113,76 @@ class JSEngineManager: ObservableObject {
     }
     
     func executeScript(_ script: String, inputState: [String: StateValue]) -> Bool {
-        guard let context = context else { return false }
-        
-        let startTime = CFAbsoluteTimeGetCurrent()
-        
-        // Reset context for clean execution
-        setupContext()
-        
-        let jsonCompatibleInput = inputState.mapValues { $0.toJSONValue() }
-
-        // Inject input state FIRST
-        let inputJSON = try? JSONSerialization.data(withJSONObject: jsonCompatibleInput)
-        if let inputJSON = inputJSON,
-           let inputString = String(data: inputJSON, encoding: .utf8) {
-            context.evaluateScript("var inputState = \(inputString);")
-        }
-        
-        // Now execute the script with inputState available
-        context.evaluateScript(script)
-        
-        // Check for errors (compilation or runtime)
-        if let exception = context.exception {
-            errorMessage = "Error: \(exception.toString() ?? "Unknown")"
-            return false
-        }
-        
-        // Extract output state
-        // print("Extracting output state")
-        if let output = context.objectForKeyedSubscript("outputState"),
-           !output.isUndefined,
-           let outputDict = output.toDictionary() as? [String: Any] {
-            var parsedOutput: [String: StateValue] = [:]
-            for (key, value) in outputDict {
-                // print("Extracting key \(key)")
-                if let stateValue = StateValue.fromJSONValue(value) {
-                    parsedOutput[key] = stateValue
+        jsQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            let startTime = CFAbsoluteTimeGetCurrent()
+            
+            // Reset context for clean execution
+            self.setupContext()
+            
+            guard let context = self.context else {
+                DispatchQueue.main.async {
+                    self.errorMessage = "JS context not available"
                 }
+                return
             }
-            let endTime = CFAbsoluteTimeGetCurrent()
-            let duration = (endTime - startTime) * 1000
-            DispatchQueue.main.async {
-                self.outputState = parsedOutput
-                self.errorMessage = nil
-                self.lastExecutionTime = Date()
-                self.executionDuration = duration
+            
+            
+            let jsonCompatibleInput = inputState.mapValues { $0.toJSONValue() }
+            
+            // Inject input state FIRST
+            let inputJSON = try? JSONSerialization.data(withJSONObject: jsonCompatibleInput)
+            if let inputJSON = inputJSON,
+               let inputString = String(data: inputJSON, encoding: .utf8) {
+                context.evaluateScript("var inputState = \(inputString);")
             }
-            return true
-        } else {
-            let endTime = CFAbsoluteTimeGetCurrent()
-            let duration = (endTime - startTime) * 1000
-            DispatchQueue.main.async {
-                self.errorMessage = "No outputState object found or invalid format"
-                self.executionDuration = duration
+            
+            // Now execute the script with inputState available
+            context.evaluateScript(script)
+            
+            // Check for errors (compilation or runtime)
+            if let exception = context.exception {
+                let endTime = CFAbsoluteTimeGetCurrent()
+                let duration = (endTime - startTime) * 1000
+                DispatchQueue.main.async { // CHANGE: main-thread UI update
+                    self.errorMessage = "Error: \(exception.toString() ?? "Unknown")"
+                    self.executionDuration = duration
+                }
+                return
             }
-            return false
+            
+            // Extract output state
+            // print("Extracting output state")
+            if let output = context.objectForKeyedSubscript("outputState"),
+               !output.isUndefined,
+               let outputDict = output.toDictionary() as? [String: Any] {
+                var parsedOutput: [String: StateValue] = [:]
+                for (key, value) in outputDict {
+                    // print("Extracting key \(key)")
+                    if let stateValue = StateValue.fromJSONValue(value) {
+                        parsedOutput[key] = stateValue
+                    }
+                }
+                let endTime = CFAbsoluteTimeGetCurrent()
+                let duration = (endTime - startTime) * 1000
+                DispatchQueue.main.async {
+                    self.outputState = parsedOutput
+                    self.errorMessage = nil
+                    self.lastExecutionTime = Date()
+                    self.executionDuration = duration
+                }
+                return
+            } else {
+                let endTime = CFAbsoluteTimeGetCurrent()
+                let duration = (endTime - startTime) * 1000
+                DispatchQueue.main.async {
+                    self.errorMessage = "No outputState object found or invalid format"
+                    self.executionDuration = duration
+                }
+                return
+            }
         }
+        return true
     }
 }
