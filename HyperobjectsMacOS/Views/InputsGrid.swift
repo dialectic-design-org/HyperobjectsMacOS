@@ -32,7 +32,7 @@ final class InputsGridModel: ObservableObject {
                     note: $0.isEmpty ? "Ungrouped inputs" : nil,
                     background: .secondary,
                     isVisible: true,
-                    isExpanded: true
+                    isExpanded: false
                 )
             })
         }
@@ -84,7 +84,7 @@ struct InputsGrid: View, Equatable {
         if let idx = groups.wrappedValue.firstIndex(where: { $0.name == name }) {
             return groups[idx]
         } else {
-            return .constant(SceneInputGroup(name: name, isVisible: true, isExpanded: true))
+            return .constant(SceneInputGroup(name: name, isVisible: true, isExpanded: false))
         }
     }
 }

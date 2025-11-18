@@ -7,6 +7,7 @@
 
 import Foundation
 import simd
+import SwiftUI
 
 class CubeGenerator: CachedGeometryGenerator {
     init() {
@@ -21,18 +22,29 @@ class CubeGenerator: CachedGeometryGenerator {
         let endColor = colorFromInputs(inputs, name: "Color end")
         let colorScale = ColorScale(colors: [startColor, endColor], mode: .hsl)
 
-        
+        let sceneRotationX = floatFromInputs(inputs, name: "Scene Rotation X")
+        let sceneRotationY = floatFromInputs(inputs, name: "Scene Rotation Y")
+        let sceneRotationZ = floatFromInputs(inputs, name: "Scene Rotation Z")
+
+        let colorMode = stringFromInputs(inputs, name: "Color mode")
+        let isRGBColorMode = (colorMode == "RGB")
         
         let size = floatFromInputs(inputs, name: "Size")
         let facesOffsetInput = scene.getInputWithName(name: "Face offset")
         let facesOffsetInputDelay = scene.getInputWithName(name: "Face offset delay")
+        let facesOffsetInputOuterLoopDelay = scene.getInputWithName(name: "Face offset Outer Loop delay")
+        let facesOffsetInputInnerLoopDelay = scene.getInputWithName(name: "Face offset Inner Loop delay")
         
         let outerLoopCubesCount: Int = intFromInputs(inputs, name: "Outer Loop Cubes Count")// 1 to 100
         let innerLoopCubesCount: Int = intFromInputs(inputs, name: "Inner Loop Cubes Count")
         
         
         let innerCubesScalingInput = scene.getInputWithName(name: "InnerCubesScaling")
+        let innerCubesScalingInputOuterLoop = scene.getInputWithName(name: "InnerCubesScaling Outer Loop")
+        let innerCubesScalingInputInnerLoop = scene.getInputWithName(name: "InnerCubesScaling Inner Loop")
         let innerCubesScalingDelay = scene.getInputWithName(name: "InnerCubesScaling delay")
+        let innerCubesScalingOuterLoopDelay = scene.getInputWithName(name: "InnerCubesScaling Outer Loop delay")
+        let innerCubesScalingInnerLoopDelay = scene.getInputWithName(name: "InnerCubesScaling Inner Loop delay")
         
         let rotationXInput = scene.getInputWithName(name: "Rotation X")
         let rotationXInputDelay = scene.getInputWithName(name: "Rotation X Delay")
@@ -52,38 +64,124 @@ class CubeGenerator: CachedGeometryGenerator {
         
         let lineWidthInput = scene.getInputWithName(name: "LineWidth")
         let lineWidthInputDelay = scene.getInputWithName(name: "LineWidth delay")
+        let lineWidthInputOuterLoopDelay = scene.getInputWithName(name: "LineWidth Outer Loop delay")
+        let lineWidthInputInnerLoopDelay = scene.getInputWithName(name: "LineWidth Inner Loop delay")
         
         let widthInput = scene.getInputWithName(name: "Width")
         let widthInputDelay = scene.getInputWithName(name: "Width delay")
+        let widthInputOuterLoopDelay = scene.getInputWithName(name: "Width Outer Loop delay")
+        let widthInputInnerLoopDelay = scene.getInputWithName(name: "Width Inner Loop delay")
         
         let heightInput = scene.getInputWithName(name: "Height")
         let heightInputDelay = scene.getInputWithName(name: "Height delay")
+        let heightInputOuterLoopDelay = scene.getInputWithName(name: "Height Outer Loop delay")
+        let heightInputInnerLoopDelay = scene.getInputWithName(name: "Height Inner Loop delay")
         
         let depthInput = scene.getInputWithName(name: "Depth")
         let depthInputDelay = scene.getInputWithName(name: "Depth delay")
-        
+        let depthInputOuterLoopDelay = scene.getInputWithName(name: "Depth Outer Loop delay")
+        let depthInputInnerLoopDelay = scene.getInputWithName(name: "Depth Inner Loop delay")
         
         
         // Outer loop cubes
         let outerLoopCubesSpreadXInput = scene.getInputWithName(name: "Outer Loop Cubes spread x")
         let outerLoopCubesSpreadXInputDelay = scene.getInputWithName(name: "Outer Loop Cubes spread x delay")
+        let outerLoopCubesSpreadXInputOuterLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread x Outer Loop delay")
+        let outerLoopCubesSpreadXInputInnerLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread x Inner Loop delay")
         
         let outerLoopCubesSpreadYInput = scene.getInputWithName(name: "Outer Loop Cubes spread y")
         let outerLoopCubesSpreadYInputDelay = scene.getInputWithName(name: "Outer Loop Cubes spread y delay")
+        let outerLoopCubesSpreadYInputOuterLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread y Outer Loop delay")
+        let outerLoopCubesSpreadYInputInnerLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread y Inner Loop delay")
         
         let outerLoopCubesSpreadZInput = scene.getInputWithName(name: "Outer Loop Cubes spread z")
         let outerLoopCubesSpreadZInputDelay = scene.getInputWithName(name: "Outer Loop Cubes spread z delay")
+        let outerLoopCubesSpreadZInputOuterLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread z Outer Loop delay")
+        let outerLoopCubesSpreadZInputInnerLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread z Inner Loop delay")
         
         
         // Inner loop cubes
         let innerLoopCubesSpreadXInput = scene.getInputWithName(name: "Inner Loop Cubes spread x")
         let innerLoopCubesSpreadXInputDelay = scene.getInputWithName(name: "Inner Loop Cubes spread x delay")
+        let innerLoopCubesSpreadXInputOuterLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread x Outer Loop delay")
+        let innerLoopCubesSpreadXInputInnerLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread x Inner Loop delay")
         
         let innerLoopCubesSpreadYInput = scene.getInputWithName(name: "Inner Loop Cubes spread y")
         let innerLoopCubesSpreadYInputDelay = scene.getInputWithName(name: "Inner Loop Cubes spread y delay")
+        let innerLoopCubesSpreadYInputOuterLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread y Outer Loop delay")
+        let innerLoopCubesSpreadYInputInnerLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread y Inner Loop delay")
         
         let innerLoopCubesSpreadZInput = scene.getInputWithName(name: "Inner Loop Cubes spread z")
         let innerLoopCubesSpreadZInputDelay = scene.getInputWithName(name: "Inner Loop Cubes spread z delay")
+        let innerLoopCubesSpreadZInputOuterLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread z Outer Loop delay")
+        let innerLoopCubesSpreadZInputInnerLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread z Inner Loop delay")
+        
+        
+        // Wave function inputs
+        let waveAmplituteOuterLoopTranslateXInput = scene.getInputWithName(name: "Wave Amplitude Outer Loop translate x")
+        let waveFrequencyOuterLoopTranslateXInput = scene.getInputWithName(name: "Wave Frequency Outer Loop translate x")
+        let waveOffsetOuterLoopTranslateXInput = scene.getInputWithName(name: "Wave Offset Outer Loop translate x")
+
+        let waveAmplituteOuterLoopTranslateYInput = scene.getInputWithName(name: "Wave Amplitude Outer Loop translate y")
+        let waveFrequencyOuterLoopTranslateYInput = scene.getInputWithName(name: "Wave Frequency Outer Loop translate y")
+        let waveOffsetOuterLoopTranslateYInput = scene.getInputWithName(name: "Wave Offset Outer Loop translate y")
+
+        let waveAmplituteOuterLoopTranslateZInput = scene.getInputWithName(name: "Wave Amplitude Outer Loop translate z")
+        let waveFrequencyOuterLoopTranslateZInput = scene.getInputWithName(name: "Wave Frequency Outer Loop translate z")
+        let waveOffsetOuterLoopTranslateZInput = scene.getInputWithName(name: "Wave Offset Outer Loop translate z")
+
+        let waveAmplituteInnerLoopTranslateXInput = scene.getInputWithName(name: "Wave Amplitude Inner Loop translate x")
+        let waveFrequencyInnerLoopTranslateXInput = scene.getInputWithName(name: "Wave Frequency Inner Loop translate x")
+        let waveOffsetInnerLoopTranslateXInput = scene.getInputWithName(name: "Wave Offset Inner Loop translate x")
+
+        let waveAmplituteInnerLoopTranslateYInput = scene.getInputWithName(name: "Wave Amplitude Inner Loop translate y")
+        let waveFrequencyInnerLoopTranslateYInput = scene.getInputWithName(name: "Wave Frequency Inner Loop translate y")
+        let waveOffsetInnerLoopTranslateYInput = scene.getInputWithName(name: "Wave Offset Inner Loop translate y")
+
+        let waveAmplituteInnerLoopTranslateZInput = scene.getInputWithName(name: "Wave Amplitude Inner Loop translate z")
+        let waveFrequencyInnerLoopTranslateZInput = scene.getInputWithName(name: "Wave Frequency Inner Loop translate z")
+        let waveOffsetInnerLoopTranslateZInput = scene.getInputWithName(name: "Wave Offset Inner Loop translate z")
+
+
+
+        let waveAmlitudeOuterLoopWidth = scene.getInputWithName(name: "Wave Amplitude Outer Loop Width")
+        let waveFrequencyOuterLoopWidth = scene.getInputWithName(name: "Wave Frequency Outer Loop Width")
+        let waveOffsetOuterLoopWidth = scene.getInputWithName(name: "Wave Offset Outer Loop Width")
+
+        let waveAmlitudeInnerLoopWidth = scene.getInputWithName(name: "Wave Amplitude Inner Loop Width")
+        let waveFrequencyInnerLoopWidth = scene.getInputWithName(name: "Wave Frequency Inner Loop Width")
+        let waveOffsetInnerLoopWidth = scene.getInputWithName(name: "Wave Offset Inner Loop Width")
+
+        let waveAmplitudeOuterLoopHeight = scene.getInputWithName(name: "Wave Amplitude Outer Loop Height")
+        let waveFrequencyOuterLoopHeight = scene.getInputWithName(name: "Wave Frequency Outer Loop Height")
+        let waveOffsetOuterLoopHeight = scene.getInputWithName(name: "Wave Offset Outer Loop Height")
+
+        let waveAmplitudeInnerLoopHeight = scene.getInputWithName(name: "Wave Amplitude Inner Loop Height")
+        let waveFrequencyInnerLoopHeight = scene.getInputWithName(name: "Wave Frequency Inner Loop Height")
+        let waveOffsetInnerLoopHeight = scene.getInputWithName(name: "Wave Offset Inner Loop Height")
+
+        let waveAmplitudeOuterLoopDepth = scene.getInputWithName(name: "Wave Amplitude Outer Loop Depth")
+        let waveFrequencyOuterLoopDepth = scene.getInputWithName(name: "Wave Frequency Outer Loop Depth")
+        let waveOffsetOuterLoopDepth = scene.getInputWithName(name: "Wave Offset Outer Loop Depth")
+
+        let waveAmplitudeInnerLoopDepth = scene.getInputWithName(name: "Wave Amplitude Inner Loop Depth")
+        let waveFrequencyInnerLoopDepth = scene.getInputWithName(name: "Wave Frequency Inner Loop Depth")
+        let waveOffsetInnerLoopDepth = scene.getInputWithName(name: "Wave Offset Inner Loop Depth")
+        
+        
+        let redStartInput = scene.getInputWithName(name: "Red start")
+        let redStartDelayInput = scene.getInputWithName(name: "Red start delay")
+        let greenStartInput = scene.getInputWithName(name: "Green start")
+        let greenStartDelayInput = scene.getInputWithName(name: "Green start delay")
+        let blueStartInput = scene.getInputWithName(name: "Blue start")
+        let blueStartDelayInput = scene.getInputWithName(name: "Blue start delay")
+        
+        let redEndInput = scene.getInputWithName(name: "Red end")
+        let redEndDelayInput = scene.getInputWithName(name: "Red end delay")
+        let greenEndInput = scene.getInputWithName(name: "Green end")
+        let greenEndDelayInput = scene.getInputWithName(name: "Green end delay")
+        let blueEndInput = scene.getInputWithName(name: "Blue end")
+        let blueEndDelayInput = scene.getInputWithName(name: "Blue end delay")
         
         
         let brightnessInput = scene.getInputWithName(name: "Brightness")
@@ -103,6 +201,21 @@ class CubeGenerator: CachedGeometryGenerator {
         
         let statefulColorShift = floatFromInputs(inputs, name: "Stateful Color Shift")
         
+        
+        
+        func dimensionWaveContribution(amplitudeInput: SceneInput,
+                                       frequencyInput: SceneInput,
+                                       offsetInput: SceneInput,
+                                       time: Float) -> Float {
+            let amplitude = ensureValueIsFloat(amplitudeInput.getHistoryValue(millisecondsAgo: 0))
+            if amplitude == 0.0 {
+                return 0.0
+            }
+            let frequency = ensureValueIsFloat(frequencyInput.getHistoryValue(millisecondsAgo: 0))
+            let phaseOffset = ensureValueIsFloat(offsetInput.getHistoryValue(millisecondsAgo: 0))
+            let angle = Double((time * frequency) + phaseOffset) * 2.0 * Double.pi
+            return amplitude * Float(sin(angle))
+        }
         
         
         lines = []
@@ -169,15 +282,49 @@ class CubeGenerator: CachedGeometryGenerator {
                 }
                 
                 // Apply width, height, depth transforms
+                let baseWidthScale = ensureValueIsFloat(delayedWidth)
+                let baseHeightScale = ensureValueIsFloat(delayedHeight)
+                let baseDepthScale = ensureValueIsFloat(delayedDepth)
+                
+                let widthOuterWave = dimensionWaveContribution(amplitudeInput: waveAmlitudeOuterLoopWidth,
+                                                               frequencyInput: waveFrequencyOuterLoopWidth,
+                                                               offsetInput: waveOffsetOuterLoopWidth,
+                                                               time: cubeOuterTime)
+                let widthInnerWave = dimensionWaveContribution(amplitudeInput: waveAmlitudeInnerLoopWidth,
+                                                               frequencyInput: waveFrequencyInnerLoopWidth,
+                                                               offsetInput: waveOffsetInnerLoopWidth,
+                                                               time: cubeInnerTime)
+                let finalWidthScale = baseWidthScale + widthOuterWave + widthInnerWave
+                
+                let heightOuterWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeOuterLoopHeight,
+                                                                frequencyInput: waveFrequencyOuterLoopHeight,
+                                                                offsetInput: waveOffsetOuterLoopHeight,
+                                                                time: cubeOuterTime)
+                let heightInnerWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeInnerLoopHeight,
+                                                                frequencyInput: waveFrequencyInnerLoopHeight,
+                                                                offsetInput: waveOffsetInnerLoopHeight,
+                                                                time: cubeInnerTime)
+                let finalHeightScale = baseHeightScale + heightOuterWave + heightInnerWave
+                
+                let depthOuterWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeOuterLoopDepth,
+                                                               frequencyInput: waveFrequencyOuterLoopDepth,
+                                                               offsetInput: waveOffsetOuterLoopDepth,
+                                                               time: cubeOuterTime)
+                let depthInnerWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeInnerLoopDepth,
+                                                               frequencyInput: waveFrequencyInnerLoopDepth,
+                                                               offsetInput: waveOffsetInnerLoopDepth,
+                                                               time: cubeInnerTime)
+                let finalDepthScale = baseDepthScale + depthOuterWave + depthInnerWave
+                
                 for i in 0..<cube.count {
-                    cube[i].startPoint.y *= ensureValueIsFloat(delayedHeight)
-                    cube[i].endPoint.y *= ensureValueIsFloat(delayedHeight)
+                    cube[i].startPoint.y *= finalHeightScale
+                    cube[i].endPoint.y *= finalHeightScale
                     
-                    cube[i].startPoint.x *= ensureValueIsFloat(delayedWidth)
-                    cube[i].endPoint.x *= ensureValueIsFloat(delayedWidth)
+                    cube[i].startPoint.x *= finalWidthScale
+                    cube[i].endPoint.x *= finalWidthScale
                     
-                    cube[i].startPoint.z *= ensureValueIsFloat(delayedDepth)
-                    cube[i].endPoint.z *= ensureValueIsFloat(delayedDepth)
+                    cube[i].startPoint.z *= finalDepthScale
+                    cube[i].endPoint.z *= finalDepthScale
                 }
                 
                 // Apply size and rotation
@@ -219,7 +366,7 @@ class CubeGenerator: CachedGeometryGenerator {
                 }
                 
                 var yTranslateOuterLoop: Float = 0.0
-                if innerCubeCounts > 1 {
+                if cubeCounts > 1 {
                     yTranslateOuterLoop = (cubeOuterTime - 0.5)
                 }
                 var yTranslateInnerLoop: Float = 0.0
@@ -276,11 +423,60 @@ class CubeGenerator: CachedGeometryGenerator {
                                            )
                 )
                 
-                var matrixTranslate = matrix_translation(translation: SIMD3<Float>(
-                    (xTranslateOuterLoop * ensureValueIsFloat(outerLoopXTranslate)) + (xTranslateInnerLoop * ensureValueIsFloat(innerLoopXTranslate)),
-                    (yTranslateOuterLoop * ensureValueIsFloat(outerLoopYTranslate)) + (yTranslateInnerLoop * ensureValueIsFloat(innerLoopYTranslate)),
-                    (zTranslateOuterLoop * ensureValueIsFloat(outerLoopZTranslate)) + (zTranslateInnerLoop * ensureValueIsFloat(innerLoopZTranslate))
-                ))
+                let translateXOuterWave = dimensionWaveContribution(
+                    amplitudeInput: waveAmplituteOuterLoopTranslateXInput,
+                    frequencyInput: waveFrequencyOuterLoopTranslateXInput,
+                    offsetInput: waveOffsetOuterLoopTranslateXInput,
+                    time: cubeOuterTime
+                )
+                let translateXInnerWave = dimensionWaveContribution(
+                    amplitudeInput: waveAmplituteInnerLoopTranslateXInput,
+                    frequencyInput: waveFrequencyInnerLoopTranslateXInput,
+                    offsetInput: waveOffsetInnerLoopTranslateXInput,
+                    time: cubeInnerTime
+                )
+                
+                let translateYOuterWave = dimensionWaveContribution(
+                    amplitudeInput: waveAmplituteOuterLoopTranslateYInput,
+                    frequencyInput: waveFrequencyOuterLoopTranslateYInput,
+                    offsetInput: waveOffsetOuterLoopTranslateYInput,
+                    time: cubeOuterTime
+                )
+                let translateYInnerWave = dimensionWaveContribution(
+                    amplitudeInput: waveAmplituteInnerLoopTranslateYInput,
+                    frequencyInput: waveFrequencyInnerLoopTranslateYInput,
+                    offsetInput: waveOffsetInnerLoopTranslateYInput,
+                    time: cubeInnerTime
+                )
+                
+                let translateZOuterWave = dimensionWaveContribution(
+                    amplitudeInput: waveAmplituteOuterLoopTranslateZInput,
+                    frequencyInput: waveFrequencyOuterLoopTranslateZInput,
+                    offsetInput: waveOffsetOuterLoopTranslateZInput,
+                    time: cubeOuterTime
+                )
+                let translateZInnerWave = dimensionWaveContribution(
+                    amplitudeInput: waveAmplituteInnerLoopTranslateZInput,
+                    frequencyInput: waveFrequencyInnerLoopTranslateZInput,
+                    offsetInput: waveOffsetInnerLoopTranslateZInput,
+                    time: cubeInnerTime
+                )
+                
+                let translateX = (xTranslateOuterLoop * ensureValueIsFloat(outerLoopXTranslate)) +
+                (xTranslateInnerLoop * ensureValueIsFloat(innerLoopXTranslate)) +
+                translateXOuterWave + translateXInnerWave
+                
+                let translateY = (yTranslateOuterLoop * ensureValueIsFloat(outerLoopYTranslate)) +
+                (yTranslateInnerLoop * ensureValueIsFloat(innerLoopYTranslate)) +
+                translateYOuterWave + translateYInnerWave
+                
+                let translateZ = (zTranslateOuterLoop * ensureValueIsFloat(outerLoopZTranslate)) +
+                (zTranslateInnerLoop * ensureValueIsFloat(innerLoopZTranslate)) +
+                translateZOuterWave + translateZInnerWave
+                
+                var matrixTranslate = matrix_translation(translation: SIMD3<Float>(translateX,
+                                                                                   translateY,
+                                                                                   translateZ))
                 
                 
                 let combinedMatrix = matrixTranslate * scalingMatrix
@@ -297,27 +493,102 @@ class CubeGenerator: CachedGeometryGenerator {
                     //                    endColor: colorScale.color(at: Double(cubeTime)).toSIMD4()
                     //                )
                     
+                    let brightnessDelayValue = ensureValueIsFloat(
+                        brightnessInputDelay.getHistoryValue(millisecondsAgo: 0)
+                    )
                     let brightnessValue = brightnessInput.getHistoryValue(
-                        millisecondsAgo: Double(ensureValueIsFloat(
-                            brightnessInputDelay.getHistoryValue(millisecondsAgo: 0))
-                                                * cubeTime * 1000
-                                               )
+                        millisecondsAgo: Double(brightnessDelayValue * cubeTime * 1000)
                     )
                     
+                    let saturationDelayValue = ensureValueIsFloat(
+                        saturationInputDelay.getHistoryValue(millisecondsAgo: 0)
+                    )
                     let saturationValue = saturationInput.getHistoryValue(
-                        millisecondsAgo: Double(ensureValueIsFloat(
-                            saturationInputDelay.getHistoryValue(millisecondsAgo: 0))
-                                                * cubeTime * 1000
-                        )
+                        millisecondsAgo: Double(saturationDelayValue * cubeTime * 1000)
                     )
                     
+                    let brightnessFloat = ensureValueIsFloat(brightnessValue)
+                    let saturationFloat = ensureValueIsFloat(saturationValue)
                     
-                    let color = colorScale.color(at: Double(colorTime),
-                                                 saturation: Double(ensureValueIsFloat(saturationValue)),
-                                                 brightness: Double(ensureValueIsFloat(brightnessValue))).toSIMD4()
+                    let finalColor: SIMD4<Float>
+                    if isRGBColorMode {
+                        let redStartDelayValue = ensureValueIsFloat(
+                            redStartDelayInput.getHistoryValue(millisecondsAgo: 0)
+                        )
+                        let redStartValue = redStartInput.getHistoryValue(
+                            millisecondsAgo: Double(redStartDelayValue * cubeTime * 1000)
+                        )
+                        let redStartFloat = min(max(ensureValueIsFloat(redStartValue), 0.0), 1.0)
+                        
+                        let greenStartDelayValue = ensureValueIsFloat(
+                            greenStartDelayInput.getHistoryValue(millisecondsAgo: 0)
+                        )
+                        let greenStartValue = greenStartInput.getHistoryValue(
+                            millisecondsAgo: Double(greenStartDelayValue * cubeTime * 1000)
+                        )
+                        let greenStartFloat = min(max(ensureValueIsFloat(greenStartValue), 0.0), 1.0)
+                        
+                        let blueStartDelayValue = ensureValueIsFloat(
+                            blueStartDelayInput.getHistoryValue(millisecondsAgo: 0)
+                        )
+                        let blueStartValue = blueStartInput.getHistoryValue(
+                            millisecondsAgo: Double(blueStartDelayValue * cubeTime * 1000)
+                        )
+                        let blueStartFloat = min(max(ensureValueIsFloat(blueStartValue), 0.0), 1.0)
+                        
+                        let redEndDelayValue = ensureValueIsFloat(
+                            redEndDelayInput.getHistoryValue(millisecondsAgo: 0)
+                        )
+                        let redEndValue = redEndInput.getHistoryValue(
+                            millisecondsAgo: Double(redEndDelayValue * cubeTime * 1000)
+                        )
+                        let redEndFloat = min(max(ensureValueIsFloat(redEndValue), 0.0), 1.0)
+                        
+                        let greenEndDelayValue = ensureValueIsFloat(
+                            greenEndDelayInput.getHistoryValue(millisecondsAgo: 0)
+                        )
+                        let greenEndValue = greenEndInput.getHistoryValue(
+                            millisecondsAgo: Double(greenEndDelayValue * cubeTime * 1000)
+                        )
+                        let greenEndFloat = min(max(ensureValueIsFloat(greenEndValue), 0.0), 1.0)
+                        
+                        let blueEndDelayValue = ensureValueIsFloat(
+                            blueEndDelayInput.getHistoryValue(millisecondsAgo: 0)
+                        )
+                        let blueEndValue = blueEndInput.getHistoryValue(
+                            millisecondsAgo: Double(blueEndDelayValue * cubeTime * 1000)
+                        )
+                        let blueEndFloat = min(max(ensureValueIsFloat(blueEndValue), 0.0), 1.0)
+                        
+                        let rgbStartColor = Color(
+                            red: Double(redStartFloat),
+                            green: Double(greenStartFloat),
+                            blue: Double(blueStartFloat)
+                        )
+                        
+                        let rgbEndColor = Color(
+                            red: Double(redEndFloat),
+                            green: Double(greenEndFloat),
+                            blue: Double(blueEndFloat)
+                        )
+                        
+                        let rgbScale = ColorScale(colors: [rgbStartColor, rgbEndColor], mode: .rgb)
+                        finalColor = rgbScale.color(
+                            at: Double(colorTime),
+                            saturation: Double(saturationFloat),
+                            brightness: Double(brightnessFloat)
+                        ).toSIMD4()
+                    } else {
+                        finalColor = colorScale.color(
+                            at: Double(colorTime),
+                            saturation: Double(saturationFloat),
+                            brightness: Double(brightnessFloat)
+                        ).toSIMD4()
+                    }
+                    
                     cube[i] = cube[i].setBasicEndPointColors(
-                        startColor: color,
-                        endColor: color
+                        startColor: finalColor,
+                        endColor: finalColor
                     )
                 }
                 
@@ -325,9 +596,13 @@ class CubeGenerator: CachedGeometryGenerator {
             }
         }
         
-        let sceneRotationMatrixX = matrix_rotation(angle: sceneStatefulRotationX, axis: SIMD3<Float>(1.0, 0.0, 0.0))
-        let sceneRotationMatrixY = matrix_rotation(angle: sceneStatefulRotationY, axis: SIMD3<Float>(0.0, 1.0, 0.0))
-        let sceneRotationMatrixZ = matrix_rotation(angle: sceneStatefulRotationZ, axis: SIMD3<Float>(0.0, 0.0, 1.0))
+        let totalSceneRotationX = sceneRotationX + sceneStatefulRotationX
+        let totalSceneRotationY = sceneRotationY + sceneStatefulRotationY
+        let totalSceneRotationZ = sceneRotationZ + sceneStatefulRotationZ
+        
+        let sceneRotationMatrixX = matrix_rotation(angle: totalSceneRotationX, axis: SIMD3<Float>(1.0, 0.0, 0.0))
+        let sceneRotationMatrixY = matrix_rotation(angle: totalSceneRotationY, axis: SIMD3<Float>(0.0, 1.0, 0.0))
+        let sceneRotationMatrixZ = matrix_rotation(angle: totalSceneRotationZ, axis: SIMD3<Float>(0.0, 0.0, 1.0))
         
         let combinedSceneRotationMatrix = sceneRotationMatrixX * sceneRotationMatrixY * sceneRotationMatrixZ
         
@@ -411,4 +686,3 @@ func makeCube(size: Float = 1.0, offset: Float = 0.0) -> [Line] {
 
     return cubeLines
 }
-

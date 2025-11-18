@@ -19,7 +19,7 @@ struct SceneInputGroup: Identifiable {
                 note: String? = nil,
                 background: Color = .secondary,
                 isVisible: Bool = true,
-                isExpanded: Bool = true) {
+                isExpanded: Bool = false) {
         self.id = id
         self.name = name
         self.note = note

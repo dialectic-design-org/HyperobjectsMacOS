@@ -45,11 +45,11 @@ struct SceneInputsView: View {
                                                                 note: name.isEmpty ? "Ungrouped inputs" : nil,
                                                                 background: .secondary,
                                                                 isVisible: true,
-                                                                isExpanded: true
+                                                                isExpanded: false
                                                                ), at: 0)
             }
         }
-        return .constant(SceneInputGroup(name: name, isVisible: true, isExpanded: true))
+        return .constant(SceneInputGroup(name: name, isVisible: true, isExpanded: false))
     }
     
     
