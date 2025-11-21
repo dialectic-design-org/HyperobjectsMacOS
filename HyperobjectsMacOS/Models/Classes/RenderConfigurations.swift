@@ -22,6 +22,8 @@ class RenderConfigurations: ObservableObject {
     @Published var renderLinesOverlay: Bool = false
     
     @Published var showOverlay: Bool = true
+
+    @Published var showSquareBounds: Bool = false
     
     @Published var runScriptOnFrameChange: Bool = false
     

@@ -37,6 +37,11 @@ struct RenderConfigurationsView: View {
                     "Show overlay",
                     isOn: $renderConfigurations.showOverlay
                 )
+
+                Toggle(
+                    "Show square bounds",
+                    isOn: $renderConfigurations.showSquareBounds
+                )
                 
                 Toggle(
                     "Run script on timer",

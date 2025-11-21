@@ -23,6 +23,18 @@ struct RenderView: View {
                 resolutionMode: $resolutionMode,
                 resolution: $resolution
             ).frame(minWidth: 300, minHeight: 300)
+
+
+            if renderConfigs.showSquareBounds {
+                GeometryReader { geometry in
+                    let size = min(geometry.size.width, geometry.size.height)
+                    Rectangle()
+                        .stroke(Color.yellow, lineWidth: 1)
+                        .frame(width: size, height: size)
+                        .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                }
+            }
+
             if renderConfigs.showOverlay {
                 VStack(alignment: .leading) {
                     Text("RENDER VIEW").fontWeight(.bold)
