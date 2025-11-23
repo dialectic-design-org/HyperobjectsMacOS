@@ -11,12 +11,18 @@ import UniformTypeIdentifiers
 import Combine
 import simd
 
+struct LineStateValue {
+    var start: SIMD3<Double>
+    var end: SIMD3<Double>
+}
+
 struct StateValue {
     enum Value {
         case float(Double)
         case vector3(SIMD3<Double>)
         case vector4(SIMD4<Double>)
         case object([String: Value])
+        case lineSegments([LineStateValue])
     }
     
     var value: Value
@@ -35,6 +41,13 @@ extension StateValue {
             return dict.mapValues { value -> Any in
                 return StateValue(value: value).toJSONValue()
             }
+        case .lineSegments(let segments):
+            return segments.map { l -> Any in
+                return [
+                    "start": ["x": l.start.x, "y": l.start.y, "z": l.start.z],
+                    "end": ["x": l.end.x, "y": l.end.y, "z": l.end.z]
+                ]
+            }
         }
     }
     
@@ -51,7 +64,6 @@ extension StateValue {
                     Double(z)
                 )))
             }
-            
             var objDict: [String: StateValue.Value] = [:]
             for (key, val) in dict {
                 if let stateVal = fromJSONValue(val) {
@@ -59,19 +71,35 @@ extension StateValue {
                 }
             }
             return StateValue(value: .object(objDict))
-        } else if let array = jsonValue as? [Double], array.count == 3 {
-            return StateValue(value: .vector3(SIMD3<Double>(
-                array[0],
-                array[1],
-                array[2]
-            )))
-        } else if let array = jsonValue as? [Double], array.count == 4 {
-            return StateValue(value: .vector4(SIMD4<Double>(
-                array[0],
-                array[1],
-                array[2],
-                array[3]
-            )))
+        } else if let array = jsonValue as? [Any] {
+            if let doubleArray = array as? [Double], doubleArray.count == 3 {
+                return StateValue(value: .vector3(SIMD3<Double>(
+                    doubleArray[0],
+                    doubleArray[1],
+                    doubleArray[2]
+                )))
+            } else if let doubleArray = array as? [Double], doubleArray.count == 4 {
+                return StateValue(value: .vector4(SIMD4<Double>(
+                    doubleArray[0],
+                    doubleArray[1],
+                    doubleArray[2],
+                    doubleArray[3]
+                )))
+            } else if let lineDicts = array as? [[String: Any]] {
+                var segments: [LineStateValue] = []
+                for lineDict in lineDicts {
+                    guard let startDict = lineDict["start"] as? [String: Any],
+                          let endDict = lineDict["end"] as? [String: Any],
+                          let startValue = fromJSONValue(startDict),
+                          case let .vector3(startVec) = startValue.value,
+                          let endValue = fromJSONValue(endDict),
+                          case let .vector3(endVec) = endValue.value else {
+                        return nil
+                    }
+                    segments.append(LineStateValue(start: startVec, end: endVec))
+                }
+                return StateValue(value: .lineSegments(segments))
+            }
         }
         return nil
     }
@@ -159,7 +187,6 @@ class JSEngineManager: ObservableObject {
                let outputDict = output.toDictionary() as? [String: Any] {
                 var parsedOutput: [String: StateValue] = [:]
                 for (key, value) in outputDict {
-                    // print("Extracting key \(key)")
                     if let stateValue = StateValue.fromJSONValue(value) {
                         parsedOutput[key] = stateValue
                     }

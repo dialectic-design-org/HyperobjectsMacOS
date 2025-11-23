@@ -481,7 +481,10 @@ class CubeGenerator: CachedGeometryGenerator {
                 
                 let combinedMatrix = matrixTranslate * scalingMatrix
                 
-                let colorTime = (Double(cubeTime) + Double(statefulColorShift)).truncatingRemainder(dividingBy: 1.0)
+                
+                
+                let colorTime = (Double(cubeOuterTime) + Double(statefulColorShift)).truncatingRemainder(dividingBy: 1.00001)
+
                 
                 for i in 0..<cube.count {
                     cube[i] = cube[i].applyMatrix(combinedMatrix)

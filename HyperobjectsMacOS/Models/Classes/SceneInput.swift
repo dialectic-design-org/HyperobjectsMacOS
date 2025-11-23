@@ -9,6 +9,7 @@ import Foundation
 import SwiftUI
 import AppKit
 import QuartzCore
+import simd
 
 final class SceneInput: ObservableObject, Identifiable, Equatable {
     var id: UUID = UUID()
@@ -54,6 +55,7 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
     private enum ValueKey: Equatable {
         case num(Float), bool(Bool), str(String)
         case color(r: Float, g: Float, b: Float, a: Float)
+        case lines(hash: Int)
         case none
     }
     
@@ -66,9 +68,56 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
         case let v as String: return .str(v)
         case let v as Color: let ns = NSColor(v).usingColorSpace(.sRGB) ?? NSColor.black
             return .color(r: Float(ns.redComponent), g: Float(ns.greenComponent), b: Float(ns.blueComponent), a: Float(ns.alphaComponent))
+        case let v as [Line]: return .lines(hash: hashLines(v))
         default:
             return .str(String(describing: any))
         }
+    }
+
+    private static func hashLines(_ lines: [Line]) -> Int {
+        var hasher = Hasher()
+        hasher.combine(lines.count)
+        for line in lines {
+            hashLine(line, into: &hasher)
+        }
+        return hasher.finalize()
+    }
+
+    private static func hashLine(_ line: Line, into hasher: inout Hasher) {
+        hasher.combine(line.pathID)
+        hasher.combine(line.degree)
+        hashVector(line.startPoint, into: &hasher)
+        hashVector(line.endPoint, into: &hasher)
+        hashVector(line.colorStart, into: &hasher)
+        hashVector(line.colorStartOuterLeft, into: &hasher)
+        hashVector(line.colorStartOuterRight, into: &hasher)
+        hashVector(line.colorEnd, into: &hasher)
+        hashVector(line.colorEndOuterLeft, into: &hasher)
+        hashVector(line.colorEndOuterRight, into: &hasher)
+        hasher.combine(line.sigmoidSteepness0)
+        hasher.combine(line.sigmoidMidpoint0)
+        hasher.combine(line.sigmoidSteepness1)
+        hasher.combine(line.sigmoidMidpoint1)
+        hasher.combine(line.lineWidthStart)
+        hasher.combine(line.lineWidthEnd)
+        hasher.combine(line.noiseFloor)
+        hasher.combine(line.controlPoints.count)
+        for controlPoint in line.controlPoints {
+            hashVector(controlPoint, into: &hasher)
+        }
+    }
+
+    private static func hashVector(_ vector: SIMD3<Float>, into hasher: inout Hasher) {
+        hasher.combine(vector.x)
+        hasher.combine(vector.y)
+        hasher.combine(vector.z)
+    }
+
+    private static func hashVector(_ vector: SIMD4<Float>, into hasher: inout Hasher) {
+        hasher.combine(vector.x)
+        hasher.combine(vector.y)
+        hasher.combine(vector.z)
+        hasher.combine(vector.w)
     }
     
     
@@ -195,6 +244,15 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
         }
         return Float(0.0)
     }
+
+    func valueAsLines() -> [Line] {
+        if self.type == .lines {
+            if let linesValue = self.value as? [Line] {
+                return self.value as! [Line]
+            }
+        }
+        return []
+    }
     
     func combinedValueAsFloat(audioSignal: Float = 0.0) -> Float {
         return self.valueAsFloat()
@@ -206,7 +264,7 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
     func toStateValue() -> StateValue {
         if self.type == .float {
             if let floatValue = self.value as? Double {
-                return StateValue(value: .float(floatValue as! Double))
+                return StateValue(value: .float(floatValue))
             }
             if let floatValue = self.value as? Float {
                 return StateValue(value: .float(Double(floatValue)))
@@ -215,6 +273,22 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
             let color = self.value as! Color
             let colorVec = color.asSIMD4()
             return StateValue(value: .vector4(colorVec))
+        } else if self.type == .lines {
+            var lines: [Line] = self.valueAsLines()
+            return StateValue(value: .lineSegments(lines.map { line in
+                return LineStateValue(
+                    start: SIMD3<Double>(
+                        Double(line.startPoint.x),
+                        Double(line.startPoint.y),
+                        Double(line.startPoint.z)
+                    ),
+                    end: SIMD3<Double>(
+                        Double(line.endPoint.x),
+                        Double(line.endPoint.y),
+                        Double(line.endPoint.z)
+                    )
+                )
+            }))
         }
         return StateValue(value: .float(0.0))
     }

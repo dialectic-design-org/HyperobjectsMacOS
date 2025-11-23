@@ -14,7 +14,7 @@ private final class TimeBox {
 
 @main
 struct HyperobjectsMacOSApp: App {
-    @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneLine())
+    @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneLiveCoding())
     @StateObject private var renderConfigurations = RenderConfigurations()
     @StateObject private var jsEngine = JSEngineManager()
     @StateObject private var fileMonitor = FileMonitor()
@@ -237,7 +237,16 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
                     input.value = Color(nsColor: nsColor)
                 }
             }
-            
+        case (.lineSegments(let a), .lineSegments(let b)):
+            if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
+                var newLines: [Line] = []
+                for scriptLine in b {
+                    let start = SIMD3<Float>(Float(scriptLine.start.x), Float(scriptLine.start.y), Float(scriptLine.start.z))
+                    let end = SIMD3<Float>(Float(scriptLine.end.x), Float(scriptLine.end.y), Float(scriptLine.end.z))
+                    newLines.append(Line(startPoint: start, endPoint: end))
+                }
+                input.value = newLines
+            }
         default:
             // Different types or unhandled types
             print("[State Change] Type or value changed unhandled for key \(key): \(inVal) -> \(outVal)")

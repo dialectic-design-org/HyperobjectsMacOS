@@ -126,6 +126,8 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
                 return (input.name, combinedValueAsFloat)
             } else if input.type == .colorInput {
                 return (input.name, input.value)
+            } else if input.type == .lines {
+                return (input.name, input.value)
             } else {
                 return (input.name, input.value)
             }
@@ -155,6 +157,14 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
 
         
         for (index, input) in inputs.enumerated() where input.type == .float {
+            // Only update if the value actually changed significantly
+            // if abs(input.valueAsFloat() - audioValue) > 0.001 {
+            if true {
+                changedInputNames.append(input.name)
+            }
+        }
+        
+        for (index, input) in inputs.enumerated() where input.type == .lines {
             // Only update if the value actually changed significantly
             // if abs(input.valueAsFloat() - audioValue) > 0.001 {
             if true {
