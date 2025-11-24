@@ -286,6 +286,20 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
                         Double(line.endPoint.x),
                         Double(line.endPoint.y),
                         Double(line.endPoint.z)
+                    ),
+                    lineWidthStart: Double(line.lineWidthStart),
+                    lineWidthEnd: Double(line.lineWidthEnd),
+                    colorStart: SIMD4<Double>(
+                        Double(line.colorStart.x),
+                        Double(line.colorStart.y),
+                        Double(line.colorStart.z),
+                        Double(line.colorStart.w)
+                    ),
+                    colorEnd: SIMD4<Double>(
+                        Double(line.colorEnd.x),
+                        Double(line.colorEnd.y),
+                        Double(line.colorEnd.z),
+                        Double(line.colorEnd.w)
                     )
                 )
             }))
@@ -316,3 +330,4 @@ extension Color {
         )
     }
 }
+

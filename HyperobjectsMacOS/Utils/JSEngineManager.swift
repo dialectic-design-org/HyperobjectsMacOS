@@ -14,11 +14,16 @@ import simd
 struct LineStateValue {
     var start: SIMD3<Double>
     var end: SIMD3<Double>
+    var lineWidthStart: Double
+    var lineWidthEnd: Double
+    var colorStart: SIMD4<Double>
+    var colorEnd: SIMD4<Double>
 }
 
 struct StateValue {
     enum Value {
         case float(Double)
+        case floatArray([Double])
         case vector3(SIMD3<Double>)
         case vector4(SIMD4<Double>)
         case object([String: Value])
@@ -33,6 +38,8 @@ extension StateValue {
         switch value {
         case .float(let f):
             return f
+        case .floatArray(let a):
+            return a as Any
         case .vector3(let v):
             return ["x": v.x, "y": v.y, "z": v.z]
         case .vector4(let v):
@@ -45,7 +52,11 @@ extension StateValue {
             return segments.map { l -> Any in
                 return [
                     "start": ["x": l.start.x, "y": l.start.y, "z": l.start.z],
-                    "end": ["x": l.end.x, "y": l.end.y, "z": l.end.z]
+                    "end": ["x": l.end.x, "y": l.end.y, "z": l.end.z],
+                    "lineWidthStart": l.lineWidthStart,
+                    "lineWidthEnd": l.lineWidthEnd,
+                    "colorStart": ["x": l.colorStart.x, "y": l.colorStart.y, "z": l.colorStart.z, "w": l.colorStart.w],
+                    "colorEnd": ["x": l.colorEnd.x, "y": l.colorEnd.y, "z": l.colorEnd.z, "w": l.colorEnd.w]
                 ]
             }
         }
@@ -96,9 +107,22 @@ extension StateValue {
                           case let .vector3(endVec) = endValue.value else {
                         return nil
                     }
-                    segments.append(LineStateValue(start: startVec, end: endVec))
+                    let lineWidthStart: Double = lineDict["lineWidthStart"] as? Double ?? 1.0
+                    let lineWidthEnd: Double = lineDict["lineWidthEnd"] as? Double ?? 1.0
+                    let colorStart: [Double] = (lineDict["colorStart"] as? [Double]) ?? [1.0, 1.0, 1.0, 1.0]
+                    let colorEnd: [Double] = (lineDict["colorEnd"] as? [Double]) ?? [1.0, 1.0, 1.0, 1.0]
+                    segments.append(LineStateValue(
+                        start: startVec,
+                        end: endVec,
+                        lineWidthStart: lineWidthStart,
+                        lineWidthEnd: lineWidthEnd,
+                        colorStart: SIMD4<Double>(colorStart),
+                        colorEnd: SIMD4<Double>(colorEnd)
+                    ))
                 }
                 return StateValue(value: .lineSegments(segments))
+            } else if let floatArray = array as? [Double] {
+                return StateValue(value: .floatArray(array as! [Double]))
             }
         }
         return nil

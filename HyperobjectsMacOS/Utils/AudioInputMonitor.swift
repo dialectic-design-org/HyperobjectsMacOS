@@ -26,7 +26,7 @@ class AudioInputMonitor: ObservableObject {
 
     @Published var lowpassCutoffFrequency: Float = 200.0 // in Hz
 
-    private var recentVolumes: [Float] = []
+    @Published var recentVolumes: [Float] = []
     @Published var recentVolumesPerSmoothing: [Int:[Float]] = [:]
     
     private var smoothingSteps: [Int] = [1, 2, 5, 20, 50]

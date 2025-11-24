@@ -52,7 +52,7 @@ struct HyperobjectsMacOSApp: App {
                     fileMonitor.setCallback { [weak sceneManager, weak jsEngine] script in
                         guard let sceneManager = sceneManager, let jsEngine = jsEngine else { return }
                         
-                        var inputState = prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox)
+                        var inputState = prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor)
                         
                         _ = jsEngine.executeScript(script, inputState: inputState)
                         
@@ -72,7 +72,7 @@ struct HyperobjectsMacOSApp: App {
                             // print("Script timer: runScriptOnFrameChange: \(renderConfigurations.runScriptOnFrameChange)")
                             if renderConfigurations.runScriptOnFrameChange && latestScript.isEmpty == false {
                                 
-                                var inputState = prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox)
+                                var inputState = prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor)
                                 
                                 _ = jsEngine.executeScript(latestScript, inputState: inputState)
                                 
@@ -143,9 +143,27 @@ struct HyperobjectsMacOSApp: App {
 }
 
 
-private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox) -> [String: StateValue] {
+private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox, audioMonitor: AudioInputMonitor) -> [String: StateValue] {
+    
+    var latestAudioAmplitude = sceneManager.currentScene.audioSignalProcessed.isZero ? 0.0 : sceneManager.currentScene.audioSignalProcessed.magnitude
+    let smoothedAudioAmplitudes = sceneManager.currentScene.audioSignalsSmoothedProcessed.map {
+        return $0.value
+    }
+    
+    let recentVolumes = audioMonitor.recentVolumes.map {
+        return Double($0)
+    }
+    
+    let recentVolumesProcessed = sceneManager.currentScene.historyData.map {
+        return $0.processedVolume
+    }
+    
     var inputState: [String: StateValue] = [
         "time": StateValue(value: .float(timeBox.value)),
+        "audioAmplitude": StateValue(value: .float(latestAudioAmplitude)),
+        "smoothedAudioAmplitudes": StateValue(value: .floatArray(smoothedAudioAmplitudes)),
+        "recentVolumesRaw": StateValue(value: .floatArray(recentVolumes)),
+        "recentVolumesProcessed": StateValue(value: .floatArray(recentVolumesProcessed)),
         "width": StateValue(value: .float(800.0)),
         "height": StateValue(value: .float(600.0))
     ]
@@ -243,7 +261,27 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
                 for scriptLine in b {
                     let start = SIMD3<Float>(Float(scriptLine.start.x), Float(scriptLine.start.y), Float(scriptLine.start.z))
                     let end = SIMD3<Float>(Float(scriptLine.end.x), Float(scriptLine.end.y), Float(scriptLine.end.z))
-                    newLines.append(Line(startPoint: start, endPoint: end))
+                    var newLine = Line(
+                        startPoint: start,
+                        endPoint: end,
+                        lineWidthStart: Float(scriptLine.lineWidthStart),
+                        lineWidthEnd: Float(scriptLine.lineWidthEnd)
+                    )
+                    newLine = newLine.setBasicEndPointColors(
+                        startColor: SIMD4<Float>(
+                            Float(scriptLine.colorStart.x),
+                            Float(scriptLine.colorStart.y),
+                            Float(scriptLine.colorStart.z),
+                            Float(scriptLine.colorStart.w)
+                        ),
+                        endColor: SIMD4<Float>(
+                            Float(scriptLine.colorEnd.x),
+                            Float(scriptLine.colorEnd.y),
+                            Float(scriptLine.colorEnd.z),
+                            Float(scriptLine.colorEnd.w)
+                        )
+                    )
+                    newLines.append(newLine)
                 }
                 input.value = newLines
             }
