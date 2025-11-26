@@ -132,6 +132,7 @@ extension StateValue {
 class JSEngineManager: ObservableObject {
     @Published var outputState: [String: StateValue] = [:]
     @Published var errorMessage: String?
+    @Published var warningMessage: String?
     @Published var lastExecutionTime: Date?
     @Published var executionDuration: Double = 0
     
@@ -154,14 +155,16 @@ class JSEngineManager: ObservableObject {
         }
         context?.setObject(consoleLog, forKeyedSubscript: "consoleLog" as NSString)
         
-        context?.evaluateScript("""
-            var console = {
-                log: function() {
-                    var args = Array.prototype.slice.call(arguments);
-                    consoleLog(args.join(' '));
-                }
-            };
-        """)
+        
+        var scriptToEvaluate = JSHelperClasses + """
+        var console = {
+            log: function() {
+                var args = Array.prototype.slice.call(arguments);
+                consoleLog(args.join(' '));
+            }
+        };
+        """
+        context?.evaluateScript(scriptToEvaluate)
     }
     
     func executeScript(_ script: String, inputState: [String: StateValue]) -> Bool {
@@ -182,12 +185,31 @@ class JSEngineManager: ObservableObject {
             
             
             let jsonCompatibleInput = inputState.mapValues { $0.toJSONValue() }
+            var warnings: [String] = []
+            let sanitizedAny = self.sanitizedJSONValue(jsonCompatibleInput, warnings: &warnings)
+            guard let sanitizedInput = sanitizedAny as? [String: Any] else {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Invalid inputState: could not sanitize"
+                    self.warningMessage = warnings.isEmpty ? nil : warnings.joined(separator: "; ")
+                }
+                return
+            }
+            
+            guard JSONSerialization.isValidJSONObject(sanitizedInput) else {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Invalid inputState: not JSON-serializable"
+                    self.warningMessage = warnings.isEmpty ? nil : warnings.joined(separator: "; ")
+                }
+                return
+            }
             
             // Inject input state FIRST
-            let inputJSON = try? JSONSerialization.data(withJSONObject: jsonCompatibleInput)
+            let inputJSON = try? JSONSerialization.data(withJSONObject: sanitizedInput)
             if let inputJSON = inputJSON,
                let inputString = String(data: inputJSON, encoding: .utf8) {
-                context.evaluateScript("var inputState = \(inputString);")
+                context.evaluateScript("""
+var inputState = \(inputString);
+""")
             }
             
             // Now execute the script with inputState available
@@ -199,6 +221,7 @@ class JSEngineManager: ObservableObject {
                 let duration = (endTime - startTime) * 1000
                 DispatchQueue.main.async { // CHANGE: main-thread UI update
                     self.errorMessage = "Error: \(exception.toString() ?? "Unknown")"
+                    self.warningMessage = warnings.isEmpty ? nil : warnings.joined(separator: "; ")
                     self.executionDuration = duration
                 }
                 return
@@ -220,6 +243,7 @@ class JSEngineManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.outputState = parsedOutput
                     self.errorMessage = nil
+                    self.warningMessage = warnings.isEmpty ? nil : warnings.joined(separator: "; ")
                     self.lastExecutionTime = Date()
                     self.executionDuration = duration
                 }
@@ -229,11 +253,35 @@ class JSEngineManager: ObservableObject {
                 let duration = (endTime - startTime) * 1000
                 DispatchQueue.main.async {
                     self.errorMessage = "No outputState object found or invalid format"
+                    self.warningMessage = warnings.isEmpty ? nil : warnings.joined(separator: "; ")
                     self.executionDuration = duration
                 }
                 return
             }
         }
         return true
+    }
+    
+    // Replace non-finite numbers (NaN/Inf) with 0 and accumulate warnings with their paths.
+    private func sanitizedJSONValue(_ value: Any, warnings: inout [String], path: String = "root") -> Any {
+        if let number = value as? NSNumber {
+            let doubleValue = number.doubleValue
+            if doubleValue.isNaN || !doubleValue.isFinite {
+                warnings.append("\(path) replaced non-finite number with 0")
+                return 0.0
+            }
+            return value
+        } else if let dict = value as? [String: Any] {
+            var newDict: [String: Any] = [:]
+            for (key, val) in dict {
+                newDict[key] = sanitizedJSONValue(val, warnings: &warnings, path: "\(path).\(key)")
+            }
+            return newDict
+        } else if let array = value as? [Any] {
+            return array.enumerated().map { index, element in
+                sanitizedJSONValue(element, warnings: &warnings, path: "\(path)[\(index)]")
+            }
+        }
+        return value
     }
 }
