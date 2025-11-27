@@ -41,7 +41,7 @@ func computeOutSegsCapacity(linearCount: Int, quadCount: Int, cubicCount: Int) -
 
 private let BIN_POW: UInt32 = 5
 private let BIN_SIZE: UInt32 = 1 << BIN_POW
-private let lineCount: UInt32 = 10000
+// private let lineCount: UInt32 = 10000 // REMOVED: Now an instance variable
 
 
 // ADD: helper to compute a legal, efficient threadsPerThreadgroup for this pipeline
@@ -93,6 +93,8 @@ class MetalRenderer {
     var lineRenderTextureB: MTLTexture!
     let maxViewSize = 4096 * 2
     
+    // DYNAMIC BUFFER SIZING
+    private var lineCount: Int = 10000
     
     private var linesBuffer: MTLBuffer!
     private var quadraticCurvesBuffer: MTLBuffer!
@@ -143,6 +145,45 @@ class MetalRenderer {
         // createRenderPipelineState()
     }
     
+    private func createLineBuffers() {
+        let binCols = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
+        let binRows = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
+        let totalBins = binCols * binRows
+        
+        // Re-allocate buffers with current lineCount
+        linesBuffer = device.makeBuffer(length: MemoryLayout<LinearSeg3D>.stride * lineCount, options: .storageModeShared)!
+        quadraticCurvesBuffer = device.makeBuffer(length: MemoryLayout<QuadraticSeg3D>.stride * lineCount, options: .storageModeShared)!
+        cubicCurvesBuffer = device.makeBuffer(length: MemoryLayout<CubicSeg3D>.stride * lineCount, options: .storageModeShared)!
+        linearLinesScreenSpaceBuffer = device.makeBuffer(length: MemoryLayout<LinearSegScreenSpace>.stride * lineCount, options: .storageModeShared)!
+        
+        // Bin list needs to hold potentially all lines in each bin (worst case) or a shared pool.
+        // The current implementation seems to use a fixed stride per bin: `offset += lineCount`.
+        // This implies binList size = lineCount * totalBins. This is huge but that's how it's written.
+        binList = device.makeBuffer(length: MemoryLayout<UInt32>.stride * lineCount * totalBins, options: .storageModeShared)!
+        
+        segAllocBuffer = device.makeBuffer(length: MemoryLayout<SegAlloc>.stride, options: .storageModeShared)!
+        
+        print("Allocated buffers for \(lineCount) lines.")
+    }
+    
+    private func updateBufferCapacity(required: Int) {
+        let minCapacity = 10000
+        
+        if required > lineCount {
+            let oldLineCount = lineCount
+            // Geometric growth
+            lineCount = max(required, lineCount * 2)
+            print("⚠️ Growing buffers: \(oldLineCount) -> \(lineCount) lines (Required: \(required))")
+            createLineBuffers()
+        } else if required < lineCount / 4 && lineCount > minCapacity {
+            let oldLineCount = lineCount
+            // Shrink, but keep some headroom
+            lineCount = max(minCapacity, required * 2)
+            print("♻️ Shrinking buffers: \(oldLineCount) -> \(lineCount) lines (Required: \(required))")
+            createLineBuffers()
+        }
+    }
+    
     private func createBuffers() {
         // Define a simple triangle
         var vertices: [Float] = [
@@ -186,21 +227,13 @@ class MetalRenderer {
         let binRows = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
         let totalBins = binCols * binRows
         
-        // TODO: set correct buffer sizes based on types of lines
-        linesBuffer = device.makeBuffer(length: MemoryLayout<LinearSeg3D>.stride * Int(lineCount), options: .storageModeShared)!
-        quadraticCurvesBuffer = device.makeBuffer(length: MemoryLayout<QuadraticSeg3D>.stride * Int(lineCount), options: .storageModeShared)!
-        cubicCurvesBuffer = device.makeBuffer(length: MemoryLayout<CubicSeg3D>.stride * Int(lineCount), options: .storageModeShared)!
-        linearLinesScreenSpaceBuffer = device.makeBuffer(length: MemoryLayout<LinearSegScreenSpace>.stride * Int(lineCount), options: .storageModeShared)!
-        
         binCounts = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
         binOffsets = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
-        binList = device.makeBuffer(length: MemoryLayout<UInt32>.stride * Int(lineCount) * totalBins, options: .storageModeShared)!
         
         randomValuesBuffer = device.makeBuffer(length:MemoryLayout<SIMD4<Float>>.stride * Int(1000), options: .storageModeShared)!
         
-        // TODO: IMPLEMENT DYNAMIC CAPACITY ALLOCATION!
-        
-        segAllocBuffer = device.makeBuffer(length: MemoryLayout<SegAlloc>.stride, options: .storageModeShared)!
+        // Create the line-dependent buffers
+        createLineBuffers()
         
     }
     
@@ -322,6 +355,10 @@ class MetalRenderer {
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
         
+        // DYNAMIC BUFFER SIZING: Ensure we have enough space
+        let totalLineCount = scene.cachedGeometries.count
+        updateBufferCapacity(required: totalLineCount)
+        
         drawCounter += 1
         
         var writeTexture: MTLTexture?
@@ -337,11 +374,11 @@ class MetalRenderer {
         
         var testPoints: [SIMD3<Float>] = []
         
-        let linesPtr = linesBuffer.contents().bindMemory(to: LinearSeg3D.self, capacity: Int(lineCount))
+        let linesPtr = linesBuffer.contents().bindMemory(to: LinearSeg3D.self, capacity: lineCount)
         
-        let quadraticCurvesPtr = quadraticCurvesBuffer.contents().bindMemory(to: QuadraticSeg3D.self, capacity: Int(lineCount))
+        let quadraticCurvesPtr = quadraticCurvesBuffer.contents().bindMemory(to: QuadraticSeg3D.self, capacity: lineCount)
         
-        let cubicCurvesPtr = cubicCurvesBuffer.contents().bindMemory(to: CubicSeg3D.self, capacity: Int(lineCount))
+        let cubicCurvesPtr = cubicCurvesBuffer.contents().bindMemory(to: CubicSeg3D.self, capacity: lineCount)
         
         let randomValuesPtr = randomValuesBuffer.contents().bindMemory(to: SIMD4<Float>.self, capacity: Int(1000))
         
@@ -475,7 +512,7 @@ class MetalRenderer {
         for i in 0..<totalBins {
             binCountsPtr[i] = 0
             binOffsetsPtr[i] = offset
-            offset += lineCount // Each bin can potentially hold all lines
+            offset += UInt32(lineCount) // Each bin can potentially hold all lines
         }
         
         // Create MVP matrix (identity for this example)
@@ -578,7 +615,7 @@ class MetalRenderer {
         var segCount: Int32 = Int32(gIndex)
         
         
-        var segAlloc = SegAlloc(next: 0, capacity: uint32(10000));
+        var segAlloc = SegAlloc(next: 0, capacity: uint32(lineCount));
         var segAllocPtr = segAllocBuffer.contents().bindMemory(to: SegAlloc.self, capacity: Int(1))
         // Reset to 0 for each frame
         segAllocPtr[0] = segAlloc
@@ -601,7 +638,7 @@ class MetalRenderer {
                                  height: 1,
                                  depth: 1)
                 
-                transformLinearEncoder.dispatchThreads(MTLSize(width: Int(lineCount), height: 1, depth: 1),
+                transformLinearEncoder.dispatchThreads(MTLSize(width: lineCount, height: 1, depth: 1),
                                                  threadsPerThreadgroup: tg)
                 transformLinearEncoder.endEncoding()          // ← guarantees completion before the next encoder
             }
@@ -623,7 +660,7 @@ class MetalRenderer {
                                  height: 1,
                                  depth: 1)
                 
-                transformQuadraticEncoder.dispatchThreads(MTLSize(width: Int(lineCount), height: 1, depth: 1),
+                transformQuadraticEncoder.dispatchThreads(MTLSize(width: lineCount, height: 1, depth: 1),
                                                  threadsPerThreadgroup: tg)
                 transformQuadraticEncoder.endEncoding()          // ← guarantees completion before the next encoder
             }
@@ -645,7 +682,7 @@ class MetalRenderer {
                                  height: 1,
                                  depth: 1)
                 
-                transformCubicEncoder.dispatchThreads(MTLSize(width: Int(lineCount), height: 1, depth: 1),
+                transformCubicEncoder.dispatchThreads(MTLSize(width: lineCount, height: 1, depth: 1),
                                                  threadsPerThreadgroup: tg)
                 transformCubicEncoder.endEncoding()          // ← guarantees completion before the next encoder
             }

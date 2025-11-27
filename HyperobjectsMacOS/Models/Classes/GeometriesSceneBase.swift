@@ -196,7 +196,29 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         self.historyData.append(dataPoint)
         
         let cutoffTime = currentTime - self.maxAudioHistoryDuration
-        self.historyData.removeAll { $0.timestamp < cutoffTime }
+        
+        // OPTIMIZATION: Efficiently remove old history
+        // Instead of iterating the whole array with removeAll, we find the count of old items and remove them in batch.
+        // Since the array is sorted by time, we only need to check from the start.
+        var removeCount = 0
+        for item in self.historyData {
+            if item.timestamp < cutoffTime {
+                removeCount += 1
+            } else {
+                break
+            }
+        }
+        
+        if removeCount > 0 {
+            self.historyData.removeFirst(removeCount)
+        }
+        
+        // Safety cap to prevent unbounded growth if timestamps drift
+        if self.historyData.count > 4000 {
+             let excess = self.historyData.count - 3600
+             self.historyData.removeFirst(excess)
+             print("⚠️ Audio History exceeded safety limit. Pruned \(excess) items.")
+        }
     }
     
     func setChangedInputs(names: [String]) {

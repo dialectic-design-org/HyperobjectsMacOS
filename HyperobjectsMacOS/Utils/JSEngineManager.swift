@@ -75,6 +75,41 @@ extension StateValue {
                     Double(z)
                 )))
             }
+            
+            // OPTIMIZATION: Handle packed line segments
+            if let packed = dict["lineSegments_packed"] as? [String: Any],
+               let count = packed["count"] as? Double, // JS numbers come as Double
+               let starts = packed["starts"] as? [Double],
+               let ends = packed["ends"] as? [Double],
+               let widths = packed["widths"] as? [Double],
+               let colors = packed["colors"] as? [Double] {
+                
+                let countInt = Int(count)
+                var segments: [LineStateValue] = []
+                segments.reserveCapacity(countInt)
+                
+                for i in 0..<countInt {
+                    let i3 = i * 3
+                    let i2 = i * 2
+                    let i8 = i * 8
+                    
+                    // Safety check for array bounds
+                    if i3 + 2 < starts.count && i3 + 2 < ends.count &&
+                       i2 + 1 < widths.count && i8 + 7 < colors.count {
+                        
+                        segments.append(LineStateValue(
+                            start: SIMD3<Double>(starts[i3], starts[i3+1], starts[i3+2]),
+                            end: SIMD3<Double>(ends[i3], ends[i3+1], ends[i3+2]),
+                            lineWidthStart: widths[i2],
+                            lineWidthEnd: widths[i2+1],
+                            colorStart: SIMD4<Double>(colors[i8], colors[i8+1], colors[i8+2], colors[i8+3]),
+                            colorEnd: SIMD4<Double>(colors[i8+4], colors[i8+5], colors[i8+6], colors[i8+7])
+                        ))
+                    }
+                }
+                return StateValue(value: .lineSegments(segments))
+            }
+
             var objDict: [String: StateValue.Value] = [:]
             for (key, val) in dict {
                 if let stateVal = fromJSONValue(val) {
@@ -137,6 +172,8 @@ class JSEngineManager: ObservableObject {
     @Published var executionDuration: Double = 0
     
     private var context: JSContext?
+    private var currentScript: String = ""
+    private var consecutiveErrors: Int = 0
     
     private let jsQueue = DispatchQueue(label: "JSEngineManager.JSQueue")
     
@@ -148,6 +185,7 @@ class JSEngineManager: ObservableObject {
     
     func setupContext() {
         context = JSContext()
+        currentScript = "" // Reset script cache
         
         // Setup console.log for debugging
         let consoleLog: @convention(block) (String) -> Void = { message in
@@ -168,13 +206,23 @@ class JSEngineManager: ObservableObject {
     }
     
     func executeScript(_ script: String, inputState: [String: StateValue]) -> Bool {
+        let requestTime = CFAbsoluteTimeGetCurrent()
+        
         jsQueue.async { [weak self] in
             guard let self = self else { return }
             
             let startTime = CFAbsoluteTimeGetCurrent()
+            let queueLatency = startTime - requestTime
             
-            // Reset context for clean execution
-            self.setupContext()
+            // Log if we are falling behind (latency > 33ms / 2 frames)
+            if queueLatency > 0.033 {
+                print("⚠️ JS Queue Backpressure: Waited \(String(format: "%.1f", queueLatency * 1000))ms before execution started.")
+            }
+            
+            // OPTIMIZATION: Only recreate context if it doesn't exist
+            if self.context == nil {
+                self.setupContext()
+            }
             
             guard let context = self.context else {
                 DispatchQueue.main.async {
@@ -183,53 +231,150 @@ class JSEngineManager: ObservableObject {
                 return
             }
             
+            // OPTIMIZATION: Only evaluate the script if it has changed
+            if script != self.currentScript {
+                // Wrap user script in a function to avoid re-parsing overhead
+                // and to allow repeated execution.
+                // We also try to return outputState if it exists, to support 'var outputState = ...'
+                let wrappedScript = """
+                var __optimizeOutput = function(output) {
+                    if (!output || typeof output !== 'object') return output;
+                    if (output.lineSegments && Array.isArray(output.lineSegments) && output.lineSegments.length > 0) {
+                        var segs = output.lineSegments;
+                        var count = segs.length;
+                        var starts = new Float64Array(count * 3);
+                        var ends = new Float64Array(count * 3);
+                        var widths = new Float64Array(count * 2);
+                        var colors = new Float64Array(count * 8); // 4 for start, 4 for end
+                        
+                        for (var i = 0; i < count; i++) {
+                            var s = segs[i];
+                            var i3 = i * 3;
+                            var i2 = i * 2;
+                            var i8 = i * 8;
+                            
+                            // Start
+                            if (s.start) {
+                                starts[i3] = s.start.x || 0;
+                                starts[i3+1] = s.start.y || 0;
+                                starts[i3+2] = s.start.z || 0;
+                            }
+                            
+                            // End
+                            if (s.end) {
+                                ends[i3] = s.end.x || 0;
+                                ends[i3+1] = s.end.y || 0;
+                                ends[i3+2] = s.end.z || 0;
+                            }
+                            
+                            // Widths
+                            widths[i2] = s.lineWidthStart || 1;
+                            widths[i2+1] = s.lineWidthEnd || 1;
+                            
+                            // Colors
+                            if (s.colorStart) {
+                                if (Array.isArray(s.colorStart)) {
+                                    colors[i8] = s.colorStart[0];
+                                    colors[i8+1] = s.colorStart[1];
+                                    colors[i8+2] = s.colorStart[2];
+                                    colors[i8+3] = s.colorStart[3];
+                                } else {
+                                    colors[i8] = s.colorStart.x || 0;
+                                    colors[i8+1] = s.colorStart.y || 0;
+                                    colors[i8+2] = s.colorStart.z || 0;
+                                    colors[i8+3] = s.colorStart.w || 1;
+                                }
+                            } else {
+                                colors[i8] = 1; colors[i8+1] = 1; colors[i8+2] = 1; colors[i8+3] = 1;
+                            }
+                            
+                            if (s.colorEnd) {
+                                if (Array.isArray(s.colorEnd)) {
+                                    colors[i8+4] = s.colorEnd[0];
+                                    colors[i8+5] = s.colorEnd[1];
+                                    colors[i8+6] = s.colorEnd[2];
+                                    colors[i8+7] = s.colorEnd[3];
+                                } else {
+                                    colors[i8+4] = s.colorEnd.x || 0;
+                                    colors[i8+5] = s.colorEnd.y || 0;
+                                    colors[i8+6] = s.colorEnd.z || 0;
+                                    colors[i8+7] = s.colorEnd.w || 1;
+                                }
+                            } else {
+                                colors[i8+4] = 1; colors[i8+5] = 1; colors[i8+6] = 1; colors[i8+7] = 1;
+                            }
+                        }
+                        
+                        output.lineSegments_packed = {
+                            count: count,
+                            starts: starts,
+                            ends: ends,
+                            widths: widths,
+                            colors: colors
+                        };
+                        // Optional: remove original to save bridging time, though strictly not needed if we just ignore it in Swift
+                        // delete output.lineSegments; 
+                    }
+                    return output;
+                };
+
+                var userMain = function() {
+                    \(script)
+                    if (typeof outputState !== 'undefined') { return __optimizeOutput(outputState); }
+                };
+                """
+                context.evaluateScript(wrappedScript)
+                self.currentScript = script
+            }
             
-            let jsonCompatibleInput = inputState.mapValues { $0.toJSONValue() }
-            var warnings: [String] = []
-            let sanitizedAny = self.sanitizedJSONValue(jsonCompatibleInput, warnings: &warnings)
-            guard let sanitizedInput = sanitizedAny as? [String: Any] else {
-                DispatchQueue.main.async {
-                    self.errorMessage = "Invalid inputState: could not sanitize"
-                    self.warningMessage = warnings.isEmpty ? nil : warnings.joined(separator: "; ")
+            // Inject input state directly as JSValues
+            let jsInputState = JSValue(newObjectIn: context)
+            for (key, stateVal) in inputState {
+                if let jsVal = stateVal.toJSValue(in: context) {
+                    jsInputState?.setValue(jsVal, forProperty: key)
                 }
-                return
             }
+            context.setObject(jsInputState, forKeyedSubscript: "inputState" as NSString)
             
-            guard JSONSerialization.isValidJSONObject(sanitizedInput) else {
-                DispatchQueue.main.async {
-                    self.errorMessage = "Invalid inputState: not JSON-serializable"
-                    self.warningMessage = warnings.isEmpty ? nil : warnings.joined(separator: "; ")
-                }
-                return
-            }
-            
-            // Inject input state FIRST
-            let inputJSON = try? JSONSerialization.data(withJSONObject: sanitizedInput)
-            if let inputJSON = inputJSON,
-               let inputString = String(data: inputJSON, encoding: .utf8) {
-                context.evaluateScript("""
-var inputState = \(inputString);
-""")
-            }
-            
-            // Now execute the script with inputState available
-            context.evaluateScript(script)
+            // Execute the user function
+            let userMain = context.objectForKeyedSubscript("userMain")
+            let result = userMain?.call(withArguments: [])
             
             // Check for errors (compilation or runtime)
             if let exception = context.exception {
+                self.consecutiveErrors += 1
+                if self.consecutiveErrors % 60 == 0 {
+                     print("⚠️ High Error Rate: \(self.consecutiveErrors) consecutive errors. This may degrade performance.")
+                }
+                
                 let endTime = CFAbsoluteTimeGetCurrent()
                 let duration = (endTime - startTime) * 1000
-                DispatchQueue.main.async { // CHANGE: main-thread UI update
-                    self.errorMessage = "Error: \(exception.toString() ?? "Unknown")"
-                    self.warningMessage = warnings.isEmpty ? nil : warnings.joined(separator: "; ")
+                let errorString = "Error: \(exception.toString() ?? "Unknown")"
+                
+                DispatchQueue.main.async {
+                    // Optimization: Only update if changed to avoid UI thrashing
+                    if self.errorMessage != errorString {
+                        self.errorMessage = errorString
+                    }
                     self.executionDuration = duration
                 }
+                // Clear exception for next run
+                context.exception = nil
                 return
             }
             
+            self.consecutiveErrors = 0
+            
             // Extract output state
-            // print("Extracting output state")
-            if let output = context.objectForKeyedSubscript("outputState"),
+            // First check the return value of the function (supports 'var outputState = ...')
+            var output: JSValue? = result
+            
+            // If return value is undefined, check global scope (supports 'outputState = ...')
+            if output == nil || output!.isUndefined {
+                output = context.objectForKeyedSubscript("outputState")
+            }
+            
+            if let output = output,
                !output.isUndefined,
                let outputDict = output.toDictionary() as? [String: Any] {
                 var parsedOutput: [String: StateValue] = [:]
@@ -240,10 +385,14 @@ var inputState = \(inputString);
                 }
                 let endTime = CFAbsoluteTimeGetCurrent()
                 let duration = (endTime - startTime) * 1000
+                
+                if duration > 16.0 {
+                     print("⚠️ Slow Script: Execution took \(String(format: "%.1f", duration))ms")
+                }
+                
                 DispatchQueue.main.async {
                     self.outputState = parsedOutput
                     self.errorMessage = nil
-                    self.warningMessage = warnings.isEmpty ? nil : warnings.joined(separator: "; ")
                     self.lastExecutionTime = Date()
                     self.executionDuration = duration
                 }
@@ -253,7 +402,6 @@ var inputState = \(inputString);
                 let duration = (endTime - startTime) * 1000
                 DispatchQueue.main.async {
                     self.errorMessage = "No outputState object found or invalid format"
-                    self.warningMessage = warnings.isEmpty ? nil : warnings.joined(separator: "; ")
                     self.executionDuration = duration
                 }
                 return
@@ -283,5 +431,74 @@ var inputState = \(inputString);
             }
         }
         return value
+    }
+}
+
+extension StateValue {
+    func toJSValue(in context: JSContext) -> JSValue? {
+        switch value {
+        case .float(let f):
+            return JSValue(double: f, in: context)
+        case .floatArray(let a):
+            return JSValue(object: a, in: context)
+        case .vector3(let v):
+            let obj = JSValue(newObjectIn: context)
+            obj?.setValue(v.x, forProperty: "x")
+            obj?.setValue(v.y, forProperty: "y")
+            obj?.setValue(v.z, forProperty: "z")
+            return obj
+        case .vector4(let v):
+            let obj = JSValue(newObjectIn: context)
+            obj?.setValue(v.x, forProperty: "x")
+            obj?.setValue(v.y, forProperty: "y")
+            obj?.setValue(v.z, forProperty: "z")
+            obj?.setValue(v.w, forProperty: "w")
+            return obj
+        case .object(let dict):
+            let obj = JSValue(newObjectIn: context)
+            for (k, v) in dict {
+                if let jsVal = StateValue(value: v).toJSValue(in: context) {
+                    obj?.setValue(jsVal, forProperty: k)
+                }
+            }
+            return obj
+        case .lineSegments(let segments):
+            let arr = JSValue(newArrayIn: context)
+            for (i, seg) in segments.enumerated() {
+                let segObj = JSValue(newObjectIn: context)
+                
+                let start = JSValue(newObjectIn: context)
+                start?.setValue(seg.start.x, forProperty: "x")
+                start?.setValue(seg.start.y, forProperty: "y")
+                start?.setValue(seg.start.z, forProperty: "z")
+                segObj?.setValue(start, forProperty: "start")
+                
+                let end = JSValue(newObjectIn: context)
+                end?.setValue(seg.end.x, forProperty: "x")
+                end?.setValue(seg.end.y, forProperty: "y")
+                end?.setValue(seg.end.z, forProperty: "z")
+                segObj?.setValue(end, forProperty: "end")
+                
+                segObj?.setValue(seg.lineWidthStart, forProperty: "lineWidthStart")
+                segObj?.setValue(seg.lineWidthEnd, forProperty: "lineWidthEnd")
+                
+                let colorStart = JSValue(newObjectIn: context)
+                colorStart?.setValue(seg.colorStart.x, forProperty: "x")
+                colorStart?.setValue(seg.colorStart.y, forProperty: "y")
+                colorStart?.setValue(seg.colorStart.z, forProperty: "z")
+                colorStart?.setValue(seg.colorStart.w, forProperty: "w")
+                segObj?.setValue(colorStart, forProperty: "colorStart")
+                
+                let colorEnd = JSValue(newObjectIn: context)
+                colorEnd?.setValue(seg.colorEnd.x, forProperty: "x")
+                colorEnd?.setValue(seg.colorEnd.y, forProperty: "y")
+                colorEnd?.setValue(seg.colorEnd.z, forProperty: "z")
+                colorEnd?.setValue(seg.colorEnd.w, forProperty: "w")
+                segObj?.setValue(colorEnd, forProperty: "colorEnd")
+                
+                arr?.setValue(segObj, at: i)
+            }
+            return arr
+        }
     }
 }
