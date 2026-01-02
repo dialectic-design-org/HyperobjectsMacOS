@@ -38,6 +38,9 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     @Published var audioSignalLowpassProcessed: Double = 0.0
     @Published var frameStamp: Int = 0
     
+    @Published var sceneHasBackgroundColor: Bool = false
+    @Published var backgroundColor: SIMD3<Float> = SIMD3<Float>(0.0, 0.0, 0.0)
+    
     
     @Published var historyData: [AudioDataPoint] = []
     

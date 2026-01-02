@@ -15,7 +15,9 @@ func generateGeometrySceneLiveCoding() -> GeometriesSceneBase {
             SceneInput(name: "Lines", type: .lines, value: [Line(
                 startPoint: SIMD3<Float>(-1.0, 0.0, 0.0),
                 endPoint: SIMD3<Float>(1.0, 0.0, 0.0)
-            )])
+            )]),
+            
+            SceneInput(name: "Message", type: .string)
         ],
         inputGroups: [
         ],

@@ -12,8 +12,8 @@ import CoreText
 import CoreGraphics
 import simd
 
-func textToBezierPaths(_ text: String, font: Font, size: CGFloat, maxLineWidth: CGFloat) -> [[Line]] {
-    guard let ctFont = resolveCTFont(from: font, size: size) else { return [] }
+func textToBezierPaths(_ text: String, font: Font, fontName: String = "", size: CGFloat, maxLineWidth: CGFloat) -> [[Line]] {
+    guard let ctFont = resolveCTFont(from: font, fontName: fontName, size: size) else { return [] }
 
     // Helper: split into words but keep trailing spaces so spacing is preserved
     let wordsWithSpaces: [String] = {
@@ -147,7 +147,7 @@ func textToBezierPaths(_ text: String, font: Font, size: CGFloat, maxLineWidth: 
 }
 
 
-private func resolveCTFont(from font: Font, size: CGFloat) -> CTFont? {
+private func resolveCTFont(from font: Font, fontName: String, size: CGFloat) -> CTFont? {
     let mirror = Mirror(reflecting: font)
     for child in mirror.children {
         if let label = child.label, label.contains("provider") {
@@ -162,7 +162,14 @@ private func resolveCTFont(from font: Font, size: CGFloat) -> CTFont? {
             }
         }
     }
-    return CTFontCreateWithName("SF Mono Heavy" as CFString, size, nil)
+    
+    var catchingFontName = "SF Mono Heavy"
+    
+    if fontName != "" {
+        catchingFontName = fontName
+    }
+    
+    return CTFontCreateWithName(catchingFontName as CFString, size, nil)
 }
 
 private func decompose(path: CGPath) -> [Line] {

@@ -44,17 +44,6 @@ struct RenderView: View {
                     }
                     Text("geometries count: \(geometries.count)")
                     
-                    Picker("Resolution mode", selection: $resolutionMode) {
-                        Text("Fixed").tag(ResolutionMode.fixed)
-                        Text("Dynamic").tag(ResolutionMode.dynamic)
-                    }.pickerStyle(SegmentedPickerStyle()).fixedSize()
-                    
-                    Picker("Resolution", selection: $resolution) {
-                        Text("1000 x 1000").tag(CGSize(width: 1000, height: 1000))
-                        Text("2000 x 2000").tag(CGSize(width: 2000, height: 2000))
-                        Text("1920 x 1080").tag(CGSize(width: 1920, height: 1080))
-                    }.pickerStyle(SegmentedPickerStyle()).fixedSize()
-                    
                     
                     FrameMetricsView(
                         timingManager: rendererState.frameTimingManager

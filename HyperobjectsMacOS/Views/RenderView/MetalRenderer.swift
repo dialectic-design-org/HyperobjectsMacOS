@@ -586,10 +586,15 @@ class MetalRenderer {
             randomValuesPtr[i] = SIMD4<Float>(r(), r(), r(), r())
         }
         
+        var backgroundColorVector = colorToVector(backgroundColor.color)
+        if scene.sceneHasBackgroundColor {
+            backgroundColorVector = scene.backgroundColor
+        }
+        
         var uniforms: Uniforms = Uniforms(
             viewWidth: Int32(viewW),
             viewHeight: Int32(viewH),
-            backgroundColor: colorToVector(backgroundColor.color),
+            backgroundColor: backgroundColorVector,
             antiAliasPx: 0.808,
             debugBins: renderConfigs?.binGridVisibility ?? 0.0,
             binVisibility: renderConfigs?.binVisibility ?? 0.0,
@@ -789,13 +794,6 @@ class MetalRenderer {
         renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
         
         renderEncoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
-//        
-//        renderEncoder.drawIndexedPrimitives(type: .triangle,
-//                                           indexCount: 3,
-//                                           indexType: .uint16,
-//                                           indexBuffer: indexBuffer,
-//                                           indexBufferOffset: 0)
-        
         
         
         let renderPoints = renderConfigs?.renderPoints ?? false
@@ -812,9 +810,6 @@ class MetalRenderer {
                                          vertexStart: 0,
                                          vertexCount: testPoints.count)
         }
-        
-        // renderEncoder.drawPrimitives(type: .lineStrip, vertexStart: 0, vertexCount: testPoints.count)
-
         
         renderEncoder.endEncoding()
         commandBuffer.present(drawable)

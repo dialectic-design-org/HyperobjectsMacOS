@@ -48,6 +48,11 @@ struct RenderConfigurationsView: View {
                     isOn: $renderConfigurations.runScriptOnFrameChange
                 )
                 
+                Toggle(
+                    "Show audio controls",
+                    isOn: $renderConfigurations.showAudioControls
+                )
+                
                 Text("Projection mix")
                 Slider(value: $renderConfigurations.projectionMix, in: 0...1.0)
                 
@@ -101,6 +106,8 @@ struct RenderConfigurationsView: View {
                 
                 Text("Background color")
                 ColorPickerControlView(colorInput: renderConfigurations.backgroundColor)
+                
+                
             }
         }.padding()
     }

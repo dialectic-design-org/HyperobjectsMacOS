@@ -19,5 +19,6 @@ var allScenes: [GeometriesSceneBase] = [
     generateGeometrySceneTextDemo(),
     generateGeometrySceneSmoothedPath(),
     generateGeometrySceneThreeBody(),
-    generateGeometrySceneVectors3D()
+    generateGeometrySceneVectors3D(),
+    generateGeometrySceneGenuary2026()
 ]

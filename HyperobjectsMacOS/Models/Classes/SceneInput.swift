@@ -152,6 +152,7 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
          audioAmplificationMultiplicationRange: ClosedRange<Float> = 0...1,
          audioAmplificationMultiplicationOffset: Float = 1.0,
          audioAmplificationMultiplicationOffsetRange: ClosedRange<Float> = -1...1,
+         audioDelay: Float = 0.0,
          tickValueAdjustment: Double = 0.0,
          tickValueAdjustmentRange: ClosedRange<Double> = 0...1,
          tickValueAudioAdjustment: Double = 0.0,
@@ -171,6 +172,7 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
         self.audioAmplificationMultiplicationRange = audioAmplificationMultiplicationRange
         self.audioAmplificationMultiplicationOffset = audioAmplificationMultiplicationOffset
         self.audioAmplificationMultiplicationOffsetRange = audioAmplificationMultiplicationOffsetRange
+        self.audioDelay = audioDelay
         
         self.tickValueAdjustment = tickValueAdjustment
         self.tickValueAdjustmentRange = tickValueAdjustmentRange

@@ -14,7 +14,7 @@ private final class TimeBox {
 
 @main
 struct HyperobjectsMacOSApp: App {
-    @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneLiveCoding())
+    @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneGenuary2026())
     @StateObject private var renderConfigurations = RenderConfigurations()
     @StateObject private var jsEngine = JSEngineManager()
     @StateObject private var fileMonitor = FileMonitor()
@@ -109,6 +109,7 @@ struct HyperobjectsMacOSApp: App {
         
         Window("\(sceneInputsWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: sceneInputsWindowConfig.id) {
             sceneInputsWindowConfig.content.environmentObject(sceneManager.currentScene)
+                .environmentObject(renderConfigurations)
                 .environmentObject(jsEngine)
                 .environmentObject(fileMonitor)
                 .environmentObject(audioMonitor)
