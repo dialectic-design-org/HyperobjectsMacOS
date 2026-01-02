@@ -27,7 +27,7 @@ class RenderConfigurations: ObservableObject {
     
     @Published var runScriptOnFrameChange: Bool = false
     
-    @Published var showAudioControls: Bool = true
+    @Published var showAudioControls: Bool = false
     
     @Published var cameraDistance: Float = 1.7320508075688772
     

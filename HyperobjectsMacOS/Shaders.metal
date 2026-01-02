@@ -670,8 +670,8 @@ kernel void transformAndBinQuadratic(
                     outSegs[outIdx].noiseFloor = S.noiseFloor;
                     outSegs[outIdx].bboxMinSS = mn;
                     outSegs[outIdx].bboxMaxSS = mx;
-                    outSegs[outIdx].colorStartCenter = float4(1.0, 1.0, 1.0, 1.0);
-                    outSegs[outIdx].colorEndCenter = float4(1.0, 1.0, 1.0, 1.0);
+                    outSegs[outIdx].colorStartCenter = mix(S.colorStartCenter, S.colorEndCenter, t);
+                    outSegs[outIdx].colorEndCenter = mix(S.colorStartCenter, S.colorEndCenter, tn);
                     
                     outSegs[outIdx].z0_clip = c0.z;
                     outSegs[outIdx].w0_clip = c0.w;

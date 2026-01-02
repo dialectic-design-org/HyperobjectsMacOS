@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 1"
+private var currentTextDay = "Day 2"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "One color, one shape."
+private var currentTextPrompt = "Ten principles of animation."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -115,6 +115,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
         var mainFont = stringFromInputs(inputs, name: "Main font")
         var secondaryFont = stringFromInputs(inputs, name: "Secondary font")
         
+        var dayNumber = stringFromInputs(inputs, name: "Day")
         var mainTitle = stringFromInputs(inputs, name: "Main title")
         var year = stringFromInputs(inputs, name: "Year")
         var prompt = stringFromInputs(inputs, name: "Prompt")
@@ -124,7 +125,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
         var height = floatFromInputs(inputs, name: "Height")
         var depth = floatFromInputs(inputs, name: "Depth")
         
-        let replacementProbability = floatFromInputs(inputs, name: "Replacement probability")
+        var replacementProbability = floatFromInputs(inputs, name: "Replacement probability")
         let restoreProbability = floatFromInputs(inputs, name: "Restore probability")
         
         
@@ -133,6 +134,225 @@ class Genuary2026Generator: CachedGeometryGenerator {
         let mainFontSize: CGFloat = 0.075
         
         let leftAlignValue: Float = -0.8
+        
+        
+        if dayNumber == "2" {
+            replacementProbability = 0
+        }
+        
+        
+        
+        
+        
+        let scaleMatrix = matrix_scale(scale: SIMD3<Float>(width, height, depth))
+        
+        // Time in milliseconds as float
+        var timeAsFloat = Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 1000.0)
+        
+        let rotationMatrixX = matrix_rotation(angle: 0.0, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
+        var yAngle: Float = Float(timeAsFloat * 0.15)
+        if dayNumber == "2" {
+            yAngle = 0
+        }
+        let rotationMatrixY = matrix_rotation(angle: yAngle, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
+        let rotationMatrixZ = matrix_rotation(angle: 0.0, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
+        
+        let translationMatrix = matrix_translation(translation: SIMD3<Float>(x: 0.0, y: 0.0, z: 0.0))
+        
+
+        let rotationMatrixXYZ = rotationMatrixX * rotationMatrixY * rotationMatrixZ
+        
+        
+        var cubeLines = makeCube(size: 0.52, offset: 0)
+        
+        // func sigmoidFunction(input: Double, steepness: Double = 5.0, threshold: Double = 0.5, outputGain: Double = 1.0)
+
+        if dayNumber == "2" {
+            cubeLines = []
+            var steepnessFactor = 1.5
+            var animatedCubeLines: [Line] = []
+            let topDistance:Float = -0.5 + Float(sigmoidFunction(input: 0.5 + sin(timeAsFloat) * 0.5, steepness: 10.0 * steepnessFactor)) * 0.95
+            let bottomDistance:Float = 0.5 - Float(sigmoidFunction(input: 0.5 + sin(timeAsFloat * 1.35) * 0.5, steepness: 15.0 * steepnessFactor)) * 0.95
+            let leftDistance:Float = -0.5 + Float(sigmoidFunction(input: 0.5 + cos(timeAsFloat * 0.5) * 0.5, steepness: 13.0 * steepnessFactor)) * 0.95
+            let rightDistance:Float = 0.5 - Float(sigmoidFunction(input: 0.5 + cos(0.1 + timeAsFloat * 0.4) * 0.5, steepness: 20.0 * steepnessFactor)) * 0.95
+            let frontDistance:Float = -0.5 + Float(sigmoidFunction(input: 0.5 + cos(timeAsFloat * 0.25) * 0.5, steepness: 12.0 * steepnessFactor)) * 1.0
+            let backDistance:Float = 0.5 - Float(sigmoidFunction(input: 0.5 + cos(1.1 + timeAsFloat * 0.2) * 0.5, steepness: 10.0 * steepnessFactor)) * 1.5
+            
+            let delta:Double = 0.1
+            let topDistance_plusT:Float = -0.5 + Float(sigmoidFunction(input: 0.5 + sin(timeAsFloat + delta) * 0.5, steepness: 10.0 * steepnessFactor)) * 0.95
+            let bottomDistance_plusT:Float = 0.5 - Float(sigmoidFunction(input: 0.5 + sin(timeAsFloat * 1.35 + delta) * 0.5, steepness: 15.0 * steepnessFactor)) * 0.95
+            let leftDistance_plusT:Float = -0.5 + Float(sigmoidFunction(input: 0.5 + cos(timeAsFloat * 0.5 + delta) * 0.5, steepness: 13.0 * steepnessFactor)) * 0.95
+            let rightDistance_plusT:Float = 0.5 - Float(sigmoidFunction(input: 0.5 + cos(0.1 + timeAsFloat * 0.4 + delta) * 0.5, steepness: 20.0 * steepnessFactor)) * 0.95
+            let frontDistance_plusT:Float = -0.5 + Float(sigmoidFunction(input: 0.5 + cos(timeAsFloat * 0.25 + delta) * 0.5, steepness: 12.0 * steepnessFactor)) * 1.0
+            let backDistance_plusT:Float = 0.5 - Float(sigmoidFunction(input: 0.5 + cos(1.1 + timeAsFloat * 0.2 + delta) * 0.5, steepness: 10.0 * steepnessFactor)) * 1.5
+            
+            // Deltas
+            let topDistanceDelta:Float = topDistance_plusT - topDistance
+            let bottomDistanceDelta:Float = bottomDistance_plusT - bottomDistance
+            let leftDistanceDelta:Float = leftDistance_plusT - leftDistance
+            let rightDistanceDelta:Float = rightDistance_plusT - rightDistance
+            let frontDistanceDelta:Float = frontDistance_plusT - frontDistance
+            let backDistanceDelta:Float = backDistance_plusT - backDistance
+            
+            let allDeltas = [topDistanceDelta, bottomDistanceDelta, leftDistanceDelta, rightDistanceDelta, frontDistanceDelta, backDistanceDelta]
+            let allDeltasAbsolute = allDeltas.map(\.magnitude)
+            var allDeltasSum = allDeltasAbsolute.reduce(0, +)
+            allDeltasSum = Float(sigmoidFunction(input: Double(allDeltasSum), steepness: 15.0))
+            print(allDeltasSum)
+            
+            replacementProbability = allDeltasSum
+            
+            let topLeftFrontPoint = SIMD3<Float>(
+                leftDistance,
+                topDistance,
+                frontDistance
+            )
+            let topRightFrontPoint = SIMD3<Float>(
+                rightDistance,
+                topDistance,
+                frontDistance
+            )
+            let topRightBackPoint = SIMD3<Float>(
+                rightDistance,
+                topDistance,
+                backDistance
+            )
+            let topLeftBackPoint = SIMD3<Float>(
+                leftDistance,
+                topDistance,
+                backDistance
+            )
+            
+            let bottomLeftFrontPoint = SIMD3<Float>(
+                leftDistance,
+                bottomDistance,
+                frontDistance
+            )
+            let bottomRightFrontPoint = SIMD3<Float>(
+                rightDistance,
+                bottomDistance,
+                frontDistance
+            )
+            let bottomRightBackPoint = SIMD3<Float>(
+                rightDistance,
+                bottomDistance,
+                backDistance
+            )
+            let bottomLeftBackPoint = SIMD3<Float>(
+                leftDistance,
+                bottomDistance,
+                backDistance
+            )
+            
+            // Top
+            animatedCubeLines.append(Line(
+                startPoint: topLeftFrontPoint,
+                endPoint: topRightFrontPoint
+            ))
+            animatedCubeLines.append(Line(
+                startPoint: topRightFrontPoint,
+                endPoint: topRightBackPoint
+            ))
+            animatedCubeLines.append(Line(
+                startPoint: topRightBackPoint,
+                endPoint: topLeftBackPoint
+            ))
+            animatedCubeLines.append(Line(
+                startPoint: topLeftBackPoint,
+                endPoint: topLeftFrontPoint
+            ))
+            
+            // Bottom
+            animatedCubeLines.append(Line(
+                startPoint: bottomLeftFrontPoint,
+                endPoint: bottomRightFrontPoint
+            ))
+            animatedCubeLines.append(Line(
+                startPoint: bottomRightFrontPoint,
+                endPoint: bottomRightBackPoint
+            ))
+            animatedCubeLines.append(Line(
+                startPoint: bottomRightBackPoint,
+                endPoint: bottomLeftBackPoint
+                ))
+            animatedCubeLines.append(Line(
+                startPoint: bottomLeftBackPoint,
+                endPoint: bottomLeftFrontPoint
+            ))
+            
+            // Corners
+            animatedCubeLines.append(Line(
+                startPoint: topLeftFrontPoint,
+                endPoint: bottomLeftFrontPoint
+            ))
+            animatedCubeLines.append(Line(
+                startPoint: topRightFrontPoint,
+                endPoint: bottomRightFrontPoint
+            ))
+            animatedCubeLines.append(Line(
+                startPoint: topRightBackPoint,
+                endPoint: bottomRightBackPoint
+            ))
+            animatedCubeLines.append(Line(
+                startPoint: topLeftBackPoint,
+                endPoint: bottomLeftBackPoint
+            ))
+            
+            cubeLines = animatedCubeLines
+            
+        }
+        
+        
+        var cubeColor = SIMD4<Float>(
+            0.4,
+            0.85,
+            0.7,
+            1.0
+        )
+        cubeColor = SIMD4<Float>(
+            0.1,
+            0.35,
+            0.35,
+            1.0
+        )
+        
+        for line in cubeLines {
+            var tLine = Line(
+                startPoint: line.startPoint,
+                endPoint: line.endPoint,
+                degree: line.degree,
+                controlPoints: line.controlPoints,
+                lineWidthStart: lineWidthBase * 2,
+                lineWidthEnd: lineWidthBase * 2
+            )
+            tLine = tLine.setBasicEndPointColors(startColor: cubeColor, endColor: cubeColor)
+            
+            if dayNumber == "1" {
+                tLine = tLine.applyMatrix(scaleMatrix)
+            } else if dayNumber == "2" {
+                let scaling:Float = 1.1
+                let day2ScaleMatrix = matrix_scale(scale: SIMD3<Float>(scaling, scaling, scaling))
+                tLine = tLine.applyMatrix(day2ScaleMatrix)
+            }
+            
+            
+            tLine = tLine.applyMatrix(rotationMatrixXYZ)
+            tLine = tLine.applyMatrix(translationMatrix)
+            lines.append(tLine)
+        }
+        
+        
+    
+        // TEXT
+        
+        let offWhite = SIMD4<Float>(0.9, 0.9, 0.9, 1.0)
+        
+        var textColor = SIMD4<Float>(
+            1.0,
+            1.0,
+            1.0,
+            1.0
+        )
         
         
         currentTextMainTitle = mutateString(
@@ -145,7 +365,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
         )
         
         currentTextDay = mutateString(
-            original: "Day 1",
+            original: "Day \(dayNumber)",
             current: currentTextDay,
             pReplace: Double(replacementProbability),
             pRestore: Double(restoreProbability),
@@ -202,13 +422,14 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     lineWidthEnd: lineWidthBase
                 )
                 
+                transformedLine = transformedLine.setBasicEndPointColors(startColor: textColor, endColor: textColor)
                 transformedLine = transformedLine.applyMatrix(mainTitleTransform)
                 
                 lines.append(transformedLine)
             }
         }
         
-        // Main title
+        // Year
         let yearLines = textToBezierPaths(currentTextYear, font: .custom(mainFont, size: 48), fontName: mainFont, size: mainFontSize * 7.95, maxLineWidth: 10.0)
         
         let yearTransform = matrix_translation(translation: SIMD3<Float>(
@@ -217,7 +438,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
             -0.5
         ))
         
-        let offWhite = SIMD4<Float>(0.9, 0.9, 0.9, 1.0)
+        
         
         for char in yearLines {
             for line in char {
@@ -231,7 +452,6 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 )
                 
                 transformedLine = transformedLine.setBasicEndPointColors(startColor: offWhite, endColor: offWhite)
-                
                 transformedLine = transformedLine.applyMatrix(yearTransform)
                 
                 lines.append(transformedLine)
@@ -259,6 +479,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     lineWidthEnd: lineWidthBase
                 )
                 
+                transformedLine = transformedLine.setBasicEndPointColors(startColor: textColor, endColor: textColor)
                 transformedLine = transformedLine.applyMatrix(dayTransform)
                 
                 lines.append(transformedLine)
@@ -283,10 +504,11 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     endPoint: line.endPoint,
                     degree: line.degree,
                     controlPoints: line.controlPoints,
-                    lineWidthStart: lineWidthBase,
-                    lineWidthEnd: lineWidthBase
+                    lineWidthStart: lineWidthBase * 0.5,
+                    lineWidthEnd: lineWidthBase * 0.5
                 )
                 
+                transformedLine = transformedLine.setBasicEndPointColors(startColor: textColor, endColor: textColor)
                 transformedLine = transformedLine.applyMatrix(promptTransform)
                 
                 lines.append(transformedLine)
@@ -310,69 +532,22 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     endPoint: line.endPoint,
                     degree: line.degree,
                     controlPoints: line.controlPoints,
-                    lineWidthStart: lineWidthBase,
-                    lineWidthEnd: lineWidthBase
+                    lineWidthStart: lineWidthBase * 0.5,
+                    lineWidthEnd: lineWidthBase * 0.5
                 )
                 
+                transformedLine = transformedLine.setBasicEndPointColors(startColor: textColor, endColor: textColor)
                 transformedLine = transformedLine.applyMatrix(creditTransform)
                 
                 lines.append(transformedLine)
             }
         }
         
-        let scaleMatrix = matrix_scale(scale: SIMD3<Float>(width, height, depth))
-        
-        // Time in milliseconds as float
-        var timeAsFloat = Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 1000.0)
-        
-        let rotationMatrixX = matrix_rotation(angle: -0.6, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
-        let rotationMatrixY = matrix_rotation(angle: Float(timeAsFloat * 0.15), axis: SIMD3<Float>(x: 0, y: 1, z: 0))
-        let rotationMatrixZ = matrix_rotation(angle: 0.0, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
-        
-        let translationMatrix = matrix_translation(translation: SIMD3<Float>(x: 0.0, y: 0.1, z: 0.0))
-        
-
-        let rotationMatrixXYZ = rotationMatrixX * rotationMatrixY * rotationMatrixZ
-        
-        
-        var cubeLines = makeCube(size: 0.52, offset: 0)
-        
-        
-        var cubeColor = SIMD4<Float>(
-            0.4,
-            0.85,
-            0.7,
-            1.0
-        )
-        cubeColor = SIMD4<Float>(
-            0.0,
-            0.6,
-            0.7,
-            1.0
-        )
-        
-        for line in cubeLines {
-            var tLine = Line(
-                startPoint: line.startPoint,
-                endPoint: line.endPoint,
-                degree: line.degree,
-                controlPoints: line.controlPoints,
-                lineWidthStart: lineWidthBase * 19,
-                lineWidthEnd: lineWidthBase * 19
-            )
-            tLine = tLine.setBasicEndPointColors(startColor: cubeColor, endColor: cubeColor)
-            tLine = tLine.applyMatrix(scaleMatrix)
-            tLine = tLine.applyMatrix(rotationMatrixXYZ)
-            tLine = tLine.applyMatrix(translationMatrix)
-            lines.append(tLine)
-        }
-        
-        
-        
-        
-        
         
         
         return lines
     }
 }
+
+
+
