@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 3"
+private var currentTextDay = "Day 4"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Fibonacci."
+private var currentTextPrompt = "Low res, pixelated."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -714,6 +714,116 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 
                 cubeNr += 1
             }
+        } else if dayNumber == "4" {
+            replacementProbability = Float(sigmoidFunction(input: (0.5 + sin(timeAsFloat * 2.0) * 0.5) * 0.51, steepness: 10.0))
+            
+            var spiral = Spiral()
+            spiral.rotations = 2
+            spiral.radius = 0.5
+            spiral.height = 2.5
+            spiral.offset = Float(timeAsFloat * 0.25)
+            
+            // var spiralLines = spiral.toLines(stepSize: 0.005)
+            // lines.append(contentsOf: spiralLines)
+            
+            var voxelGrid = VoxelGrid(
+                dimensions: (8, 8, 8),
+                voxelSize: 0.15
+            )
+            
+            let gridCenter = voxelGrid.gridCenter()
+            let centeringMatrix = matrix_translation(translation: -gridCenter)
+            
+            var voxels = voxelGrid.voxels()
+            
+            for v in voxels {
+                // Apply centering to the voxel center point first
+                let centeredVoxelCenter = matrix_multiply(centeringMatrix, SIMD4<Float>(v.center, 1.0))
+                let centeredPoint = SIMD3<Float>(centeredVoxelCenter.x, centeredVoxelCenter.y, centeredVoxelCenter.z)
+                
+                let distanceToSpiral = spiral.distanceToPoint(centeredPoint)
+                
+                
+                
+                // Calculate scaling factor based on distance (closer = larger, or vice versa depending on desired effect)
+                // Example: Scale down as distance increases, normalized by voxelSize
+                var scaleFactor = max(0.1, 1.0 - (distanceToSpiral / (voxelGrid.voxelSize * 1.5)))
+                scaleFactor = Float(sigmoidFunction(input: Double(scaleFactor), steepness: 45.0)) * 0.9
+                
+                if scaleFactor > 0.01 {
+                    
+                    // Create scaling matrix
+                    let scaleMatrix = matrix_scale(scale: SIMD3<Float>(scaleFactor, scaleFactor, scaleFactor))
+                    
+                    // Matrices to scale around the voxel's own center (before centering in grid)
+                    let toVoxelOrigin = matrix_translation(translation: -v.center)
+                    let fromVoxelOrigin = matrix_translation(translation: v.center)
+                    
+                    let voxelLines = v.toCube().wallOutlines()
+                    // Apply centering translation to each line for rendering
+                    
+                    
+                    let tFloat = Float(timeAsFloat)
+                    
+                    // Use more varied spatial frequencies to break uniformity
+                    let greenInput = (v.center.z * 3.5) + (v.center.x * 1.2) + tFloat
+                    // Map cosine from [-1, 1] to [0.2, 1.0] to avoid dipping into black
+                    var green: Float = (cos(greenInput) * 0.4) + 0.6
+                    
+                    let blueInput = (v.center.y * 4.0) - (v.center.x * 2.0) + (tFloat * 1.3)
+                    // Map sine from [-1, 1] to [0.3, 1.0]
+                    var blue: Float = (sin(blueInput) * 0.35) + 0.65
+                    
+                    // Add a red component based on distance from center for a gradient effect
+                    let dist = length(v.center)
+                    let red = 0.2 + (sin(dist * 5.0 - tFloat * 2.0) * 0.2)
+
+                    var voxelColor = SIMD4<Float>(
+                        red,
+                        green,
+                        blue,
+                        1.0
+                    )
+                    
+                    // Use a cosine-based palette to ensure harmonious color transitions
+                    // Based on: https://iquilezles.org/articles/palettes/
+                    // Formula: color = a + b * cos(2 * pi * (c * t + d))
+                    
+                    // Calculate a scalar 't' based on position and time
+                    // Combining radial distance and a bit of axial position creates a dynamic flow
+                    let t = length(v.center) * 0.6 - tFloat * 0.15 + (v.center.x + v.center.y) * 0.1
+                    
+                    // Palette parameters for a vibrant, non-clashing spectrum
+                    let pal_a = SIMD3<Float>(0.5, 0.5, 0.5)
+                    let pal_b = SIMD3<Float>(0.5, 0.5, 0.5)
+                    let pal_c = SIMD3<Float>(1.0, 1.0, 1.0)
+                    let pal_d = SIMD3<Float>(0.00, 0.33, 0.67) // Phase shifts for R, G, B
+                    
+                    let twoPi: Float = 6.2831853
+                    
+                    let pRed = pal_a.x + pal_b.x * cos(twoPi * (pal_c.x * t + pal_d.x))
+                    let pGreen = pal_a.y + pal_b.y * cos(twoPi * (pal_c.y * t + pal_d.y))
+                    let pBlue = pal_a.z + pal_b.z * cos(twoPi * (pal_c.z * t + pal_d.z))
+                    
+                    voxelColor = SIMD4<Float>(pRed, pGreen, pBlue, 1.0)
+                    
+                    for line in voxelLines {
+                        var centeredLine = line
+                        
+                        // Scale the voxel around its own center
+                        centeredLine = centeredLine.applyMatrix(fromVoxelOrigin * scaleMatrix * toVoxelOrigin)
+                        
+                        // Move to centered grid position
+                        centeredLine = centeredLine.applyMatrix(centeringMatrix)
+                        centeredLine.lineWidthStart = lineWidthBase * 5 * scaleFactor
+                        centeredLine.lineWidthEnd = lineWidthBase * 5 * scaleFactor
+                        centeredLine = centeredLine.setBasicEndPointColors(startColor: voxelColor, endColor: voxelColor)
+                        lines.append(centeredLine)
+                    }
+                }
+            }
+            
+            
         }
         
         
