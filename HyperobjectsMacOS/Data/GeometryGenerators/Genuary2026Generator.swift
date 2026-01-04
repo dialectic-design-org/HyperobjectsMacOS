@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 2"
+private var currentTextDay = "Day 3"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Ten principles of animation."
+private var currentTextPrompt = "Fibonacci."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -103,7 +103,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
         ])
     }
     
-    override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {
+    override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase) -> [any Geometry] {
         var lines: [Line] = []
         
         lines.append(
@@ -140,6 +140,12 @@ class Genuary2026Generator: CachedGeometryGenerator {
             replacementProbability = 0
         }
         
+
+        let widthInput = scene.getInputWithName(name: "Width")
+        let heightInput = scene.getInputWithName(name: "Height")
+        let depthInput = scene.getInputWithName(name: "Depth")
+        
+        let brightnessInput = scene.getInputWithName(name: "Brightness")
         
         
         
@@ -163,12 +169,14 @@ class Genuary2026Generator: CachedGeometryGenerator {
         let rotationMatrixXYZ = rotationMatrixX * rotationMatrixY * rotationMatrixZ
         
         
-        var cubeLines = makeCube(size: 0.52, offset: 0)
+        var outputLines:[Line] = []
         
         // func sigmoidFunction(input: Double, steepness: Double = 5.0, threshold: Double = 0.5, outputGain: Double = 1.0)
-
-        if dayNumber == "2" {
-            cubeLines = []
+        
+        
+        if dayNumber == "1" {
+            outputLines = makeCube(size: 0.52, offset: 0)
+        } else if dayNumber == "2" {
             var steepnessFactor = 1.5
             var animatedCubeLines: [Line] = []
             let topDistance:Float = -0.5 + Float(sigmoidFunction(input: 0.5 + sin(timeAsFloat) * 0.5, steepness: 10.0 * steepnessFactor)) * 0.95
@@ -298,8 +306,414 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 endPoint: bottomLeftBackPoint
             ))
             
-            cubeLines = animatedCubeLines
+            outputLines = animatedCubeLines
             
+        } else if dayNumber == "3" {
+            // replacementProbability = 0.0
+            
+            var totalCubes = 12
+            
+            var squares: [[SIMD2<Double>]] = fibonacciSquares(count: totalCubes, firstSquareSize: 0.008)
+            
+            // Get max bounds from the squares to center them
+            var minX: Double = Double.greatestFiniteMagnitude
+            var maxX: Double = -Double.greatestFiniteMagnitude
+            var minY: Double = Double.greatestFiniteMagnitude
+            var maxY: Double = -Double.greatestFiniteMagnitude
+
+            for square in squares {
+                for point in square {
+                    if point.x < minX {
+                        minX = point.x
+                    }
+                    if point.x > maxX {
+                        maxX = point.x
+                    }
+                    if point.y < minY {
+                        minY = point.y
+                    }
+                    if point.y > maxY {
+                        maxY = point.y
+                    }
+                }
+            }
+            let centerX = (minX + maxX) / 2.0
+            let centerY = (minY + maxY) / 2.0
+
+            // Center the squares around (0,0)
+            for i in 0..<squares.count {
+                for j in 0..<squares[i].count {
+                    squares[i][j].x -= centerX
+                    squares[i][j].y -= centerY
+                }
+            }
+
+            // Convert to 3d cubes with depth 0.1
+            let depth: Double = 0.1
+
+            var cubes: [[SIMD3<Double>]] = []
+            struct CubeCorners {
+                let top: [SIMD3<Double>]
+                let bottom: [SIMD3<Double>]
+            }
+            
+            var cubeStructs: [CubeCorners] = []
+
+            for square in squares {
+                var topPoints: [SIMD3<Double>] = []
+                var bottomPoints: [SIMD3<Double>] = []
+                
+                for point in square {
+                    // Create top face at +depth/2
+                    let topPoint = SIMD3<Double>(point.x, point.y, depth / 2.0)
+                    topPoints.append(topPoint)
+                    
+                    // Create bottom face at -depth/2
+                    let bottomPoint = SIMD3<Double>(point.x, point.y, -depth / 2.0)
+                    bottomPoints.append(bottomPoint)
+                }
+                
+                cubeStructs.append(CubeCorners(top: topPoints, bottom: bottomPoints))
+            }
+
+            func createCrossOnPoint(point: SIMD3<Double>) -> [Line] {
+                var crossLines: [Line] = []
+                
+                let size: Double = Double(ensureValueIsFloat(depthInput.getHistoryValue(millisecondsAgo: 0.0))) * 1.0
+                
+                let horizontalLine = Line(
+                    startPoint: SIMD3<Float>(
+                        Float(point.x - size),
+                        Float(point.y),
+                        Float(point.z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(point.x + size),
+                        Float(point.y),
+                        Float(point.z)
+                    )
+                )
+                
+                let verticalLine = Line(
+                    startPoint: SIMD3<Float>(
+                        Float(point.x),
+                        Float(point.y - size),
+                        Float(point.z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(point.x),
+                        Float(point.y + size),
+                        Float(point.z)
+                    )
+                )
+
+                let depthLine = Line(
+                    startPoint: SIMD3<Float>(
+                        Float(point.x),
+                        Float(point.y),
+                        Float(point.z - size)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(point.x),
+                        Float(point.y),
+                        Float(point.z + size)
+                    )
+                )
+                
+                crossLines.append(horizontalLine)
+                crossLines.append(verticalLine)
+                crossLines.append(depthLine)
+                
+                return crossLines
+            }
+            var cubeNr = 0
+            for cube in cubeStructs {
+                
+                var crossLines: [Line] = []
+                for p in cube.top {
+                    crossLines.append(contentsOf: createCrossOnPoint(point: p))
+                }
+                for p in cube.bottom {
+                    crossLines.append(contentsOf: createCrossOnPoint(point: p))
+                }
+                
+                
+
+                var cubeInset = 0.005
+                var cubeLines: [Line] = []
+                // Top face
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.top[0].x + cubeInset),
+                        Float(cube.top[0].y + cubeInset),
+                        Float(cube.top[0].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.top[1].x - cubeInset),
+                        Float(cube.top[1].y + cubeInset),
+                        Float(cube.top[1].z)
+                    )
+                ))
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.top[1].x - cubeInset),
+                        Float(cube.top[1].y + cubeInset),
+                        Float(cube.top[1].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.top[2].x - cubeInset),
+                        Float(cube.top[2].y - cubeInset),
+                        Float(cube.top[2].z)
+                    )
+                ))
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.top[2].x - cubeInset),
+                        Float(cube.top[2].y - cubeInset),
+                        Float(cube.top[2].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.top[3].x + cubeInset),
+                        Float(cube.top[3].y - cubeInset),
+                        Float(cube.top[3].z)
+                    )
+                ))
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.top[3].x + cubeInset),
+                        Float(cube.top[3].y - cubeInset),
+                        Float(cube.top[3].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.top[0].x + cubeInset),
+                        Float(cube.top[0].y + cubeInset),
+                        Float(cube.top[0].z)
+                    )
+                ))
+
+                // Bottom face
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.bottom[0].x + cubeInset),
+                        Float(cube.bottom[0].y + cubeInset),
+                        Float(cube.bottom[0].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.bottom[1].x - cubeInset),
+                        Float(cube.bottom[1].y + cubeInset),
+                        Float(cube.bottom[1].z)
+                    )
+                ))
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.bottom[1].x - cubeInset),
+                        Float(cube.bottom[1].y + cubeInset),
+                        Float(cube.bottom[1].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.bottom[2].x - cubeInset),
+                        Float(cube.bottom[2].y - cubeInset),
+                        Float(cube.bottom[2].z)
+                    )
+                ))
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.bottom[2].x - cubeInset),
+                        Float(cube.bottom[2].y - cubeInset),
+                        Float(cube.bottom[2].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.bottom[3].x + cubeInset),
+                        Float(cube.bottom[3].y - cubeInset),
+                        Float(cube.bottom[3].z)
+                    )
+                ))
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.bottom[3].x + cubeInset),
+                        Float(cube.bottom[3].y - cubeInset),
+                        Float(cube.bottom[3].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.bottom[0].x + cubeInset),
+                        Float(cube.bottom[0].y + cubeInset),
+                        Float(cube.bottom[0].z)
+                    )
+                ))
+                
+                // Between lines
+                // Vertical lines connecting top and bottom faces
+                // 0: Top-Left (relative to square logic)
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.top[0].x + cubeInset),
+                        Float(cube.top[0].y + cubeInset),
+                        Float(cube.top[0].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.bottom[0].x + cubeInset),
+                        Float(cube.bottom[0].y + cubeInset),
+                        Float(cube.bottom[0].z)
+                    )
+                ))
+                
+                // 1: Top-Right
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.top[1].x - cubeInset),
+                        Float(cube.top[1].y + cubeInset),
+                        Float(cube.top[1].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.bottom[1].x - cubeInset),
+                        Float(cube.bottom[1].y + cubeInset),
+                        Float(cube.bottom[1].z)
+                    )
+                ))
+                
+                // 2: Bottom-Right
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.top[2].x - cubeInset),
+                        Float(cube.top[2].y - cubeInset),
+                        Float(cube.top[2].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.bottom[2].x - cubeInset),
+                        Float(cube.bottom[2].y - cubeInset),
+                        Float(cube.bottom[2].z)
+                    )
+                ))
+                
+                // 3: Bottom-Left
+                cubeLines.append(Line(
+                    startPoint: SIMD3<Float>(
+                        Float(cube.top[3].x + cubeInset),
+                        Float(cube.top[3].y - cubeInset),
+                        Float(cube.top[3].z)
+                    ),
+                    endPoint: SIMD3<Float>(
+                        Float(cube.bottom[3].x + cubeInset),
+                        Float(cube.bottom[3].y - cubeInset),
+                        Float(cube.bottom[3].z)
+                    )
+                ))
+                let cubeIndexDouble = Double(cubeNr)
+                let angleMultiplier = 1.0 + ((Double(totalCubes) - cubeIndexDouble) * 0.33333333)
+                let angle = Float(timeAsFloat * angleMultiplier * 0.05)
+                
+                var rotationMatrix = matrix_rotation(
+                    angle: angle,
+                    axis: SIMD3<Float>(1, 0, 0))
+                
+                let cubeIndexFloat = Float(cubeNr)
+                let timeFloat = Float(timeAsFloat)
+                let sineArg = ((Float(totalCubes) - cubeIndexFloat) * 0.5) + (timeFloat * 0.5)
+                let sineRed = ((Float(totalCubes) - cubeIndexFloat) * 0.5) + (timeFloat * 0.7)
+                let greenVal = (sin(sineArg) * 0.5) + 0.5
+                let redVal = (sin(sineRed) * 0.5) + 0.5
+                
+                let brightness = ensureValueIsFloat(brightnessInput.getHistoryValue(millisecondsAgo: cubeIndexDouble * 30.0))
+                let brightnessRed = ensureValueIsFloat(brightnessInput.getHistoryValue(millisecondsAgo: 90.0 + cubeIndexDouble * 20.0))
+                let brightnessGreen = ensureValueIsFloat(brightnessInput.getHistoryValue(millisecondsAgo: 50.0 + cubeIndexDouble * 5.0))
+                let brightnessBlue = ensureValueIsFloat(brightnessInput.getHistoryValue(millisecondsAgo: cubeIndexDouble * 35.0))
+                
+                var color = SIMD4<Float>(
+                    0.5 + 0.5 * redVal * Float(1.0 * sigmoidFunction(input: Double(brightnessRed), steepness: 10.0)),
+                    greenVal * Float(1.0 * sigmoidFunction(input: Double(brightnessGreen), steepness: 5.0)) * 3.0,
+                    brightnessBlue * 0.2,
+                    Float(sigmoidFunction(input: Double(brightness), steepness: 20.0)))
+
+                // Increase overall brightness by brightness amount
+                color.x += brightness * 0.9
+                color.y += brightness * 0.9
+                color.z += brightness * 0.3
+                
+                // Calculate center of the current cube
+                // Since the cube is constructed from squares[cubeNr] centered at (0,0) relative to the square logic,
+                // and then extruded by +/- depth/2, the center is simply the center of the square at z=0.
+                // However, the square points were already centered globally in the `squares` loop earlier.
+                // Let's calculate the centroid of the top face to find X,Y, and Z is 0.
+                
+                var centerSum = SIMD3<Double>(0, 0, 0)
+                let allPoints = cube.top + cube.bottom
+                for p in allPoints {
+                    centerSum += p
+                }
+                let centerDouble = centerSum / Double(allPoints.count)
+                let center = SIMD3<Float>(Float(centerDouble.x), Float(centerDouble.y), Float(centerDouble.z))
+                
+                let toOrigin = matrix_translation(translation: -center)
+                let fromOrigin = matrix_translation(translation: center)
+                let zScale = 1.0 - ensureValueIsFloat(depthInput.getHistoryValue(millisecondsAgo: cubeIndexDouble * 70.0))
+                let zScaleMatrix = matrix_scale(scale: SIMD3<Float>(1.0, 1.0, zScale))
+                
+                let xScale = 1.0 - ensureValueIsFloat(widthInput.getHistoryValue(millisecondsAgo: cubeIndexDouble * 50.0))
+                let xScaleMatrix = matrix_scale(scale: SIMD3<Float>(xScale, 1.0, 1.0))
+                
+                let yScale = 1.0 - ensureValueIsFloat(heightInput.getHistoryValue(millisecondsAgo: cubeIndexDouble * 90.0))
+                let yScaleMatrix = matrix_scale(scale: SIMD3<Float>(1.0, yScale, 1.0))
+                
+                let combinedMatrix = fromOrigin * rotationMatrix * toOrigin
+
+                for l in cubeLines {
+                    var l_t = Line(
+                        startPoint: l.startPoint,
+                        endPoint: l.endPoint,
+                        degree: l.degree,
+                        controlPoints: l.controlPoints,
+                        lineWidthStart: lineWidthBase + 2 * brightness,
+                        lineWidthEnd: lineWidthBase + 2 * brightness
+                    )
+                    l_t = l_t.setBasicEndPointColors(startColor: color, endColor: color)
+                    var l_tMain = l_t
+                    var l_Height = l_t
+                    var l_Width = l_t
+                    
+                    
+                    
+                    
+                    l_t = l_t.applyMatrix(fromOrigin)
+                    l_t = l_t.applyMatrix(zScaleMatrix)
+                    // l_t = l_t.applyMatrix(rotationMatrix)
+                    l_t = l_t.applyMatrix(toOrigin)
+                    
+                    l_Height = l_Height.applyMatrix(fromOrigin * zScaleMatrix * yScaleMatrix * toOrigin)
+                    l_Width = l_Width.applyMatrix(fromOrigin * zScaleMatrix * xScaleMatrix * toOrigin)
+                    
+                    l_t = l_t.applyMatrix(combinedMatrix)
+                    l_tMain = l_tMain.applyMatrix(combinedMatrix)
+                    l_Height = l_Height.applyMatrix(combinedMatrix)
+                    l_Width = l_Width.applyMatrix(combinedMatrix)
+                    
+                    lines.append(l_t)
+                    lines.append(l_tMain)
+                    lines.append(l_Height)
+                    lines.append(l_Width)
+                }
+                
+                
+                var crossColor = SIMD4<Float>(0.0, 0.0, 0.0, 0.5)
+                var crossLinesTransformed: [Line] = []
+                for l in crossLines {
+                    var l_t = Line(
+                        startPoint: l.startPoint,
+                        endPoint: l.endPoint,
+                        degree: l.degree,
+                        controlPoints: l.controlPoints,
+                        lineWidthStart: 0.7,
+                        lineWidthEnd: 0.7
+                    )
+                    l_t = l_t.setBasicEndPointColors(startColor: crossColor, endColor: crossColor)
+                    l_t = l_t.applyMatrix(combinedMatrix)
+                    
+                    crossLinesTransformed.append(l_t)
+                }
+
+                // lines.append(contentsOf: crossLinesTransformed)
+                
+                cubeNr += 1
+            }
         }
         
         
@@ -316,19 +730,20 @@ class Genuary2026Generator: CachedGeometryGenerator {
             1.0
         )
         
-        for line in cubeLines {
+        for line in outputLines {
             var tLine = Line(
                 startPoint: line.startPoint,
                 endPoint: line.endPoint,
                 degree: line.degree,
                 controlPoints: line.controlPoints,
-                lineWidthStart: lineWidthBase * 2,
-                lineWidthEnd: lineWidthBase * 2
+                lineWidthStart: lineWidthBase,
+                lineWidthEnd: lineWidthBase
             )
             tLine = tLine.setBasicEndPointColors(startColor: cubeColor, endColor: cubeColor)
             
             if dayNumber == "1" {
                 tLine = tLine.applyMatrix(scaleMatrix)
+                tLine = tLine.applyMatrix(rotationMatrixXYZ)
             } else if dayNumber == "2" {
                 let scaling:Float = 1.1
                 let day2ScaleMatrix = matrix_scale(scale: SIMD3<Float>(scaling, scaling, scaling))
@@ -336,7 +751,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
             }
             
             
-            tLine = tLine.applyMatrix(rotationMatrixXYZ)
+            
             tLine = tLine.applyMatrix(translationMatrix)
             lines.append(tLine)
         }
