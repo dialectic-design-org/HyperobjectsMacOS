@@ -238,3 +238,25 @@ private func decompose(path: CGPath) -> [Line] {
 private func pointToSIMD(_ p: CGPoint) -> SIMD3<Float> {
     return SIMD3<Float>(Float(p.x), Float(p.y), 0)
 }
+
+
+// The purpose of this function is to find a certain number of cubes that will approximate the given lines with a certain accuracy.
+func linesToCubes(lines: [Line], accuracy: Float) -> [Cube] {
+    var cubes: [Cube] = []
+    
+    for line in lines {
+        let segments = line.subdivide(accuracy: accuracy)
+        for segment in segments {
+            let midPoint = (segment.startPoint + segment.endPoint) / 2
+            let length = simd_length(segment.endPoint - segment.startPoint)
+            let direction = simd_normalize(segment.endPoint - segment.startPoint)
+            
+            // Create a cube centered at midPoint with size based on length
+            let cubeSize = length * 0.1 // scale down for visual purposes
+            let cube = Cube(center: midPoint, size: cubeSize, orientation: direction)
+            cubes.append(cube)
+        }
+    }
+    
+    return cubes
+}

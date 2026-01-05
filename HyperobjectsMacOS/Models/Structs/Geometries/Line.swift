@@ -236,6 +236,74 @@ struct Line: Geometry {
         
         return points[0]
     }
+
+    func subdivide(at t: Float) -> (Line, Line) {
+        let midPoint = interpolate(t: t)
+        
+        var firstLine = Line(
+            startPoint: startPoint,
+            endPoint: midPoint,
+            degree: degree,
+            controlPoints: []
+        )
+        
+        var secondLine = Line(
+            startPoint: midPoint,
+            endPoint: endPoint,
+            degree: degree,
+            controlPoints: []
+        )
+        
+        // Calculate new control points for first line
+        if degree >= 2 {
+            let cp1 = controlPoints[0]
+            let newCP1 = mix(startPoint, cp1, t: t)
+            firstLine.controlPoints.append(newCP1)
+        }
+        
+        if degree == 3 {
+            let cp1 = controlPoints[0]
+            let cp2 = controlPoints[1]
+            let newCP1 = mix(startPoint, cp1, t: t)
+            let newCP2 = mix(cp1, cp2, t: t)
+            firstLine.controlPoints[0] = newCP1
+            firstLine.controlPoints.append(newCP2)
+        }
+        
+        // Calculate new control points for second line
+        if degree >= 2 {
+            let cpLast = controlPoints.last!
+            let newCPLast = mix(cpLast, endPoint, t: t)
+            secondLine.controlPoints.insert(newCPLast, at: 0)
+        }
+        
+        if degree == 3 {
+            let cp1 = controlPoints[0]
+            let cp2 = controlPoints[1]
+            let newCP2 = mix(cp2, endPoint, t: t)
+            secondLine.controlPoints.insert(newCP2, at: 0)
+        }
+        
+        return (firstLine, secondLine)
+    }
+
+    func subdivide(accuracy: Float) -> [Line] {
+        var segments: [Line] = [self]
+        var i = 0
+        while i < segments.count {
+            let segment = segments[i]
+            let approxLength = Float(segment.length())
+            if approxLength > accuracy {
+                let (firstHalf, secondHalf) = segment.subdivide(at: 0.5)
+                segments.remove(at: i)
+                segments.insert(secondHalf, at: i)
+                segments.insert(firstHalf, at: i)
+            } else {
+                i += 1
+            }
+        }
+        return segments
+    }
 }
 
 

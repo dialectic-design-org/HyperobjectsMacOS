@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 4"
+private var currentTextDay = "Day 5"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Low res, pixelated."
+private var currentTextPrompt = "No font."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -822,10 +822,77 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     }
                 }
             }
+        } else if dayNumber == "5" {
+            let style = CubeLetterStyle(
+                maxLineWidth: 12.0,
+                worldScale: 0.26,
+                baseCubeSize: 0.06,
+                cubesPerLetter: 20,
+                coherence: 1.0,
+                rotationJitter: 0.0,
+            )
+
+            var cubes = cubesForAbstractCubeText("GENUARY", origin: SIMD3<Float>(-1.1, 0.0, 0), style: style, seed: 42)
             
+            var rotationMatrix = matrix_rotation(angle: Float(sin(timeAsFloat)) * 0.0, axis: SIMD3<Float>(0.0, 1.0, 0.0))
             
+            var scaleMatrix = matrix_scale(scale: SIMD3<Float>(1.2, 2.1, 1.0))
+            
+            var cubeLines: [Line] = []
+            var waveAmplitude:Float = 0.05
+            for i in cubes.indices {
+                var cubeT = Double(i) / Double(cubes.count)
+                
+//                if i % 4 == 0 {
+//                    cubes[i].center.y += waveAmplitude * Float(sin(timeAsFloat + cubeT))
+//                } else if i % 4 == 1 {
+//                    cubes[i].center.y += waveAmplitude * Float(cos(timeAsFloat + cubeT))
+//                } else if i % 4 == 2 {
+//                    cubes[i].center.y += waveAmplitude * Float(sin(timeAsFloat * 0.5 + cubeT))
+//                } else if i % 4 == 3 {
+//                    cubes[i].center.y += waveAmplitude * Float(cos(timeAsFloat * 0.5 + cubeT))
+//                }
+                
+//                if i % 2 == 0 {
+//                    cubes[i].center.y += waveAmplitude * Float(sin(timeAsFloat + cubeT))
+//                } else {
+//                    cubes[i].center.y += waveAmplitude * Float(cos(timeAsFloat + cubeT))
+//                }
+                
+                cubes[i].axisScale.x *= 1.0
+                cubes[i].axisScale.y *= 1.0
+                cubes[i].axisScale.z *= 0.5 // + pulsedWave(t: Float(-timeAsFloat * 0.25 + 1.0 + cubeT * 3), frequency: 0.25, steepness: 20.0) * 20.0
+                
+                var linesForCube = cubes[i].wallOutlines()
+                // Rotate the cube lines around the cube center based on timeAsFloat and offset by cubeT
+                let angle = -timeAsFloat * 0.5 + cubeT * 3
+                let cubeRotationMatrix = matrix_rotation(angle: Float(angle), axis: SIMD3<Float>(0.0, 1.0, 0.0))
+                let toCubeCenter = matrix_translation(translation: -cubes[i].center)
+                let fromCubeCenter = matrix_translation(translation: cubes[i].center)
+                let rotationAroundCenterMatrix = fromCubeCenter * cubeRotationMatrix * toCubeCenter
+                for j in linesForCube.indices {
+                    linesForCube[j] = linesForCube[j].applyMatrix(rotationAroundCenterMatrix)
+                }
+                cubeLines.append(contentsOf: linesForCube)
+            }
+            
+            replacementProbability = pulsedWave(t: Float(timeAsFloat * 0.25 + 1.0), frequency: 0.25, steepness: 1.0) * 0.025
+            
+            var textColor = SIMD4<Float>(0.0, 0.0, 0.0, 1.0)
+            for i in cubeLines.indices {
+                cubeLines[i] = cubeLines[i].applyMatrix(rotationMatrix)
+                cubeLines[i] = cubeLines[i].applyMatrix(scaleMatrix)
+                cubeLines[i] = cubeLines[i].setBasicEndPointColors(startColor: textColor, endColor: textColor)
+                cubeLines[i].lineWidthStart = lineWidthBase * 1.0
+                cubeLines[i].lineWidthEnd = lineWidthBase * 1.0
+            }
+            
+            lines.append(contentsOf: cubeLines)
+
         }
         
+        // return lines
+
         
         var cubeColor = SIMD4<Float>(
             0.4,
@@ -870,7 +937,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
     
         // TEXT
         
-        let offWhite = SIMD4<Float>(0.9, 0.9, 0.9, 1.0)
+        var offWhite = SIMD4<Float>(0.9, 0.9, 0.9, 1.0)
         
         var textColor = SIMD4<Float>(
             1.0,
@@ -878,6 +945,13 @@ class Genuary2026Generator: CachedGeometryGenerator {
             1.0,
             1.0
         )
+        
+        textColor = SIMD4<Float>(
+            0.7,
+            0.7,
+            0.7,
+            1.0
+            )
         
         
         currentTextMainTitle = mutateString(
