@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 6"
+private var currentTextDay = "Day 7"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Lights on / off."
+private var currentTextPrompt = "Boolean algebra."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -984,6 +984,78 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 }
                 lines.append(contentsOf: cubeLines)
             }
+        } else if dayNumber == "7" {
+            replacementProbability = 0.0
+            
+            var animSpeed: Float = 0.25
+            
+            var cubeA = Cube(center: SIMD3<Float>(0.0 + sin(Float(timeAsFloat)) * 0.1, 0.0, 0.0), size: 1.0)
+            
+            
+            cubeA.axisScale = SIMD3<Float>(
+                0.01 + 1.0 - ensureValueIsFloat(widthInput.getHistoryValue(millisecondsAgo: 0)),
+                1.0,
+                1.0
+            )
+            
+            let commonFactorA = -Float(timeAsFloat * 0.25) * animSpeed
+
+            cubeA.orientation.x = (.pi / 1.0) * commonFactorA
+            cubeA.orientation.y = (.pi / 3.0) * commonFactorA
+            cubeA.orientation.z = (.pi / 2.0) * commonFactorA
+            
+            var cubeAColor = SIMD4<Float>(0.8, 0.8, 0.8, 1.0)
+            
+            var cubeALines = cubeA.wallOutlines()
+            for i in cubeALines.indices {
+                cubeALines[i] = cubeALines[i].setBasicEndPointColors(startColor: cubeAColor, endColor: cubeAColor)
+                cubeALines[i].lineWidthStart = lineWidthBase * 0.5
+                cubeALines[i].lineWidthEnd = lineWidthBase * 0.5
+            }
+            
+            var cubeB = Cube(center: SIMD3<Float>(
+                sin(Float(timeAsFloat)) * 0.6 * animSpeed,
+                sin(Float(timeAsFloat * 0.25)) * 0.6 * animSpeed,
+                cos(Float(timeAsFloat * 0.5)) * 0.6 * animSpeed
+            ), size: 0.8)
+            
+            cubeB.axisScale = SIMD3<Float>(
+                0.01 + 1.0 - ensureValueIsFloat(widthInput.getHistoryValue(millisecondsAgo: 200)),
+                1.0,
+                1.0
+            )
+            
+            let commonFactor = Float(timeAsFloat * 0.25) * animSpeed
+            
+            cubeB.orientation.x = (.pi / 5.0) * commonFactor
+            cubeB.orientation.y = (.pi / 6.0) * commonFactor
+            cubeB.orientation.z = (.pi / 7.0) * commonFactor
+            
+            var cubeBLines = cubeB.wallOutlines()
+            for i in cubeBLines.indices {
+                cubeBLines[i] = cubeBLines[i].setBasicEndPointColors(startColor: cubeAColor, endColor: cubeAColor)
+                cubeBLines[i].lineWidthStart = lineWidthBase * 0.5
+                cubeBLines[i].lineWidthEnd = lineWidthBase * 0.5
+            }
+            
+            let result = cubeA.intersect(with: cubeB)
+            var edges: [Line] = result.allEdgeLines()
+            
+            var intersectionColor = SIMD4<Float>(0.0, 0.0, 0.0, 1.0)
+            
+            for i in edges.indices {
+                edges[i] = edges[i].setBasicEndPointColors(startColor: intersectionColor, endColor: intersectionColor)
+                edges[i].lineWidthStart = lineWidthBase * 3
+                edges[i].lineWidthEnd = lineWidthBase * 3
+            }
+
+            
+            
+            
+            lines.append(contentsOf: cubeALines)
+            lines.append(contentsOf: cubeBLines)
+            
+            lines.append(contentsOf: edges)
         }
         
         // return lines
@@ -1040,19 +1112,35 @@ class Genuary2026Generator: CachedGeometryGenerator {
             1.0,
             1.0
         )
-        offWhite = SIMD4<Float>(
-            0.2 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
-            0.2 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
-            0.2 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
-            1.0
-        )
         
-        textColor = SIMD4<Float>(
-            0.3 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
-            0.3 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
-            0.3 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
-            1.0
+        if dayNumber == "6" {
+            offWhite = SIMD4<Float>(
+                0.2 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+                0.2 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+                0.2 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+                1.0
             )
+            
+            textColor = SIMD4<Float>(
+                0.3 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+                0.3 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+                0.3 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+                1.0
+            )
+        } else if dayNumber == "7" {
+            textColor = SIMD4<Float>(
+                0.7,
+                0.7,
+                0.7,
+                1.0
+            )
+            offWhite = SIMD4<Float>(
+                0.8,
+                0.8,
+                0.8,
+                1.0
+            )
+        }
         
         
         currentTextMainTitle = mutateString(

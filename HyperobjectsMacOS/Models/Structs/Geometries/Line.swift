@@ -314,4 +314,21 @@ struct Line: Geometry {
     }
 }
 
+extension Line: Equatable {
+    static func == (lhs: Line, rhs: Line) -> Bool {
+        simd_length(lhs.startPoint - rhs.startPoint) < CSG_EPSILON &&
+        simd_length(lhs.endPoint - rhs.endPoint) < CSG_EPSILON
+    }
+}
 
+extension Line: Hashable {
+    func hash(into hasher: inout Hasher) {
+        let scale = 1.0 / CSG_EPSILON
+        hasher.combine(Int(startPoint.x * scale))
+        hasher.combine(Int(startPoint.y * scale))
+        hasher.combine(Int(startPoint.z * scale))
+        hasher.combine(Int(endPoint.x * scale))
+        hasher.combine(Int(endPoint.y * scale))
+        hasher.combine(Int(endPoint.z * scale))
+    }
+}

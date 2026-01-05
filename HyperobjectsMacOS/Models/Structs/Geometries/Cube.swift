@@ -88,5 +88,104 @@ struct Cube {
             Line(startPoint: v[3], endPoint: v[7])
         ]
     }
+    func boundingBox() -> (min: SIMD3<Float>, max: SIMD3<Float>) {
+        let verts = vertices()
+        var minV = verts[0]
+        var maxV = verts[0]
+        for v in verts {
+            minV = simd_min(minV, v)
+            maxV = simd_max(maxV, v)
+        }
+        return (minV, maxV)
+    }
     
+    /// Check if two bounding boxes overlap
+    private static func boundingBoxesOverlap(
+        _ a: (min: SIMD3<Float>, max: SIMD3<Float>),
+        _ b: (min: SIMD3<Float>, max: SIMD3<Float>)
+    ) -> Bool {
+        // Check for separation along each axis
+        if a.max.x < b.min.x - CSG_EPSILON || b.max.x < a.min.x - CSG_EPSILON { return false }
+        if a.max.y < b.min.y - CSG_EPSILON || b.max.y < a.min.y - CSG_EPSILON { return false }
+        if a.max.z < b.min.z - CSG_EPSILON || b.max.z < a.min.z - CSG_EPSILON { return false }
+        return true
+    }
+    
+    /// Apply a boolean operation with another cube
+    /// - Parameters:
+    ///   - other: The other cube to combine with
+    ///   - operation: The boolean operation to apply
+    /// - Returns: BooleanResult containing resulting geometry (possibly multiple solids)
+    func applyBoolean(other: Cube, operation: BooleanOperation) -> BooleanResult {
+        // Early exit: check bounding box overlap
+        let bbA = self.boundingBox()
+        let bbB = other.boundingBox()
+        let overlaps = Cube.boundingBoxesOverlap(bbA, bbB)
+        
+        // Handle non-overlapping cases efficiently
+        if !overlaps {
+            switch operation {
+            case .intersection:
+                // No overlap = empty intersection
+                return BooleanResult(fromCSGSolid: CSGSolid(polygons: []))
+            case .union:
+                // No overlap = two separate solids
+                let solidA = CSGSolid.fromCube(self)
+                let solidB = CSGSolid.fromCube(other)
+                let polyA = Polyhedron(fromPolygons: solidA.polygons)
+                let polyB = Polyhedron(fromPolygons: solidB.polygons)
+                return BooleanResult(solids: [polyA, polyB])
+            case .difference:
+                // No overlap = A unchanged
+                let solidA = CSGSolid.fromCube(self)
+                return BooleanResult(fromCSGSolid: solidA)
+            case .symmetricDifference:
+                // No overlap = both solids
+                let solidA = CSGSolid.fromCube(self)
+                let solidB = CSGSolid.fromCube(other)
+                let polyA = Polyhedron(fromPolygons: solidA.polygons)
+                let polyB = Polyhedron(fromPolygons: solidB.polygons)
+                return BooleanResult(solids: [polyA, polyB])
+            }
+        }
+        
+        // Standard CSG operation for overlapping cubes
+        let solidA = CSGSolid.fromCube(self)
+        let solidB = CSGSolid.fromCube(other)
+        
+        let resultCSG: CSGSolid
+        
+        switch operation {
+        case .union:
+            resultCSG = solidA.union(solidB)
+        case .intersection:
+            resultCSG = solidA.intersection(solidB)
+        case .difference:
+            resultCSG = solidA.subtract(solidB)
+        case .symmetricDifference:
+            resultCSG = solidA.symmetricDifference(solidB)
+        }
+        
+        return BooleanResult(fromCSGSolid: resultCSG)
+    }
+    
+    /// Convenience method for intersection
+    func intersect(with other: Cube) -> BooleanResult {
+        applyBoolean(other: other, operation: .intersection)
+    }
+    
+    /// Convenience method for union
+    func union(with other: Cube) -> BooleanResult {
+        applyBoolean(other: other, operation: .union)
+    }
+    
+    /// Convenience method for difference (self - other)
+    func subtract(_ other: Cube) -> BooleanResult {
+        applyBoolean(other: other, operation: .difference)
+    }
+    
+    /// Convenience method for symmetric difference (XOR)
+    func symmetricDifference(with other: Cube) -> BooleanResult {
+        applyBoolean(other: other, operation: .symmetricDifference)
+    }
 }
