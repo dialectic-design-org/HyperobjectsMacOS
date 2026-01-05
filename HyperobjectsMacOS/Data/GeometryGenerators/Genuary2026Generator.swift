@@ -989,13 +989,17 @@ class Genuary2026Generator: CachedGeometryGenerator {
             
             var animSpeed: Float = 0.25
             
-            var cubeA = Cube(center: SIMD3<Float>(0.0 + sin(Float(timeAsFloat)) * 0.1, 0.0, 0.0), size: 1.0)
+            var cubeA = Cube(center: SIMD3<Float>(
+                0.0 + sin(Float(timeAsFloat * 0.333)) * 0.1,
+                0.0 + sin(Float(timeAsFloat * 0.1111)) * 0.1,
+                0.0
+            ), size: 1.0)
             
             
             cubeA.axisScale = SIMD3<Float>(
-                0.01 + 1.0 - ensureValueIsFloat(widthInput.getHistoryValue(millisecondsAgo: 0)),
-                1.0,
-                1.0
+                1.5,
+                0.8,
+                0.8
             )
             
             let commonFactorA = -Float(timeAsFloat * 0.25) * animSpeed
@@ -1013,6 +1017,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 cubeALines[i].lineWidthEnd = lineWidthBase * 0.5
             }
             
+            
             var cubeB = Cube(center: SIMD3<Float>(
                 sin(Float(timeAsFloat)) * 0.6 * animSpeed,
                 sin(Float(timeAsFloat * 0.25)) * 0.6 * animSpeed,
@@ -1020,9 +1025,9 @@ class Genuary2026Generator: CachedGeometryGenerator {
             ), size: 0.8)
             
             cubeB.axisScale = SIMD3<Float>(
-                0.01 + 1.0 - ensureValueIsFloat(widthInput.getHistoryValue(millisecondsAgo: 200)),
-                1.0,
-                1.0
+                1.5,
+                0.8,
+                0.8
             )
             
             let commonFactor = Float(timeAsFloat * 0.25) * animSpeed
