@@ -165,6 +165,14 @@ struct Line: Geometry {
         }
     }
     
+    func direction() -> SIMD3<Float> {
+        return simd_normalize(endPoint - startPoint)
+    }
+    
+    func midPoint() -> SIMD3<Float> {
+        0.5 * (endPoint + startPoint)
+    }
+    
     
     private func approximateBezierLength(segments: Int = 100) -> Double {
         var totalLength: Double = 0.0

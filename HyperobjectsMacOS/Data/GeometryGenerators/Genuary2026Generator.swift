@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 5"
+private var currentTextDay = "Day 6"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "No font."
+private var currentTextPrompt = "Lights on / off."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -889,6 +889,101 @@ class Genuary2026Generator: CachedGeometryGenerator {
             
             lines.append(contentsOf: cubeLines)
 
+        } else if dayNumber == "6" {
+            replacementProbability = pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5
+
+            // Render 4 rotating cubes all with the same size but with different brightness colors and rotation speeds.
+            // The first cube is visible all the time, while the second cube is visible only every other frame and so on.
+            let totalCubes = 6
+            let baseCubeSize:Float = 1.0
+            let gatingFrames = 8 * 8 * 2
+
+            for cubeIndex in 0..<totalCubes {
+                
+                
+                let strobePeriod = gatingFrames / (1 << cubeIndex)
+                
+                // [HARDENING] Avoid division by zero if divisor is 0.
+                if strobePeriod <= 0 {
+                    continue
+                }
+                
+                let phaseOffset = (strobePeriod * cubeIndex) / totalCubes * 10
+                let effectiveFrame = scene.frameStamp + phaseOffset
+                
+                let currentBlock = effectiveFrame / strobePeriod
+                let frameWithinBlock = effectiveFrame % strobePeriod
+                let progressWithinBlock = Double(frameWithinBlock) / Double(strobePeriod)
+                
+                let isStrobeOn = currentBlock % 2 == 0
+                
+                let maxBrightness = 1.4
+                let minBrightness = 0.15
+                let maxSaturation = 2.0
+                let minSaturation = 0.4
+                
+                var brightnessFactor: Double
+                var saturationFactor: Double
+                
+                if isStrobeOn {
+                    // Strobe flash: start bright, fade out over the block duration
+                    // Using an ease-out curve for more natural falloff
+                    let fadeProgress = progressWithinBlock
+                    let easedFade = 1.0 - pow(1.0 - fadeProgress, 2.0)  // Quadratic ease-out (fast initial fade)
+                    // Alternative: exponential decay for more realistic persistence
+                    // let easedFade = 1.0 - exp(-3.0 * fadeProgress)
+                    
+                    brightnessFactor = maxBrightness - (maxBrightness - minBrightness) * easedFade
+                    saturationFactor = maxSaturation - (maxSaturation - minSaturation) * easedFade
+                } else {
+                    // "Off" period: stay dim (or could do a slower secondary fade here)
+                    brightnessFactor = minBrightness
+                    saturationFactor = minSaturation
+                }
+                // Size: outer cubes slightly larger
+                let sizeMultiplier = 1.0 - (Float(cubeIndex) * 0.02)
+                let cubeSize = baseCubeSize * sizeMultiplier
+                
+                // ROTATION: Freeze to the start of current strobe block
+                // This simulates how a real strobe "freezes" motion for our eyes
+                let frozenFrame = currentBlock * strobePeriod
+                let frozenTime = Double(frozenFrame) / 60.0
+                
+                // Oscillating rotation speed for visual interest
+                let minSpeed = 0.0
+                let maxSpeed = 0.5 * Double.pi
+                let waveFreq = 2.0 * Double.pi / 30.0  // Speed oscillates over 30 seconds
+                let avgSpeed = (minSpeed + maxSpeed) / 2.0
+                let ampSpeed = (maxSpeed - minSpeed) / 2.0
+                
+                // Angle is the integral of the oscillating speed
+                // speed(t) = avgSpeed + ampSpeed * sin(waveFreq * t)
+                // angle(t) = avgSpeed * t - (ampSpeed / waveFreq) * cos(waveFreq * t)
+                let angle = Float(avgSpeed * frozenTime - (ampSpeed / waveFreq) * cos(waveFreq * frozenTime))
+                
+                let rotationMatrix = matrix_rotation(angle: angle, axis: SIMD3<Float>(0.0, 1.0, 0.0))
+                let cube = Cube(
+                    center: SIMD3<Float>(0.0, 0.0, 0.0),
+                    size: cubeSize
+                )
+                var cubeLines = cube.wallOutlines()
+                
+                // Color gradient from red (outer) to blue (inner)
+                var colorScale = ColorScale(colors: [.red, .blue], mode: .hsl)
+                let cubeColor = colorScale.color(
+                    at: 1.0 - Double(cubeIndex) / Double(totalCubes - 1),
+                    saturation: saturationFactor,
+                    brightness: brightnessFactor
+                ).toSIMD4()
+                
+                for i in cubeLines.indices {
+                    cubeLines[i] = cubeLines[i].applyMatrix(rotationMatrix)
+                    cubeLines[i] = cubeLines[i].setBasicEndPointColors(startColor: cubeColor, endColor: cubeColor)
+                    cubeLines[i].lineWidthStart = lineWidthBase * Float(saturationFactor)
+                    cubeLines[i].lineWidthEnd = lineWidthBase * Float(saturationFactor)
+                }
+                lines.append(contentsOf: cubeLines)
+            }
         }
         
         // return lines
@@ -945,11 +1040,17 @@ class Genuary2026Generator: CachedGeometryGenerator {
             1.0,
             1.0
         )
+        offWhite = SIMD4<Float>(
+            0.2 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+            0.2 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+            0.2 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+            1.0
+        )
         
         textColor = SIMD4<Float>(
-            0.7,
-            0.7,
-            0.7,
+            0.3 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+            0.3 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
+            0.3 + pulsedWave(t: Float(timeAsFloat), frequency: 10.0, steepness: 100.0) * 0.5,
             1.0
             )
         
