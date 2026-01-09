@@ -12,19 +12,159 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 7"
+private var currentTextDay = "Day 9"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Boolean algebra."
+private var currentTextPrompt = "Cellular."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
 private var mapCredit: [Int: Character] = [:]
 
 private var replacementCharacters = "genuaryGENUARY2026"
+
+
+private var cityLayoutParams: [String: Any] = [
+    "name": "New City",
+    "population": 500,
+    "area": 500.0,
+    "gdp": 300.0,
+    "gridRows": 4,
+    "gridColumns": 20,
+    "blockSize": SIMD2<Double>(1.0, 1.0)
+]
+
+private var cityLayout = Metropolis(name: "New City",
+                gridRows: cityLayoutParams["gridRows"] as! Int,
+                gridColumns: cityLayoutParams["gridColumns"] as! Int,
+                blockSize: cityLayoutParams["blockSize"] as! SIMD2<Double>)
+
+private func simd3ArrayToLinesWithOffset(_ points: [SIMD3<Float>], start: Float, end: Float) -> [Line] {
+    guard points.count > 1 else { return [] }
+    
+    // Calculate total length of the polyline
+    var totalLength: Float = 0
+    var segmentLengths: [Float] = []
+    
+    for i in 0..<(points.count - 1) {
+        let dist = simd_distance(points[i], points[i+1])
+        segmentLengths.append(dist)
+        totalLength += dist
+    }
+    
+    // Determine the absolute start and end distances
+    let startDist = totalLength * max(0.0, min(1.0, start))
+    let endDist = totalLength * max(0.0, min(1.0, end))
+    
+    if startDist >= endDist { return [] }
+    
+    var lines: [Line] = []
+    var currentDist: Float = 0.0
+    
+    for i in 0..<(points.count - 1) {
+        let segLen = segmentLengths[i]
+        let nextDist = currentDist + segLen
+        
+        // Find intersection of current segment interval [currentDist, nextDist]
+        // with the desired range [startDist, endDist]
+        let overlapStart = max(currentDist, startDist)
+        let overlapEnd = min(nextDist, endDist)
+        
+        if overlapStart < overlapEnd {
+            // There is an overlap; calculate interpolated points
+            let t1 = (overlapStart - currentDist) / segLen
+            let t2 = (overlapEnd - currentDist) / segLen
+            
+            let p1 = points[i] + (points[i+1] - points[i]) * t1
+            let p2 = points[i] + (points[i+1] - points[i]) * t2
+            
+            lines.append(Line(startPoint: p1, endPoint: p2))
+        }
+        
+        currentDist = nextDist
+        
+        // Optimization: stop processing if we've passed the end distance
+        if currentDist >= endDist {
+            break
+        }
+    }
+    
+    return lines
+}
+
+private func trimLinesToMovingWindow(pathLines: [Line], windowCenter: Float, windowSize: Float) -> [Line] {
+    guard !pathLines.isEmpty else { return [] }
+    
+    var totalLength: Float = 0
+    var lineLengths: [Float] = []
+    
+    for line in pathLines {
+        let length = simd_distance(line.startPoint, line.endPoint)
+        lineLengths.append(length)
+        totalLength += length
+    }
+    
+    // Avoid division by zero issues or empty paths
+    if totalLength < 0.0001 { return [] }
+    
+    let halfSize = windowSize * 0.5
+    let start = windowCenter - halfSize
+    let end = windowCenter + halfSize
+    
+    var ranges: [(Float, Float)] = []
+    
+    // Handle wrapping logic
+    if start < 0 {
+        // Wraps at beginning: ends of path + start of path
+        ranges.append((start + totalLength, totalLength))
+        ranges.append((0, end))
+    } else if end > totalLength {
+        // Wraps at end: end of path + start of path
+        ranges.append((start, totalLength))
+        ranges.append((0, end - totalLength))
+    } else {
+        // Contiguous segment
+        ranges.append((start, end))
+    }
+    
+    var trimmedLines: [Line] = []
+    var currentDist: Float = 0
+    
+    for i in 0..<pathLines.count {
+        let line = pathLines[i]
+        let len = lineLengths[i]
+        let nextDist = currentDist + len
+        
+        for range in ranges {
+            let rStart = range.0
+            let rEnd = range.1
+            
+            // Intersection of [currentDist, nextDist] and [rStart, rEnd]
+            let overlapStart = max(currentDist, rStart)
+            let overlapEnd = min(nextDist, rEnd)
+            
+            if overlapStart < overlapEnd {
+                let t1 = (overlapStart - currentDist) / len
+                let t2 = (overlapEnd - currentDist) / len
+                
+                let p1 = line.startPoint + (line.endPoint - line.startPoint) * t1
+                let p2 = line.startPoint + (line.endPoint - line.startPoint) * t2
+                
+                var newLine = line
+                newLine.startPoint = p1
+                newLine.endPoint = p2
+                trimmedLines.append(newLine)
+            }
+        }
+        currentDist = nextDist
+    }
+    
+    return trimmedLines
+}
+
 
 private func mutateString(
     original: String,
@@ -93,6 +233,11 @@ private func randomCharacter(excluding excluded: Character, sampleSet: String = 
 }
 
 
+var automaton = CellularAutomata3D.cube(size: 8, preset: .dense)
+
+
+
+
 class Genuary2026Generator: CachedGeometryGenerator {
     init() {
         super.init(name: "Genuary 2026 Generator", inputDependencies: [
@@ -101,6 +246,11 @@ class Genuary2026Generator: CachedGeometryGenerator {
             "Prompt",
             "Line width base"
         ])
+        
+        
+        // Seed the center
+        // automaton.populateCenteredSeed(radius: 3, density: 0.5)
+        automaton.wrapsAtEdges = true
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase) -> [any Geometry] {
@@ -146,6 +296,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
         let depthInput = scene.getInputWithName(name: "Depth")
         
         let brightnessInput = scene.getInputWithName(name: "Brightness")
+
+        let regenerationTriggerLevel: Float = floatFromInputs(inputs, name: "Regeneration Trigger Level")
         
         
         
@@ -1061,6 +1213,155 @@ class Genuary2026Generator: CachedGeometryGenerator {
             lines.append(contentsOf: cubeBLines)
             
             lines.append(contentsOf: edges)
+        } else if dayNumber == "8" {
+            // Create a grid that represents city blocks
+            // Apply some wave pattern to create lower density and higher density parts in the city
+            // Create cubes representing buildings per city block, parameterised based on density
+            // Higher density is higher buildings
+            // Other features define what kind of mixture of buildings are present in the block, is it one large building or many smaller ones.
+            
+            var randomValue = Float.random(in: 0.0...1.0)
+
+            if randomValue < regenerationTriggerLevel {
+                print("Regenerating city layout...")
+                cityLayout = Metropolis(name: "New City",
+                gridRows: cityLayoutParams["gridRows"] as! Int,
+                gridColumns: cityLayoutParams["gridColumns"] as! Int,
+                blockSize: cityLayoutParams["blockSize"] as! SIMD2<Double>)
+            }
+            
+            
+            var centerOfCity = cityLayout.centerOfCity()
+            var cityCenterVec3 = SIMD3<Float>(
+                Float(-centerOfCity.x) * 1.0,
+                Float(-centerOfCity.y) * 0.0,
+                Float(-centerOfCity.y) * 1.0)
+            var centeringMatrix = matrix_translation(translation: cityCenterVec3)
+            var rotationMatrix = matrix_rotation(angle: Float(timeAsFloat * 0.1), axis: SIMD3<Float>(0.0, 1.0, 0.0))
+            var scalingMatrix = matrix_scale(scale: SIMD3<Float>(repeating: 0.10))
+            var translationMatrix = matrix_translation(translation: SIMD3<Float>(0.0, -0.4, 0.0))
+            
+            
+            var cityColor = SIMD4<Float>(
+                0.0,
+                0.0,
+                0.0,
+                0.5)
+            var cityLines = cityLayout.cacheLines
+            for i in cityLines.indices {
+                cityLines[i] = cityLines[i].applyMatrix(centeringMatrix)
+                cityLines[i] = cityLines[i].applyMatrix(rotationMatrix)
+                cityLines[i] = cityLines[i].applyMatrix(scalingMatrix)
+                cityLines[i] = cityLines[i].applyMatrix(translationMatrix)
+                cityLines[i] = cityLines[i].setBasicEndPointColors(startColor: cityColor, endColor: cityColor)
+                cityLines[i].lineWidthStart = lineWidthBase * 1
+                cityLines[i].lineWidthEnd = lineWidthBase * 1
+            }
+            lines.append(contentsOf: cityLines)
+            
+            var carPaths = cityLayout.carPaths
+            
+            var totalPaths = carPaths.count
+            var currentPathNr = 0
+            for p in carPaths {
+                currentPathNr += 1
+                var pathT = Float(currentPathNr) / Float(totalPaths)
+
+                var totalPathLength: Float = 0.0
+                for i in 0..<(p.count - 1) {
+                    let segmentLength = length(p[i + 1] - p[i])
+                    totalPathLength += segmentLength
+                }
+
+                var pathLines = simd3ArrayToLinesWithOffset(p, start: 0.0, end: 1.0)
+
+
+                var pathStartColor: SIMD4<Float> = SIMD4<Float>(1.0 - pathT, 0.0, pathT, 1.0)
+                var pathEndColor: SIMD4<Float> = SIMD4<Float>(1.0 - pathT, 1.0 - pathT, 1.0 - pathT, 1.0)
+
+                var brightnessFactor: Float = 1.5
+                pathStartColor *= brightnessFactor
+                pathEndColor *= brightnessFactor
+
+                var startCarLineTimeOffset = Float(timeAsFloat * 2.0) + pathT * 5.0
+                let carLineSpeed = 0.5 + pathT * 1.5
+                startCarLineTimeOffset *= carLineSpeed
+                let carLineOffset = fmodf(startCarLineTimeOffset, totalPathLength)
+                // Trim the path lines based on carLineOffset to create a moving effect
+                pathLines = trimLinesToMovingWindow(pathLines: pathLines, windowCenter: carLineOffset, windowSize: totalPathLength * 0.05)
+                
+                var pathTranslationMatrix = matrix_translation(translation: SIMD3<Float>(0.0, -0.4 - pathT * 0.1, 0.0))
+                
+                for i in pathLines.indices {
+                    var pathStartDistance: Float = 0.0
+                    for j in 0..<i {
+                        let segmentLength = length(pathLines[j].endPoint - pathLines[j].startPoint)
+                        pathStartDistance += segmentLength
+                    }
+                    let pathEndDistance = pathStartDistance + length(pathLines[i].endPoint - pathLines[i].startPoint)
+                    let pathStartT = pathStartDistance / totalPathLength
+                    let pathEndT = pathEndDistance / totalPathLength
+
+
+                    pathLines[i] = pathLines[i].setBasicEndPointColors(startColor: mix(pathStartColor, pathEndColor, t: pathStartT), endColor: mix(pathStartColor, pathEndColor, t: pathEndT))
+                    pathLines[i] = pathLines[i].applyMatrix(centeringMatrix)
+                    pathLines[i] = pathLines[i].applyMatrix(pathTranslationMatrix)
+                    pathLines[i] = pathLines[i].applyMatrix(rotationMatrix)
+                    pathLines[i] = pathLines[i].applyMatrix(scalingMatrix)
+                    pathLines[i] = pathLines[i].applyMatrix(translationMatrix)
+                    pathLines[i].lineWidthStart = lineWidthBase * 1.5
+                    pathLines[i].lineWidthEnd = lineWidthBase * 1.5
+                }
+                
+                lines.append(contentsOf: pathLines)
+            }
+            
+        } else if dayNumber == "9" {
+            
+            replacementProbability = 0.0
+            
+            if Int(timeAsFloat * 4.0) % 16 == 0 {
+                automaton.tick()
+                if automaton.liveCellCount > 250 {
+                    automaton = automaton.updatePreset(to: .crystals)
+                } else {
+                    automaton = automaton.updatePreset(to: .dense)
+                }
+            } else {
+                if automaton.liveCellCount < 100 {
+                    automaton.randomlyTurnOn(density: Double(regenerationTriggerLevel) * 0.2)
+                }
+            }
+            
+            
+            
+            let liveCellsNormalized = automaton.getLiveCellsCenteredWithColors()
+            
+            var rotationMatrixX = matrix_rotation(angle: -Float.pi / 4.0, axis: SIMD3<Float>(1.0, 0.0, 0.0))
+            var rotationMatrixY = matrix_rotation(angle: Float.pi / 4.0 + Float(timeAsFloat * 0.1), axis: SIMD3<Float>(0.0, 1.0, 0.0))
+            
+            var gridScalingFactor: Float = 5
+            
+            for normalizedCell in liveCellsNormalized {
+                var center = SIMD3<Float>(
+                    normalizedCell.position.0 * gridScalingFactor,
+                    normalizedCell.position.1 * gridScalingFactor,
+                    normalizedCell.position.2 * gridScalingFactor
+                )
+                var cellCubeLines = Cube(center: center, size: 1 / 8.0 * gridScalingFactor * 0.9).wallOutlines()
+                for i in cellCubeLines.indices {
+                    cellCubeLines[i] = cellCubeLines[i].applyMatrix(rotationMatrixY)
+                    cellCubeLines[i] = cellCubeLines[i].applyMatrix(rotationMatrixX)
+                    
+                    cellCubeLines[i] = cellCubeLines[i].setBasicEndPointColors(startColor: normalizedCell.color, endColor: normalizedCell.color)
+                    
+                    cellCubeLines[i].lineWidthStart = lineWidthBase * 1
+                    cellCubeLines[i].lineWidthEnd = lineWidthBase * 1
+                }
+                
+                
+                lines.append(contentsOf: cellCubeLines)
+            }
         }
         
         // return lines
@@ -1145,6 +1446,32 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 0.8,
                 1.0
             )
+        } else if dayNumber == "8" {
+            textColor = SIMD4<Float>(
+                0.3,
+                0.3,
+                0.3,
+                1.0
+            )
+            offWhite = SIMD4<Float>(
+                0.2,
+                0.2,
+                0.2,
+                1.0
+            )
+        } else if dayNumber == "9" {
+            textColor = SIMD4<Float>(
+                0.5,
+                0.5,
+                0.5,
+                1.0
+            )
+            offWhite = SIMD4<Float>(
+                0.2,
+                0.2,
+                0.2,
+                1.0
+            )
         }
         
         
@@ -1193,6 +1520,37 @@ class Genuary2026Generator: CachedGeometryGenerator {
             replacementCharacters: replacementCharacters
         )
         
+        if dayNumber == "8" {
+            let metropolisLines = textToBezierPaths("Metropolis", font: .custom("New York", size: 90), fontName: "New York", size: mainFontSize * 0.5, maxLineWidth: 20.0)
+            var metropolisTextColor = SIMD4<Float>(0.9, 0.4, 0.3, 1.0)
+            var metropolisTranslationMatrix = matrix_translation(translation: SIMD3<Float>(-0.2, -0.35, 0.0))
+            
+            var rotationMatrix = matrix_rotation(angle: Float(timeAsFloat * 0.1), axis: SIMD3<Float>(0.0, 1.0, 0.0))
+            var totalChars = metropolisLines.count
+            var charCounter: Int = 0
+            for char in metropolisLines {
+                var charT: Float = Float(charCounter) / Float(totalChars)
+                charCounter += 1
+                var pathStartColor: SIMD4<Float> = SIMD4<Float>(1.0 - charT, 0.0, charT, 1.0)
+                for line in char {
+                    var transformedLine = Line(
+                        startPoint: line.startPoint,
+                        endPoint: line.endPoint,
+                        degree: line.degree,
+                        controlPoints: line.controlPoints,
+                        lineWidthStart: lineWidthBase * 0.5,
+                        lineWidthEnd: lineWidthBase * 0.5
+                    )
+                    
+                    transformedLine = transformedLine.setBasicEndPointColors(startColor: pathStartColor, endColor: pathStartColor)
+                    transformedLine = transformedLine.applyMatrix(metropolisTranslationMatrix)
+                    transformedLine = transformedLine.applyMatrix(rotationMatrix)
+                    
+                    lines.append(transformedLine)
+                }
+            }
+        }
+
         
         
         // Main title
