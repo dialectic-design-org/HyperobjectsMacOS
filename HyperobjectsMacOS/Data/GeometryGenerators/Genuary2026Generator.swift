@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 9"
+private var currentTextDay = "Day 10"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Cellular."
+private var currentTextPrompt = "Polar coordinates."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -1361,6 +1361,112 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 
                 
                 lines.append(contentsOf: cellCubeLines)
+            }
+        } else if dayNumber == "10" {
+            
+            replacementProbability = 0.0
+            
+            var arcsCount = 20
+            
+            var arcPairs: [(arcLength: Float, orientation: Float)] = [
+//                (arcLength: 1.0, orientation: 0.0),           // Straight ahead
+//                (arcLength: 1.5, orientation: .pi / 4),       // Turn 45° right
+//                (arcLength: 0.8, orientation: -.pi / 3),      // Turn 60° left
+//                (arcLength: 1.2, orientation: .pi / 2),       // Turn 90° right
+            ]
+            
+            for i in 0...arcsCount-1 {
+                var arcLength: Float = 2.0 + sin(Float(timeAsFloat * 0.0005) + Float(i)) * 1.78765
+                var orientation: Float = .pi / 2 + cos(Float(timeAsFloat) * 0.00333 + Float(i) * 0.433) * .pi * 2
+                arcPairs.append((
+                    arcLength: arcLength,
+                    orientation: orientation
+                ))
+            }
+            
+            let origin = SIMD3<Float>(0, 0, 0)
+            let radius: Float = 0.8
+            let initialTheta: Float = 0.0           // Starting at x-axis direction
+            let initialPhi: Float = .pi / 2         // Starting on the equator
+            let initialDirection: Float = 0.0       // Heading north initially
+            
+            let arcs = createArcChain(
+                from: arcPairs,
+                origin: origin,
+                radius: radius,
+                initialTheta: initialTheta,
+                initialPhi: initialPhi,
+                initialDirection: initialDirection
+            )
+            
+            let arcChainColors = [
+                SIMD4<Float>(0.95, 0.42, 0.45, 1.0),  // Coral
+                SIMD4<Float>(0.18, 0.78, 0.78, 1.0),  // Teal
+                SIMD4<Float>(0.98, 0.82, 0.32, 1.0),  // Golden Amber
+                SIMD4<Float>(0.42, 0.28, 0.62, 1.0),  // Deep Violet
+                SIMD4<Float>(0.35, 0.82, 0.58, 1.0),  // Mint Emerald
+            ]
+            
+            // Sample all arcs for visualization
+            for (index, arc) in arcs.enumerated() {
+                let samples = arc.sample(count: 100)
+                
+                var arcLines = simd3ArrayToLinesWithOffset(samples, start: 0, end: 1)
+                
+                var lineExtentAmplification: Float = ensureValueIsFloat(depthInput.getHistoryValue(millisecondsAgo: Double(index) * 1000 * 0.05))
+                var arcRadiusAmplification = 0.5 + Float(index) * 0.01
+                
+                
+                
+                var scalingMatrix = matrix_scale(scale: SIMD3<Float>(repeating: ensureValueIsFloat(arcRadiusAmplification)))
+                
+                var currentColor = arcChainColors[index % 3]
+                
+                currentColor = currentColor * (0.6 + lineExtentAmplification * 1.2)
+                currentColor[3] = 1.0
+                
+                for i in arcLines.indices {
+                    
+                    arcLines[i].lineWidthStart = lineWidthBase * 3
+                    arcLines[i].lineWidthEnd = lineWidthBase * 3
+                    arcLines[i] = arcLines[i].applyMatrix(scalingMatrix)
+                    arcLines[i] = arcLines[i].setBasicEndPointColors(startColor: currentColor, endColor: currentColor)
+                }
+                
+                
+                var startPoint = samples[0]
+                var lineToStartPoint = Line(
+                    startPoint: startPoint * 0.05,
+                    endPoint: startPoint * (0.05 + 0.9 * ensureValueIsFloat(lineExtentAmplification))
+                )
+                
+                var lineToStartColor = currentColor * 1.0
+                lineToStartColor.z = 1.0
+                lineToStartColor = currentColor
+                
+                lineToStartPoint = lineToStartPoint.setBasicEndPointColors(startColor: lineToStartColor, endColor: lineToStartColor)
+                
+                
+                lineToStartPoint.lineWidthStart = lineWidthBase * 0
+                lineToStartPoint.lineWidthEnd = lineWidthBase * 3
+                lineToStartPoint = lineToStartPoint.applyMatrix(scalingMatrix)
+                lines.append(lineToStartPoint)
+                
+                var lineBeyondStartPoint = Line(
+                    startPoint: startPoint * 1.05,
+                    endPoint: startPoint * (1.1 + 5.0 * ensureValueIsFloat(lineExtentAmplification))
+                )
+                
+                lineBeyondStartPoint.lineWidthStart = lineWidthBase * 3
+                lineBeyondStartPoint.lineWidthEnd = lineWidthBase * 9
+                lineBeyondStartPoint = lineBeyondStartPoint.applyMatrix(scalingMatrix)
+                
+                lineBeyondStartPoint = lineBeyondStartPoint.setBasicEndPointColors(startColor: lineToStartColor, endColor: lineToStartColor)
+                
+                lines.append(lineBeyondStartPoint)
+                
+                lines.append(contentsOf: arcLines)
+                
             }
         }
         
