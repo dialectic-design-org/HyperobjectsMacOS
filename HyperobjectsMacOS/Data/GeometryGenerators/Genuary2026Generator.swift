@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 10"
+private var currentTextDay = "Day 11"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Polar coordinates."
+private var currentTextPrompt = "Quine."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -1468,6 +1468,46 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 lines.append(contentsOf: arcLines)
                 
             }
+        } else if dayNumber == "11" {
+            replacementProbability = 0.0
+            
+            // quines1DCA is an array of 1D cellular automaton rules that produce quines. Each rule is an array of 8 ints (0 or 1).
+            
+            var ruleSpacing: Float = 0.14
+            
+            var cellSpacing: Float = 0.09
+            
+            var totalRules = quines1DCA.count
+            
+            var scaling = matrix_scale(scale: SIMD3<Float>(repeating: 1.4))
+            
+            // Visualise rules as cubes in 3D space
+            for (index, quine) in quines1DCA.enumerated() {
+                var basePosition = SIMD3<Float>(
+                    Float(index - totalRules / 2) * ruleSpacing - 0.073,
+                    0.0,
+                    0.0
+                )
+                for (index, cell) in quine.enumerated() {
+                    if cell == 1 {
+                        var cellPosition = basePosition + SIMD3<Float>(
+                            0.0,
+                            Float(index) * cellSpacing - 0.25,
+                            0.0
+                        )
+                        var cellCube = Cube(center: cellPosition, size: 0.09)
+                        var cellCubeLines = cellCube.wallOutlines()
+                        var cellColor = SIMD4<Float>(0.95, 0.95, 0.95, 1.0)
+                        for i in cellCubeLines.indices {
+                            cellCubeLines[i] = cellCubeLines[i].setBasicEndPointColors(startColor: cellColor, endColor: cellColor)
+                            cellCubeLines[i] = cellCubeLines[i].applyMatrix(scaling)
+                            cellCubeLines[i].lineWidthStart = lineWidthBase * 0.5
+                            cellCubeLines[i].lineWidthEnd = lineWidthBase * 0.5
+                        }
+                        lines.append(contentsOf: cellCubeLines)
+                    }
+                }
+            }
         }
         
         // return lines
@@ -1570,6 +1610,19 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 0.5,
                 0.5,
                 0.5,
+                1.0
+            )
+            offWhite = SIMD4<Float>(
+                0.2,
+                0.2,
+                0.2,
+                1.0
+            )
+        } else if dayNumber == "11" {
+            textColor = SIMD4<Float>(
+                0.3,
+                0.3,
+                0.3,
                 1.0
             )
             offWhite = SIMD4<Float>(
@@ -1797,6 +1850,14 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 transformedLine = transformedLine.applyMatrix(creditTransform)
                 
                 lines.append(transformedLine)
+            }
+        }
+        
+        if dayNumber == "11" {
+            var rotation = matrix_rotation(angle: Float(sin(timeAsFloat * 0.25) * 0.1), axis: SIMD3<Float>(0.0, 1.0, 0.0))
+            
+            for i in lines.indices {
+                lines[i] = lines[i].applyMatrix(rotation)
             }
         }
         
