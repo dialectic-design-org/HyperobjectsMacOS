@@ -1791,7 +1791,10 @@ class Genuary2026Generator: CachedGeometryGenerator {
             
             
             var lightPoint = fluidSpherePath(time: Float(timeAsFloat * 0.5))
+            var lightPoint2 = fluidSpherePath(time: Float(timeAsFloat * 0.45 + 200.0))
             
+//            var lightPointCube = Cube(center: lightPoint, size: 0.01)
+//            lines.append(contentsOf: lightPointCube.wallOutlines())
             
             
 
@@ -1811,17 +1814,41 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 let bSig = Float(sigmoidFunction(input: input, steepness: 25.0, threshold: 0.45))
                 
                 return SIMD4<Float>(
-                    0.0 + 2.0 * rSig,    // R (Extends furthest)
-                    0.0 + 2.0 * gSig,    // G
+                    0.0 + 1.4 * rSig,    // R (Extends furthest)
+                    0.0 + 1.8 * gSig,    // G
                     0.0 + 2.0 * bSig,    // B (Confined to closest highlight)
                     1.0
+                )
+            }
+            
+            func calculateRedHighlight(for point: SIMD3<Float>, lightPos: SIMD3<Float>) -> SIMD4<Float> {
+                let toLight = lightPos - point
+                let distanceToLight = simd_length(toLight)
+                let maxDistance: Float = 2.5
+                
+                let normalizedDist = min(distanceToLight / maxDistance, 1.0)
+                let input = Double(1.0 - normalizedDist)
+                
+                let rSig = Float(sigmoidFunction(input: input, steepness: 30.0, threshold: 0.6))
+                
+                return SIMD4<Float>(
+                    0.0 + 2.5 * rSig,
+                    0.0,
+                    0.0,
+                    0.0
                 )
             }
 
             for i in selfPortraitLines.indices {
                 // Calculate colors individually for start and end points
-                let startColor = calculateLitColor(for: selfPortraitLines[i].startPoint, lightPos: lightPoint)
-                let endColor = calculateLitColor(for: selfPortraitLines[i].endPoint, lightPos: lightPoint)
+                var startColor = calculateLitColor(for: selfPortraitLines[i].startPoint, lightPos: lightPoint)
+                var endColor = calculateLitColor(for: selfPortraitLines[i].endPoint, lightPos: lightPoint)
+                
+                let startRed = calculateRedHighlight(for: selfPortraitLines[i].startPoint, lightPos: lightPoint2)
+                let endRed = calculateRedHighlight(for: selfPortraitLines[i].endPoint, lightPos: lightPoint2)
+                
+                startColor += startRed
+                endColor += endRed
                 
                 selfPortraitLines[i] = selfPortraitLines[i].setBasicEndPointColors(startColor: startColor, endColor: endColor)
                 
@@ -2069,6 +2096,64 @@ class Genuary2026Generator: CachedGeometryGenerator {
         
         
         // Main title
+        // Lighting logic for text (shared with Day 13 portrait)
+        var applyTextLighting: ((Line, SIMD4<Float>) -> Line) = { line, color in
+            var mutableLine = line
+            return mutableLine.setBasicEndPointColors(startColor: color, endColor: color)
+        }
+        
+        if dayNumber == "13" {
+            func fluidSpherePath(time t: Float) -> SIMD3<Float> {
+                let x = sin(0.73 * t) + 0.37 * sin(2.19 * t + 0.5)
+                let y = cos(1.11 * t) + 0.29 * cos(2.93 * t + 1.3)
+                let z = 0.85 * sin(0.53 * t + 1.0) + 0.52 * sin(1.87 * t + 2.2)
+                return simd_normalize(SIMD3<Float>(x, y, z))
+            }
+            
+            let lightPoint = fluidSpherePath(time: Float(timeAsFloat * 0.5))
+            let lightPoint2 = fluidSpherePath(time: Float(timeAsFloat * 0.5 + 200.0))
+            
+            func calculateLitColor(for point: SIMD3<Float>, lightPos: SIMD3<Float>) -> SIMD4<Float> {
+                let toLight = lightPos - point
+                let distanceToLight = simd_length(toLight)
+                let maxDistance: Float = 2.5
+                let normalizedDist = min(distanceToLight / maxDistance, 1.0)
+                let input = Double(1.0 - normalizedDist)
+                
+                let rSig = Float(sigmoidFunction(input: input, steepness: 15.0, threshold: 0.65))
+                let gSig = Float(sigmoidFunction(input: input, steepness: 25.0, threshold: 0.55))
+                let bSig = Float(sigmoidFunction(input: input, steepness: 25.0, threshold: 0.45))
+                
+                return SIMD4<Float>(0.0 + 2.0 * rSig, 0.0 + 2.0 * gSig, 0.0 + 2.0 * bSig, 1.0)
+            }
+            
+            func calculateRedHighlight(for point: SIMD3<Float>, lightPos: SIMD3<Float>) -> SIMD4<Float> {
+                let toLight = lightPos - point
+                let distanceToLight = simd_length(toLight)
+                let maxDistance: Float = 2.5
+                let normalizedDist = min(distanceToLight / maxDistance, 1.0)
+                let input = Double(1.0 - normalizedDist)
+                let rSig = Float(sigmoidFunction(input: input, steepness: 30.0, threshold: 0.6))
+                
+                return SIMD4<Float>(0.0 + 2.5 * rSig, 0.0, 0.0, 0.0)
+            }
+            
+            applyTextLighting = { line, defaultColor in
+                 var startColor = calculateLitColor(for: line.startPoint, lightPos: lightPoint)
+                 var endColor = calculateLitColor(for: line.endPoint, lightPos: lightPoint)
+                 let startRed = calculateRedHighlight(for: line.startPoint, lightPos: lightPoint2)
+                 let endRed = calculateRedHighlight(for: line.endPoint, lightPos: lightPoint2)
+                 
+                 startColor += startRed
+                 endColor += endRed
+                 startColor.w = 1.0
+                 endColor.w = 1.0
+                 
+                 var mutableLine = line
+                 return mutableLine.setBasicEndPointColors(startColor: startColor, endColor: endColor)
+            }
+        }
+
         let mainTitleLines = textToBezierPaths(currentTextMainTitle, font: .custom(mainFont, size: 48), fontName: mainFont, size: mainFontSize * 0.5, maxLineWidth: 10.0)
         
         let mainTitleTransform = matrix_translation(translation: SIMD3<Float>(
@@ -2088,8 +2173,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     lineWidthEnd: lineWidthBase
                 )
                 
-                transformedLine = transformedLine.setBasicEndPointColors(startColor: textColor, endColor: textColor)
                 transformedLine = transformedLine.applyMatrix(mainTitleTransform)
+                transformedLine = applyTextLighting(transformedLine, textColor)
                 
                 lines.append(transformedLine)
             }
@@ -2117,8 +2202,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     lineWidthEnd: lineWidthBase
                 )
                 
-                transformedLine = transformedLine.setBasicEndPointColors(startColor: offWhite, endColor: offWhite)
                 transformedLine = transformedLine.applyMatrix(yearTransform)
+                transformedLine = applyTextLighting(transformedLine, offWhite)
                 
                 lines.append(transformedLine)
             }
@@ -2145,8 +2230,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     lineWidthEnd: lineWidthBase
                 )
                 
-                transformedLine = transformedLine.setBasicEndPointColors(startColor: textColor, endColor: textColor)
                 transformedLine = transformedLine.applyMatrix(dayTransform)
+                transformedLine = applyTextLighting(transformedLine, textColor)
                 
                 lines.append(transformedLine)
             }
@@ -2174,8 +2259,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     lineWidthEnd: lineWidthBase * 0.5
                 )
                 
-                transformedLine = transformedLine.setBasicEndPointColors(startColor: textColor, endColor: textColor)
                 transformedLine = transformedLine.applyMatrix(promptTransform)
+                transformedLine = applyTextLighting(transformedLine, textColor)
                 
                 lines.append(transformedLine)
             }
