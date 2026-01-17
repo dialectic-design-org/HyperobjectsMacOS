@@ -312,6 +312,48 @@ struct Line: Geometry {
         }
         return segments
     }
+
+    func closestTFromPoint(_ point: SIMD3<Float>, samples: Int = 100) -> Float {
+        // Fast path for straight lines (Degree 1)
+        if degree == 1 {
+            let lineVec = endPoint - startPoint
+            let lenSq = simd_length_squared(lineVec)
+            
+            // Check for zero-length line to avoid division by zero
+            if lenSq < Float.ulpOfOne { return 0.0 }
+            
+            let pointVec = point - startPoint
+            
+            // Project point onto line (dot product) and normalize
+            let t = simd_dot(pointVec, lineVec) / lenSq
+            
+            // Clamp t to segment [0, 1]
+            return max(0.0, min(1.0, t))
+        }
+
+        var closestT: Float = 0.0
+        var closestDistanceSquared: Float = Float.greatestFiniteMagnitude
+        
+        for i in 0...samples {
+            let t = Float(i) / Float(samples)
+            let curvePoint = interpolate(t: t)
+            let diff = curvePoint - point
+            let distanceSquared = simd_length_squared(diff)
+            
+            if distanceSquared < closestDistanceSquared {
+                closestDistanceSquared = distanceSquared
+                closestT = t
+            }
+        }
+        
+        return closestT
+    }
+
+    func colorAtT(_ t: Float) -> SIMD4<Float> {
+        let cStart = colorStart
+        let cEnd = colorEnd
+        return mix(cStart, cEnd, t: t)
+    }
 }
 
 extension Line: Equatable {
