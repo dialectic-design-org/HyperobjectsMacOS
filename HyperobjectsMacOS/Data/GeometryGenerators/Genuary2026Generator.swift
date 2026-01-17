@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 13"
+private var currentTextDay = "Day 16"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Self-portrait."
+private var currentTextPrompt = "Order and disorder."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -235,8 +235,21 @@ private func randomCharacter(excluding excluded: Character, sampleSet: String = 
 
 var automaton = CellularAutomata3D.cube(size: 8, preset: .dense)
 
+var genuary2026r_cube = RubiksCube()
 
+let bouncyOuterCubeSize: Float = 2.0
+let bouncyInnerCubeSize: Float = 0.65
+let bouncyCubeRenderScale: Float = 0.8
 
+let bouncyCubeSimulator = CubePhysicsSimulator(
+    outerCubeCenter: SIMD3<Float>(0, 0, 0),
+    outerCubeRotation: SIMD3<Float>(0, 0, 0),
+    outerCubeSize: SIMD3<Float>(repeating: bouncyOuterCubeSize),
+    innerCubeCenter: SIMD3<Float>(0, 0.5, 0),
+    innerCubeRotation: SIMD3<Float>(0.1, 0.2, 0.3),
+    innerCubeSize: SIMD3<Float>(repeating: bouncyInnerCubeSize),
+    innerCubeMass: 1.0
+)
 
 class Genuary2026Generator: CachedGeometryGenerator {
     init() {
@@ -251,6 +264,12 @@ class Genuary2026Generator: CachedGeometryGenerator {
         // Seed the center
         // automaton.populateCenteredSeed(radius: 3, density: 0.5)
         automaton.wrapsAtEdges = true
+        
+        genuary2026r_cube.scramble(moveCount: 50)
+        
+        bouncyCubeSimulator.restitution = 0.95
+        bouncyCubeSimulator.friction = 0.3
+        bouncyCubeSimulator.gravity = SIMD3<Float>(0, -5.81, 0)
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase) -> [any Geometry] {
@@ -1878,6 +1897,231 @@ class Genuary2026Generator: CachedGeometryGenerator {
             lines.append(contentsOf: selfPortraitLines)
             
             
+        } else if dayNumber == "14" {
+            // Everything fits perfectly
+            
+            replacementProbability = 0.01
+            
+            genuary2026r_cube.easingSteepness = 12
+            genuary2026r_cube.holdRatio = 0.15
+            
+            genuary2026r_cube.updateAnimation(time: max(Float((timeAsFloat * 0.06).truncatingRemainder(dividingBy: 2.0)) - 0.4, 0.0) )
+
+            let faceInsetFactor: Float = 0.94
+            
+            // "Weird red pink and yellow" palette
+            // Easily swappable color scheme
+            let cubePalette: [CubeColor: SIMD4<Float>] = [
+                .white:  SIMD4<Float>(0.95, 0.90, 0.95, 1.0), // Pale Pinkish White
+                .yellow: SIMD4<Float>(0.95, 1.00, 0.00, 1.0), // Acid Yellow
+                .red:    SIMD4<Float>(1.00, 0.20, 0.35, 1.0), // Hot Pink/Red
+                .orange: SIMD4<Float>(1.00, 0.40, 0.10, 1.0), // Vibrant Orange
+                .blue:   SIMD4<Float>(0.20, 0.05, 0.60, 1.0), // Deep Purple (Contrast to Yellow)
+                .green:  SIMD4<Float>(0.75, 0.95, 0.20, 1.0), // Toxic Green
+                .none:   SIMD4<Float>(1.00, 0.50, 0.95, 1.0)  //
+            ]
+            
+            var allCubeLines: [Line] = []
+            
+            for cubelet in genuary2026r_cube.cubelets {
+                let matrix = cubelet.transformMatrix(cubeSize: 3.0)
+                 // Use matrix for rendering...
+                 
+                 // Get colors for each face
+                 for face in CubeFace.allCases {
+                     let color = cubelet.colorOnWorldFace(face)
+                     
+                     // Create visual separation by insetting the face outlines
+                     let spread: Float = 0.5 * faceInsetFactor
+                     
+                     var p1: SIMD3<Float> = .zero
+                     var p2: SIMD3<Float> = .zero
+                     var p3: SIMD3<Float> = .zero
+                     var p4: SIMD3<Float> = .zero
+                     
+                     switch face {
+                     case .front: // +Z
+                         p1 = SIMD3<Float>(-spread, -spread, 0.5)
+                         p2 = SIMD3<Float>( spread, -spread, 0.5)
+                         p3 = SIMD3<Float>( spread,  spread, 0.5)
+                         p4 = SIMD3<Float>(-spread,  spread, 0.5)
+                     case .back: // -Z
+                         p1 = SIMD3<Float>( spread, -spread, -0.5)
+                         p2 = SIMD3<Float>(-spread, -spread, -0.5)
+                         p3 = SIMD3<Float>(-spread,  spread, -0.5)
+                         p4 = SIMD3<Float>( spread,  spread, -0.5)
+                     case .right: // +X
+                         p1 = SIMD3<Float>(0.5, -spread,  spread)
+                         p2 = SIMD3<Float>(0.5, -spread, -spread)
+                         p3 = SIMD3<Float>(0.5,  spread, -spread)
+                         p4 = SIMD3<Float>(0.5,  spread,  spread)
+                     case .left: // -X
+                         p1 = SIMD3<Float>(-0.5, -spread, -spread)
+                         p2 = SIMD3<Float>(-0.5, -spread,  spread)
+                         p3 = SIMD3<Float>(-0.5,  spread,  spread)
+                         p4 = SIMD3<Float>(-0.5,  spread, -spread)
+                     case .up: // +Y
+                         p1 = SIMD3<Float>(-spread, 0.5,  spread)
+                         p2 = SIMD3<Float>( spread, 0.5,  spread)
+                         p3 = SIMD3<Float>( spread, 0.5, -spread)
+                         p4 = SIMD3<Float>(-spread, 0.5, -spread)
+                     case .down: // -Y
+                         p1 = SIMD3<Float>(-spread, -0.5, -spread)
+                         p2 = SIMD3<Float>( spread, -0.5, -spread)
+                         p3 = SIMD3<Float>( spread, -0.5,  spread)
+                         p4 = SIMD3<Float>(-spread, -0.5,  spread)
+                     }
+                     
+                     var faceLines: [Line] = [
+                         Line(startPoint: p1, endPoint: p2),
+                         Line(startPoint: p2, endPoint: p3),
+                         Line(startPoint: p3, endPoint: p4),
+                         Line(startPoint: p4, endPoint: p1)
+                     ]
+                     
+                     let faceColorAsFloats = cubePalette[color] ?? SIMD4<Float>(1.0, 0.0, 1.0, 1.0)
+                     
+                     for i in faceLines.indices {
+                         faceLines[i] = faceLines[i].setBasicEndPointColors(startColor: faceColorAsFloats, endColor: faceColorAsFloats)
+                         faceLines[i].lineWidthStart = lineWidthBase * 4
+                         faceLines[i].lineWidthEnd = lineWidthBase * 4
+                         faceLines[i] = faceLines[i].applyMatrix(matrix)
+                     }
+                     
+                     allCubeLines.append(contentsOf: faceLines)
+                 }
+            }
+            
+            
+            var totalCubeScaling = matrix_scale(scale: SIMD3<Float>(repeating: 0.3))
+            
+            
+            var totalCubeXRotation = matrix_rotation(angle: Float(timeAsFloat * 0.111), axis: SIMD3<Float>(1.0, 0.0, 0.0))
+            var totalCubeYRotation = matrix_rotation(angle: Float(timeAsFloat * 0.0518), axis: SIMD3<Float>(0.0, 1.0, 0.0))
+            var totalCubeZRotation = matrix_rotation(angle: Float(timeAsFloat * 0.07), axis: SIMD3<Float>(0.0, 0.0, 1.0))
+            
+            var totalTransformation = totalCubeScaling * totalCubeZRotation * totalCubeYRotation * totalCubeXRotation
+            
+            
+            for i in allCubeLines.indices { allCubeLines[i] = allCubeLines[i].applyMatrix(totalTransformation)}
+            
+            lines.append(contentsOf: allCubeLines)
+            
+            
+        } else if dayNumber == "15" {
+            /// Shadows
+            
+            
+            replacementProbability = 0.0
+            
+            let innerCubeRotation = SIMD3<Float>(
+                Float(timeAsFloat * 0.05),
+                Float(timeAsFloat * 0.15),
+                Float(timeAsFloat * 0.06)
+            )
+            
+            var outerCubeRotation = SIMD3<Float>(
+                Float(timeAsFloat * 0.125),
+                Float(timeAsFloat * 0.135),
+                Float(timeAsFloat * 0.055)
+            )
+            outerCubeRotation = SIMD3<Float>(repeating: 0.0)
+            
+            let innerCubeSize:Float = 0.6
+            let outerCubeSize:Float = 1.2
+            
+            let projectedLinesPoints = projectedCubeLines(
+                innerRotation: innerCubeRotation,
+                outerRotation: outerCubeRotation,
+                innerSize: innerCubeSize,
+                outerSize: outerCubeSize)
+            
+            var totalProjectedLines: [Line] = []
+            for outputLine in projectedLinesPoints {
+                totalProjectedLines.append(Line(
+                    startPoint: outputLine.0,
+                    endPoint: outputLine.1
+                ))
+            }
+            
+            var rotationX = matrix_rotation(angle: Float(timeAsFloat * 0.025), axis: SIMD3<Float>(1.0, 0.0, 0.0))
+            var rotationY = matrix_rotation(angle: Float(timeAsFloat * 0.015), axis: SIMD3<Float>(0.0, 1.0, 0.0))
+            var rotationZ = matrix_rotation(angle: Float(timeAsFloat * 0.02), axis: SIMD3<Float>(0.0, 0.0, 1.0))
+            var totalRotation = rotationZ * rotationY * rotationX
+            
+            for i in totalProjectedLines.indices {
+                totalProjectedLines[i] = totalProjectedLines[i].applyMatrix(totalRotation)
+                totalProjectedLines[i].lineWidthStart = lineWidthBase
+                totalProjectedLines[i].lineWidthEnd = lineWidthBase
+            }
+            
+            lines.append(contentsOf: totalProjectedLines)
+            
+        } else if dayNumber == "16" {
+            /// Order and disorder
+            replacementProbability = 0.0
+            
+            let deltaTime: Float = 1.0 / 100.0
+            bouncyCubeSimulator.setOuterCubeRotation(SIMD3<Float>(
+                    sin(Float(timeAsFloat) * 0.05) * 4.0,
+                 Float(timeAsFloat) * 0.4,
+                 cos(Float(timeAsFloat) * 0.2) * 6.2
+             ), deltaTime: deltaTime)
+             
+             // Advance physics
+            bouncyCubeSimulator.tick(deltaTime: deltaTime)
+             
+             // Get state for rendering
+             let innerState = bouncyCubeSimulator.getInnerCubeState()
+             let outerOrientation = bouncyCubeSimulator.getOuterCubeOrientation()
+             let innerOrientation = bouncyCubeSimulator.getInnerCubeOrientation()
+            
+            var outerCubeLines = Cube(center: .zero, size: bouncyOuterCubeSize).wallOutlines()
+            var innerCubeLines = Cube(center: .zero, size: bouncyInnerCubeSize).wallOutlines()
+            
+            var totalScaling = matrix_scale(scale: SIMD3<Float>(repeating: bouncyCubeRenderScale))
+            let innerTranslation = matrix_translation(translation: innerState.center)
+            
+            // Calculate neon color based on physics
+            let linearSpeed = simd_length(innerState.velocity)
+            let angularSpeed = simd_length(innerState.angularVelocity)
+            
+            // Factors to tune sensitivity
+            let linearFactor = min(1.0, linearSpeed * 0.08)
+            let angularFactor = min(1.0, angularSpeed * 0.15)
+            
+            // Base dark, add Green (Angular) and Blue (Linear)
+            // Green: (0.1, 1.0, 0.1) | Blue: (0.1, 0.4, 1.0)
+            let r: Float = 0.1
+            let g: Float = 0.1 + angularFactor * 0.9
+            let b: Float = 0.1 + linearFactor * 0.9
+            
+            let innerColor = SIMD4<Float>(r, g, b, 1.0)
+            
+            
+            let outerCubeLinesColor: SIMD4<Float> = SIMD4<Float>(0.2, 0.2, 0.2, 1.0)
+            
+            for i in outerCubeLines.indices {
+                outerCubeLines[i] = outerCubeLines[i].applyMatrix(matrix_float4x4(outerOrientation))
+                outerCubeLines[i] = outerCubeLines[i].applyMatrix(totalScaling)
+                outerCubeLines[i].lineWidthStart = lineWidthBase
+                outerCubeLines[i].lineWidthEnd = lineWidthBase
+                outerCubeLines[i] = outerCubeLines[i].setBasicEndPointColors(startColor: outerCubeLinesColor, endColor: outerCubeLinesColor)
+            }
+            
+            for i in innerCubeLines.indices {
+                innerCubeLines[i] = innerCubeLines[i].setBasicEndPointColors(startColor: innerColor, endColor: innerColor)
+                innerCubeLines[i] = innerCubeLines[i].applyMatrix(matrix_float4x4(innerOrientation))
+                innerCubeLines[i] = innerCubeLines[i].applyMatrix(innerTranslation)
+                innerCubeLines[i] = innerCubeLines[i].applyMatrix(totalScaling)
+                innerCubeLines[i].lineWidthStart = lineWidthBase + lineWidthBase * linearSpeed * 0.5
+                innerCubeLines[i].lineWidthEnd = lineWidthBase + lineWidthBase * linearSpeed * 0.5
+            }
+            
+            lines.append(contentsOf: outerCubeLines)
+            lines.append(contentsOf: innerCubeLines)
+                                            
+            
         }
         
         // return lines
@@ -2012,6 +2256,44 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 0.05,
                 0.0,
                 0.35,
+                1.0
+            )
+        } else if dayNumber == "15" {
+            textColor = SIMD4<Float>(
+                0.3,
+                0.0,
+                0.1,
+                1.0
+            )
+            offWhite = SIMD4<Float>(
+                0.2,
+                0.0,
+                0.1,
+                1.0
+            )
+        } else if dayNumber == "16" {
+            
+            let innerState = bouncyCubeSimulator.getInnerCubeState()
+            
+            // Calculate neon color based on physics
+            let linearSpeed = simd_length(innerState.velocity)
+            let angularSpeed = simd_length(innerState.angularVelocity)
+            
+            // Factors to tune sensitivity
+            let linearFactor = min(1.0, linearSpeed * 0.08)
+            let angularFactor = min(1.0, angularSpeed * 0.15)
+            
+            
+            textColor = SIMD4<Float>(
+                0.0 + linearFactor * 0.9,
+                0.0 + linearFactor * 0.9,
+                0.0 + linearFactor * 0.9,
+                1.0
+            )
+            offWhite = SIMD4<Float>(
+                0.2 * angularFactor,
+                0.2 * angularFactor,
+                0.2 * angularFactor,
                 1.0
             )
         }
@@ -2307,6 +2589,3 @@ class Genuary2026Generator: CachedGeometryGenerator {
         return lines
     }
 }
-
-
-
