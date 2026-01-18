@@ -28,14 +28,14 @@ func generateGeometrySceneGenuary2026() -> GeometriesSceneBase {
     var scene = GeometriesSceneBase(
         name: "Genuary 2026",
         inputs: [
-            SceneInput(name: "Day", type: .string, inputGroupName: "Day configs", value: "17", presetValues: [
+            SceneInput(name: "Day", type: .string, inputGroupName: "Day configs", value: "18", presetValues: [
                 "1":"1", "2":"2", "3":"3", "4":"4", "5":"5", "6":"6", "7":"7", "8":"8", "9":"9", "10":"10",
                 "11":"11", "12":"12", "13":"13", "14":"14", "15":"15", "16":"16", "17":"17", "18":"18", "19":"19", "20":"20",
                 "21":"21", "22":"22", "23":"23", "24":"24", "25":"25", "26":"26", "27":"27", "28":"28", "29":"29", "30":"30", "31":"31"
             ]),
             SceneInput(name: "Main title", type: .string, inputGroupName: "Texts", value: "Genuary"),
             SceneInput(name: "Year", type: .string, inputGroupName: "Texts", value: "2026"),
-            SceneInput(name: "Prompt", type: .string, inputGroupName: "Texts", value: "Wallpaper."),
+            SceneInput(name: "Prompt", type: .string, inputGroupName: "Texts", value: "Rule line."),
             SceneInput(name: "Credit", type: .string, inputGroupName: "Texts", value: "socratism.io"),
             
             
@@ -81,7 +81,7 @@ func generateGeometrySceneGenuary2026() -> GeometriesSceneBase {
     )
     
     scene.sceneHasBackgroundColor = true
-    scene.backgroundColor = SIMD3<Float>(0.26, 0.25, 0.25)
+    scene.backgroundColor = SIMD3<Float>(0.95, 0.98, 0.99)
     
     return scene
 }
