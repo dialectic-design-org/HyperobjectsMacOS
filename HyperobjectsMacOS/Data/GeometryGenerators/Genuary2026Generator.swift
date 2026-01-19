@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 18"
+private var currentTextDay = "Day 19"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Rule line."
+private var currentTextPrompt = "16x16."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -278,7 +278,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
         "15": Day15_Shadows(),
         "16": Day16_BouncyCube(),
         "17": Day17_Wallpaper(),
-        "18": Day18_RuleLine()
+        "18": Day18_RuleLine(),
+        "19": Day19_16x16()
     ]
     
     init() {
