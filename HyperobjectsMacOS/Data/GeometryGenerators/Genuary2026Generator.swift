@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 19"
+private var currentTextDay = "Day 20"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "16x16."
+private var currentTextPrompt = "A Single Line Only."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -279,7 +279,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
         "16": Day16_BouncyCube(),
         "17": Day17_Wallpaper(),
         "18": Day18_RuleLine(),
-        "19": Day19_16x16()
+        "19": Day19_16x16(),
+        "20": Day20_OneLine()
     ]
     
     init() {
@@ -2022,7 +2023,13 @@ class Genuary2026Generator: CachedGeometryGenerator {
         }
         
         if dayNumber == "11" {
-            var rotation = matrix_rotation(angle: Float(sin(timeAsFloat * 0.25) * 0.1), axis: SIMD3<Float>(0.0, 1.0, 0.0))
+            let rotation = matrix_rotation(angle: Float(sin(timeAsFloat * 0.25) * 0.1), axis: SIMD3<Float>(0.0, 1.0, 0.0))
+            
+            for i in lines.indices {
+                lines[i] = lines[i].applyMatrix(rotation)
+            }
+        } else if dayNumber == "20" {
+            let rotation = matrix_rotation(angle: Float(timeAsFloat * 0.1), axis: SIMD3<Float>(0.0, 1.0, 0.0))
             
             for i in lines.indices {
                 lines[i] = lines[i].applyMatrix(rotation)
