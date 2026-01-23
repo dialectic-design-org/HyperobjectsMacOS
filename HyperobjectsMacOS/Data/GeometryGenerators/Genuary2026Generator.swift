@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 21"
+private var currentTextDay = "Day 22"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Bauhaus."
+private var currentTextPrompt = "Pen plotter ready."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -57,7 +57,7 @@ private var cityLayout = Metropolis(name: "New City",
                 gridColumns: cityLayoutParams["gridColumns"] as! Int,
                 blockSize: cityLayoutParams["blockSize"] as! SIMD2<Double>)
 
-private func simd3ArrayToLinesWithOffset(_ points: [SIMD3<Float>], start: Float, end: Float) -> [Line] {
+func simd3ArrayToLinesWithOffset(_ points: [SIMD3<Float>], start: Float, end: Float) -> [Line] {
     guard points.count > 1 else { return [] }
     
     // Calculate total length of the polyline
@@ -281,7 +281,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
         "18": Day18_RuleLine(),
         "19": Day19_16x16(),
         "20": Day20_OneLine(),
-        "21": Day21_Bauhaus()
+        "21": Day21_Bauhaus(),
+        "22": Day22_PenPlotter()
     ]
     
     init() {
