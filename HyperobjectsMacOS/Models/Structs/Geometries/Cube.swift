@@ -188,4 +188,98 @@ struct Cube {
     func symmetricDifference(with other: Cube) -> BooleanResult {
         applyBoolean(other: other, operation: .symmetricDifference)
     }
+
+    func traceRay(origin: SIMD3<Float>, direction: SIMD3<Float>, diffraction: Float = 0.0, postCubeLength: Float) -> [Line] {
+        // Output lines from origin to first intersection point, then within the cube, and then exiting up to postCubeLength.
+        var outputLines: [Line] = []
+        // Ray-box intersection algorithm (slab method)
+        let halfSize = size / 2
+        let rotationMatrixX = matrix_rotation(angle: orientation.x, axis: SIMD3<Float>(1, 0, 0))
+        let rotationMatrixY = matrix_rotation(angle: orientation.y, axis: SIMD3<Float>(0, 1, 0))
+        let rotationMatrixZ = matrix_rotation(angle: orientation.z, axis: SIMD3<Float>(0, 0, 1))
+        let rotationMatrix = rotationMatrixZ * rotationMatrixY * rotationMatrixX
+        let inverseRotation = rotationMatrix.inverse
+        let translatedOrigin = origin - center
+        let localOrigin4 = inverseRotation * SIMD4<Float>(translatedOrigin, 1)
+        let localOrigin = SIMD3<Float>(localOrigin4.x, localOrigin4.y, localOrigin4.z)
+        let localDirection4 = inverseRotation * SIMD4<Float>(direction, 0)
+        let localDirection = normalize(SIMD3<Float>(localDirection4.x, localDirection4.y, localDirection4.z))
+        
+        let boxMin = -halfSize * axisScale
+        let boxMax = halfSize * axisScale
+        
+        let invDir = 1.0 / localDirection
+        let t1 = (boxMin - localOrigin) * invDir
+        let t2 = (boxMax - localOrigin) * invDir
+        
+        let tMin = min(t1, t2)
+        let tMax = max(t1, t2)
+        
+        let tNear = max(max(tMin.x, tMin.y), tMin.z)
+        let tFar = min(min(tMax.x, tMax.y), tMax.z)
+        
+        if tNear > tFar || tFar < 0 {
+            outputLines.append(Line(startPoint: origin, endPoint: origin + direction * (100.0 + postCubeLength)))
+            return outputLines
+        }
+        
+        var entryT = tNear
+        var exitT = tFar
+        var inside = false
+        
+        if entryT < 0 {
+            entryT = 0
+            inside = true
+        } else {
+            let pEntry = origin + direction * entryT
+            outputLines.append(Line(startPoint: origin, endPoint: pEntry))
+        }
+        
+        let localEntry = localOrigin + localDirection * entryT
+        var effectiveLocalDir = localDirection
+        var internalDistance = exitT - entryT
+        
+        if abs(diffraction) > 0.001 && !inside {
+            var normal = SIMD3<Float>(0,0,0)
+            let epsilon: Float = 1e-4
+            if abs(localEntry.x - boxMin.x) < epsilon { normal = SIMD3<Float>(-1,0,0) }
+            else if abs(localEntry.x - boxMax.x) < epsilon { normal = SIMD3<Float>(1,0,0) }
+            else if abs(localEntry.y - boxMin.y) < epsilon { normal = SIMD3<Float>(0,-1,0) }
+            else if abs(localEntry.y - boxMax.y) < epsilon { normal = SIMD3<Float>(0,1,0) }
+            else if abs(localEntry.z - boxMin.z) < epsilon { normal = SIMD3<Float>(0,0,-1) }
+            else if abs(localEntry.z - boxMax.z) < epsilon { normal = SIMD3<Float>(0,0,1) }
+            
+            let eta = 1.0 / (1.0 + diffraction)
+            effectiveLocalDir = simd_refract(localDirection, normal, eta)
+            if length(effectiveLocalDir) < 0.001 { effectiveLocalDir = localDirection }
+            
+            let invDirRef = 1.0 / effectiveLocalDir
+            let t1r = (boxMin - localEntry) * invDirRef
+            let t2r = (boxMax - localEntry) * invDirRef
+            let tMaxR = max(t1r, t2r)
+            // For a ray starting on surface, one intersection is 0, other is positive.
+            // We want the smallest positive (which is the exit).
+            // Actually with slab method for point ON boundary, tMin/tMax can be tricky with parallel rays.
+            // But generally tFarRef (min of maxs) is the exit.
+            let tFarRef = min(min(tMaxR.x, tMaxR.y), tMaxR.z)
+            internalDistance = tFarRef
+        }
+        
+        let finalExitPointLocal: SIMD3<Float>
+        if abs(diffraction) > 0.001 && !inside {
+            finalExitPointLocal = localEntry + effectiveLocalDir * internalDistance
+        } else {
+            finalExitPointLocal = localOrigin + localDirection * exitT // Use original exitT relative to localOrigin
+        }
+        
+        let pEntryWorld = origin + direction * entryT
+        // Transform local exit point back to world
+        let pExit4 = rotationMatrix * SIMD4<Float>(finalExitPointLocal, 1)
+        let pExitWorld = SIMD3<Float>(pExit4.x, pExit4.y, pExit4.z) + center
+        
+        outputLines.append(Line(startPoint: pEntryWorld, endPoint: pExitWorld))
+        outputLines.append(Line(startPoint: pExitWorld, endPoint: pExitWorld + direction * postCubeLength))
+        
+        return outputLines
+    }
 }

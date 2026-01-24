@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 22"
+private var currentTextDay = "Day 24"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Pen plotter ready."
+private var currentTextPrompt = "Perfectionist nightmare."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -282,7 +282,9 @@ class Genuary2026Generator: CachedGeometryGenerator {
         "19": Day19_16x16(),
         "20": Day20_OneLine(),
         "21": Day21_Bauhaus(),
-        "22": Day22_PenPlotter()
+        "22": Day22_PenPlotter(),
+        "23": Day23_Transparency(),
+        "24": Day24_Perfectionist()
     ]
     
     init() {
@@ -1744,6 +1746,32 @@ class Genuary2026Generator: CachedGeometryGenerator {
         else if dayNumber == "18" {
             offWhite = SIMD4<Float>(1.0, 1.0, 1.0, 1.0)
             textColor = SIMD4<Float>(0.99, 0.99, 0.99, 1.0)
+       } else if dayNumber == "23" {
+           textColor = SIMD4<Float>(
+               0.1,
+               0.1,
+               0.1,
+               1.0
+           )
+           offWhite = SIMD4<Float>(
+               0.15,
+               0.15,
+               0.15,
+               1.0
+           )
+       } else if dayNumber == "24" {
+           textColor = SIMD4<Float>(
+               0.7,
+               0.7,
+               0.7,
+               1.0
+           )
+           offWhite = SIMD4<Float>(
+               0.8,
+               0.8,
+               0.8,
+               1.0
+           )
        }
         
         
