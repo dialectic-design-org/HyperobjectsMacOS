@@ -88,6 +88,138 @@ struct Cube {
             Line(startPoint: v[3], endPoint: v[7])
         ]
     }
+
+    func wallDiagonals() -> [Line] {
+        let v = vertices()
+        return [
+            // Bottom face diagonals
+            Line(startPoint: v[0], endPoint: v[2]),
+            Line(startPoint: v[1], endPoint: v[3]),
+            // Top face diagonals
+            Line(startPoint: v[4], endPoint: v[6]),
+            Line(startPoint: v[5], endPoint: v[7]),
+            // Side face diagonals
+            // Y-axis faces
+            Line(startPoint: v[0], endPoint: v[5]),
+            Line(startPoint: v[1], endPoint: v[4]),
+            Line(startPoint: v[3], endPoint: v[6]),
+            Line(startPoint: v[2], endPoint: v[7]),
+            // X-axis faces
+            Line(startPoint: v[0], endPoint: v[7]),
+            Line(startPoint: v[3], endPoint: v[4]),
+            Line(startPoint: v[1], endPoint: v[6]),
+            Line(startPoint: v[2], endPoint: v[5])
+        ]
+    }
+
+    func internalDiagonals() -> [Line] {
+        let v = vertices()
+        return [
+            Line(startPoint: v[0], endPoint: v[6]),
+            Line(startPoint: v[1], endPoint: v[7]),
+            Line(startPoint: v[2], endPoint: v[4]),
+            Line(startPoint: v[3], endPoint: v[5])
+        ]
+    }
+
+    func subdivide(division: Float, on: SIMD3<Int>) -> [Cube] {
+        // 'division' is treated here as a ratio (0...1) determining the split point relative to size.
+        // 'on' acts as flags: 1 means split along that axis, 0 means don't split.
+        
+        // This effectively creates sub-regions based on the split planes.
+        // If on = (1,1,1), we get 8 cubes. If on = (1,0,0), we get 2 cubes along X.
+        
+        var subCubes: [Cube] = []
+        
+        let splitX = on.x > 0
+        let splitY = on.y > 0
+        let splitZ = on.z > 0
+        
+        // Calculate the sizes of the two potential parts along each axis
+        // We assume 'division' determines the size proportion of the "negative side" sub-cube relative to total size
+        // If division is 0.5, it's an equal split.
+        
+        let sX_neg = splitX ? size * division : size
+        let sX_pos = splitX ? size * (1.0 - division) : 0 // 0 size isn't used if not splitting, effectively
+        
+        let sY_neg = splitY ? size * division : size
+        let sY_pos = splitY ? size * (1.0 - division) : 0
+        
+        let sZ_neg = splitZ ? size * division : size
+        let sZ_pos = splitZ ? size * (1.0 - division) : 0
+        
+        // Loop through the 2x2x2 potential grid blocks
+        // indices i,j,k = 0 (negative side) or 1 (positive side)
+        for i in 0...(splitX ? 1 : 0) {
+            for j in 0...(splitY ? 1 : 0) {
+                for k in 0...(splitZ ? 1 : 0) {
+                    
+                    // Determine dimensions of this sub-block
+                    let curSizeX = (i == 0) ? sX_neg : sX_pos
+                    let curSizeY = (j == 0) ? sY_neg : sY_pos
+                    let curSizeZ = (k == 0) ? sZ_neg : sZ_pos
+                    
+                    // Determine local offset from the parent's center (unrotated)
+                    // The parent extends from -size/2 to +size/2.
+                    // If splitting X at ratio 'div':
+                    //   Part A (neg): center is at -size/2 + (size*div)/2 = -size/2 + size*div/2
+                    //   Part B (pos): center is at -size/2 + size*div + (size*(1-div))/2 = -size/2 + size*div + size/2 - size*div/2 = size*div/2
+                    
+                    var offsetX: Float = 0
+                    if splitX {
+                        if i == 0 { offsetX = -size/2 + curSizeX/2 }
+                        else      { offsetX = -size/2 + sX_neg + curSizeX/2 }
+                    }
+                    
+                    var offsetY: Float = 0
+                    if splitY {
+                        if j == 0 { offsetY = -size/2 + curSizeY/2 }
+                        else      { offsetY = -size/2 + sY_neg + curSizeY/2 }
+                    }
+                    
+                    var offsetZ: Float = 0
+                    if splitZ {
+                        if k == 0 { offsetZ = -size/2 + curSizeZ/2 }
+                        else      { offsetZ = -size/2 + sZ_neg + curSizeZ/2 }
+                    }
+                    
+                    // Apply axis scaling to the offset
+                    let localOffset = SIMD3<Float>(offsetX, offsetY, offsetZ) * axisScale
+                    
+                    // Rotate the offset to match world orientation
+                    let rotationMatrixX = matrix_rotation(angle: orientation.x, axis: SIMD3<Float>(1, 0, 0))
+                    let rotationMatrixY = matrix_rotation(angle: orientation.y, axis: SIMD3<Float>(0, 1, 0))
+                    let rotationMatrixZ = matrix_rotation(angle: orientation.z, axis: SIMD3<Float>(0, 0, 1))
+                    let rotationMatrix = rotationMatrixZ * rotationMatrixY * rotationMatrixX
+                    
+                    let rotatedOffset4 = rotationMatrix * SIMD4<Float>(localOffset, 0) // Vector, w=0
+                    let rotatedOffset = SIMD3<Float>(rotatedOffset4.x, rotatedOffset4.y, rotatedOffset4.z)
+                    
+                    let newCenter = center + rotatedOffset
+                    
+                    // Determine new axis scales relative to the base 'size'.
+                    // Since 'size' is usually uniform for a cube, we adjust axisScale to represent non-uniform blocks
+                    // resulting from unequal divisions.
+                    // New scale factor = (Current Dimension / Original Size) * Original Scale
+                    let newScaleX = (curSizeX / size) * axisScale.x
+                    let newScaleY = (curSizeY / size) * axisScale.y
+                    let newScaleZ = (curSizeZ / size) * axisScale.z
+                    
+                    let newCube = Cube(
+                        center: newCenter,
+                        size: size, // Keep abstract size ref same, adjust scale
+                        orientation: orientation,
+                        axisScale: SIMD3<Float>(newScaleX, newScaleY, newScaleZ)
+                    )
+                    subCubes.append(newCube)
+                }
+            }
+        }
+        
+        return subCubes
+    }
+
+
     func boundingBox() -> (min: SIMD3<Float>, max: SIMD3<Float>) {
         let verts = vertices()
         var minV = verts[0]
