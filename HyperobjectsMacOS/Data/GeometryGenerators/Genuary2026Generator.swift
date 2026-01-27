@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 26"
+private var currentTextDay = "Day 27"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Recursivity."
+private var currentTextPrompt = "Lifeform."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -286,7 +286,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
         "23": Day23_Transparency(),
         "24": Day24_Perfectionist(),
         "25": Day25_Organic(),
-        "26": Day26_Recursivity()
+        "26": Day26_Recursivity(),
+        "27": Day27_Lifeform()
     ]
     
     init() {
@@ -1809,6 +1810,19 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 0.8 + brightness30 * 0.3,
                 0.5 + brightness10 * 0.5,
                 0.0 + brightness50 * 0.01,
+               1.0
+           )
+       } else if dayNumber == "27" {
+           textColor = SIMD4<Float>(
+               0.8,
+               0.8,
+               0.8,
+               1.0
+           )
+           offWhite = SIMD4<Float>(
+               0.9,
+               0.9,
+               0.9,
                1.0
            )
        }
