@@ -7,6 +7,9 @@
 
 struct Day31_Shading: GenuaryDayGenerator {
     let dayNumber = "31"
+    
+
+
 
     func generateLines(
         inputs: [String: Any],

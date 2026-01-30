@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 28"
+private var currentTextDay = "Day 30"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "<div>."
+private var currentTextPrompt = "Bugging out."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -1829,6 +1829,55 @@ class Genuary2026Generator: CachedGeometryGenerator {
                0.9,
                1.0
            )
+       } else if dayNumber == "28" {
+           textColor = SIMD4<Float>(
+               0.9,
+               0.9,
+               0.9,
+               1.0
+           )
+           offWhite = SIMD4<Float>(
+               0.01,
+               0.0,
+               0.45,
+               1.0
+           )
+       } else if dayNumber == "29" {
+           
+           var brightness10 = ensureValueIsFloat(brightnessInput.getHistoryValue(millisecondsAgo: 10))
+           var brightness30 = ensureValueIsFloat(brightnessInput.getHistoryValue(millisecondsAgo: 30))
+           var brightness50 = ensureValueIsFloat(brightnessInput.getHistoryValue(millisecondsAgo: 50))
+           
+           textColor = SIMD4<Float>(
+               0.0 + brightness10 * (0.3 + sin(Float(timeAsFloat) * 0.333) * 0.2),
+               0.0 + brightness30 * 0.0,
+               0.0 + brightness50 * (0.3 + cos(Float(timeAsFloat) * 0.333) * 0.2),
+               1.0
+           )
+           offWhite = SIMD4<Float>(
+                0.0 + brightness10 * (0.3 + cos(Float(timeAsFloat) * 0.233) * 0.2),
+                0.0 + brightness30 * 0.0,
+                0.0 + brightness50 * (0.3 + sin(Float(timeAsFloat) * 0.233) * 0.2),
+               1.0
+           )
+       } else if dayNumber == "30" {
+           
+           var brightness10 = ensureValueIsFloat(brightnessInput.getHistoryValue(millisecondsAgo: 10))
+           var brightness30 = ensureValueIsFloat(brightnessInput.getHistoryValue(millisecondsAgo: 30))
+           var brightness50 = ensureValueIsFloat(brightnessInput.getHistoryValue(millisecondsAgo: 50))
+           
+           textColor = SIMD4<Float>(
+               0.0 + brightness10 * (0.5 + sin(Float(timeAsFloat) * 0.333) * 0.5),
+               0.0 + brightness30 * (0.5 + sin(Float(timeAsFloat * 0.3) * 0.333) * 0.5),
+               0.0 + brightness50 * (0.5 + cos(Float(timeAsFloat) * 0.333) * 0.5),
+               1.0
+           )
+           offWhite = SIMD4<Float>(
+                0.0 + brightness10 * (0.5 + cos(Float(timeAsFloat) * 0.233) * 0.5),
+                0.0 + brightness30 * (0.5 + sin(Float(timeAsFloat * 0.3) * 0.333) * 0.5),
+                0.0 + brightness50 * (0.5 + sin(Float(timeAsFloat) * 0.233) * 0.5),
+               1.0
+           )
        }
         
         
@@ -1984,8 +2033,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     endPoint: line.endPoint,
                     degree: line.degree,
                     controlPoints: line.controlPoints,
-                    lineWidthStart: lineWidthBase,
-                    lineWidthEnd: lineWidthBase
+                    lineWidthStart: lineWidthBase * 0.5,
+                    lineWidthEnd: lineWidthBase * 0.5
                 )
                 
                 transformedLine = transformedLine.applyMatrix(mainTitleTransform)
@@ -2013,8 +2062,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     endPoint: line.endPoint,
                     degree: line.degree,
                     controlPoints: line.controlPoints,
-                    lineWidthStart: lineWidthBase,
-                    lineWidthEnd: lineWidthBase
+                    lineWidthStart: lineWidthBase * 0.5,
+                    lineWidthEnd: lineWidthBase * 0.5
                 )
                 
                 transformedLine = transformedLine.applyMatrix(yearTransform)
@@ -2041,8 +2090,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     endPoint: line.endPoint,
                     degree: line.degree,
                     controlPoints: line.controlPoints,
-                    lineWidthStart: lineWidthBase,
-                    lineWidthEnd: lineWidthBase
+                    lineWidthStart: lineWidthBase * 0.5,
+                    lineWidthEnd: lineWidthBase * 0.5
                 )
                 
                 transformedLine = transformedLine.applyMatrix(dayTransform)
