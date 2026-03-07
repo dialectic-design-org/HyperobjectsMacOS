@@ -17,6 +17,19 @@ struct VertexUniforms {
     var _padding: SIMD3<Float> = SIMD3<Float>(0, 0, 0) // 12 bytes padding
 }
 
+struct ChromaticAberrationParams {
+    var intensity: Float
+    var redOffset: Float
+    var greenOffset: Float
+    var blueOffset: Float
+    var radialPower: Float
+    var useRadialMode: Int32
+    var direction: SIMD2<Float>
+    var useSpectralMode: Int32
+    var dispersionStrength: Float
+    var referenceWavelength: Float
+}
+
 struct SegAlloc {
     var next: uint32
     var capacity: uint32
@@ -25,6 +38,28 @@ struct SegAlloc {
 let maxMicroSegPerQuad  = 16
 let maxMicroSegPerCubic = 24
 
+// MARK: - Render Override Helpers
+
+extension MetalRenderer {
+    /// Resolves a config value: returns override if non-nil, otherwise UI value
+    func resolve<T>(_ override: T?, _ uiValue: T) -> T {
+        override ?? uiValue
+    }
+
+    /// Gets effective overrides by merging geometry-time and render-time
+    func getEffectiveOverrides() -> RenderConfigurationOverrides {
+        guard let scene = currentScene else { return .none }
+
+        var combined = scene.cachedRenderOverrides
+
+        if let renderTimeClosure = scene.renderTimeOverride {
+            let context = scene.makeOverrideContext()
+            combined = combined.merged(with: renderTimeClosure(context))
+        }
+
+        return combined
+    }
+}
 
 func binGrid(viewWidth: Int, viewHeight: Int) -> (cols: Int, rows: Int, bins: Int) {
     let cols = (UInt32(viewWidth) + BIN_SIZE - 1) / BIN_SIZE
@@ -354,7 +389,10 @@ class MetalRenderer {
               let scene = currentScene else { return }
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
-        
+
+        // Get effective overrides (merged geometry-time + render-time)
+        let overrides = getEffectiveOverrides()
+
         // DYNAMIC BUFFER SIZING: Ensure we have enough space
         let totalLineCount = scene.cachedGeometries.count
         updateBufferCapacity(required: totalLineCount)
@@ -586,11 +624,16 @@ class MetalRenderer {
             randomValuesPtr[i] = SIMD4<Float>(r(), r(), r(), r())
         }
         
-        var backgroundColorVector = colorToVector(backgroundColor.color)
-        if scene.sceneHasBackgroundColor {
-            backgroundColorVector = scene.backgroundColor
-        }
-        
+        var backgroundColorVector: SIMD3<Float> = {
+            if let override = overrides.backgroundColor {
+                return override
+            }
+            if scene.sceneHasBackgroundColor {
+                return scene.backgroundColor
+            }
+            return colorToVector(backgroundColor.color)
+        }()
+
         var uniforms: Uniforms = Uniforms(
             viewWidth: Int32(viewW),
             viewHeight: Int32(viewH),
@@ -599,13 +642,13 @@ class MetalRenderer {
             debugBins: renderConfigs?.binGridVisibility ?? 0.0,
             binVisibility: renderConfigs?.binVisibility ?? 0.0,
             boundingBoxVisibility: renderConfigs?.boundingBoxVisibility ?? 0.0,
-            lineColorStrength: renderConfigs?.lineColorStrength ?? 1.0,
+            lineColorStrength: resolve(overrides.lineColorStrength, renderConfigs?.lineColorStrength ?? 1.0),
             lineDebugGradientStrength: renderConfigs?.lineTimeDebugGradientStrength ?? 0.0,
             lineDebugGradientStartColor: colorToVector(lineDebugGradientStart.color),
             lineDebugGradientEndColor: colorToVector(lineDebugGradientEnd.color),
-            blendRadius: renderConfigs?.blendRadius ?? 0.0,
-            blendIntensity: renderConfigs?.blendIntensity ?? 0.0,
-            previousColorVisibility: renderConfigs?.previousColorVisibility ?? 0.0
+            blendRadius: resolve(overrides.blendRadius, renderConfigs?.blendRadius ?? 0.0),
+            blendIntensity: resolve(overrides.blendIntensity, renderConfigs?.blendIntensity ?? 0.0),
+            previousColorVisibility: resolve(overrides.previousColorVisibility, renderConfigs?.previousColorVisibility ?? 0.0)
         )
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
@@ -733,7 +776,32 @@ class MetalRenderer {
         
         computeToRenderRenderEncoder.setRenderPipelineState(computeToRenderPipelineState)
         computeToRenderRenderEncoder.setFragmentTexture(readTexture, index: 0)
-        
+
+        // Create CA params from RenderConfigurations with overrides
+        let caEnabled = resolve(overrides.chromaticAberrationEnabled, renderConfigs?.chromaticAberrationEnabled ?? false)
+        let caAngle = resolve(overrides.chromaticAberrationAngle, renderConfigs?.chromaticAberrationAngle ?? 0.0)
+
+        var caParams = ChromaticAberrationParams(
+            intensity: caEnabled
+                ? resolve(overrides.chromaticAberrationIntensity, renderConfigs?.chromaticAberrationIntensity ?? 0.0)
+                : 0.0,
+            redOffset: resolve(overrides.chromaticAberrationRedOffset, renderConfigs?.chromaticAberrationRedOffset ?? -2.0),
+            greenOffset: resolve(overrides.chromaticAberrationGreenOffset, renderConfigs?.chromaticAberrationGreenOffset ?? 0.0),
+            blueOffset: resolve(overrides.chromaticAberrationBlueOffset, renderConfigs?.chromaticAberrationBlueOffset ?? 2.0),
+            radialPower: resolve(overrides.chromaticAberrationRadialPower, renderConfigs?.chromaticAberrationRadialPower ?? 2.0),
+            useRadialMode: resolve(overrides.chromaticAberrationUseRadialMode, renderConfigs?.chromaticAberrationUseRadialMode ?? true) ? 1 : 0,
+            direction: SIMD2<Float>(cos(caAngle), sin(caAngle)),
+            useSpectralMode: resolve(overrides.chromaticAberrationUseSpectralMode, renderConfigs?.chromaticAberrationUseSpectralMode ?? true) ? 1 : 0,
+            dispersionStrength: resolve(overrides.chromaticAberrationDispersionStrength, renderConfigs?.chromaticAberrationDispersionStrength ?? 5.0),
+            referenceWavelength: resolve(overrides.chromaticAberrationReferenceWavelength, renderConfigs?.chromaticAberrationReferenceWavelength ?? 550.0)
+        )
+
+        computeToRenderRenderEncoder.setFragmentBytes(
+            &caParams,
+            length: MemoryLayout<ChromaticAberrationParams>.stride,
+            index: 0
+        )
+
         computeToRenderRenderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         
         computeToRenderRenderEncoder.endEncoding()

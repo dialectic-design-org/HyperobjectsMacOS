@@ -48,6 +48,19 @@ struct Uniforms {
     float previousColorVisibility;
 };
 
+struct ChromaticAberrationParams {
+    float intensity;          // 0.0-1.0, blend with original
+    float redOffset;          // Pixels, typically negative (-3.0) [RGB mode only]
+    float greenOffset;        // Pixels, typically 0.0 [RGB mode only]
+    float blueOffset;         // Pixels, typically positive (3.0) [RGB mode only]
+    float radialPower;        // Falloff exponent (1.0=linear, 2.0=quadratic)
+    int useRadialMode;        // 1=radial from center, 0=uniform direction
+    vector_float2 direction;  // Direction for uniform mode (normalized)
+    int useSpectralMode;      // 1=physically-based spectral, 0=RGB split
+    float dispersionStrength; // Pixels at 400nm wavelength [spectral mode]
+    float referenceWavelength;// Reference wavelength (no shift), typically 550nm
+};
+
 
 struct LinearSeg3D {
     int pathID;

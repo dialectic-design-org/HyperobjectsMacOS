@@ -106,10 +106,125 @@ struct RenderConfigurationsView: View {
                 
                 Text("Background color")
                 ColorPickerControlView(colorInput: renderConfigurations.backgroundColor)
-                
-                
+
+                Divider().padding(.vertical, 8)
+
+                // Chromatic Aberration Controls
+                Text("Chromatic Aberration").font(.headline)
+
+                Toggle(
+                    "Enable Chromatic Aberration",
+                    isOn: $renderConfigurations.chromaticAberrationEnabled
+                )
+
+                Text("Intensity: \(String(format: "%.2f", renderConfigurations.chromaticAberrationIntensity))")
+                Slider(value: $renderConfigurations.chromaticAberrationIntensity, in: 0...1.0)
+
+                Toggle(
+                    "Spectral Mode (Physically Accurate)",
+                    isOn: $renderConfigurations.chromaticAberrationUseSpectralMode
+                )
+
+                if renderConfigurations.chromaticAberrationUseSpectralMode {
+                    // Spectral mode controls
+                    Text("Dispersion Strength: \(String(format: "%.1f", renderConfigurations.chromaticAberrationDispersionStrength)) px")
+                    Slider(value: $renderConfigurations.chromaticAberrationDispersionStrength, in: 0...30)
+
+                    Text("Reference λ: \(String(format: "%.0f", renderConfigurations.chromaticAberrationReferenceWavelength)) nm")
+                    Slider(value: $renderConfigurations.chromaticAberrationReferenceWavelength, in: 450...650)
+                    Text("(No shift at reference wavelength)").font(.caption).foregroundColor(.secondary)
+                } else {
+                    // RGB mode controls
+                    Text("Red Offset: \(String(format: "%.1f", renderConfigurations.chromaticAberrationRedOffset)) px")
+                    Slider(value: $renderConfigurations.chromaticAberrationRedOffset, in: -20...0)
+
+                    Text("Green Offset: \(String(format: "%.1f", renderConfigurations.chromaticAberrationGreenOffset)) px")
+                    Slider(value: $renderConfigurations.chromaticAberrationGreenOffset, in: -10...10)
+
+                    Text("Blue Offset: \(String(format: "%.1f", renderConfigurations.chromaticAberrationBlueOffset)) px")
+                    Slider(value: $renderConfigurations.chromaticAberrationBlueOffset, in: 0...20)
+                }
+
+                Text("Radial Power: \(String(format: "%.2f", renderConfigurations.chromaticAberrationRadialPower))")
+                Slider(value: $renderConfigurations.chromaticAberrationRadialPower, in: 0.5...4.0)
+
+                Toggle(
+                    "Radial Mode",
+                    isOn: $renderConfigurations.chromaticAberrationUseRadialMode
+                )
+
+                if !renderConfigurations.chromaticAberrationUseRadialMode {
+                    Text("Direction Angle: \(String(format: "%.0f", renderConfigurations.chromaticAberrationAngle * 180 / .pi))°")
+                    Slider(value: $renderConfigurations.chromaticAberrationAngle, in: 0...(2 * .pi))
+                }
+
+                Text("Presets").font(.subheadline).padding(.top, 4)
+
+                if renderConfigurations.chromaticAberrationUseSpectralMode {
+                    // Spectral presets
+                    HStack {
+                        Button("Subtle Lens") {
+                            applySpectralPreset(intensity: 0.6, dispersion: 3.0, refWavelength: 550, power: 2.0)
+                        }
+                        Button("Vintage") {
+                            applySpectralPreset(intensity: 0.8, dispersion: 8.0, refWavelength: 580, power: 1.5)
+                        }
+                    }
+                    HStack {
+                        Button("Strong Prism") {
+                            applySpectralPreset(intensity: 1.0, dispersion: 15.0, refWavelength: 550, power: 1.0)
+                        }
+                        Button("Cheap Lens") {
+                            applySpectralPreset(intensity: 0.7, dispersion: 6.0, refWavelength: 520, power: 2.5)
+                        }
+                    }
+                } else {
+                    // RGB presets
+                    HStack {
+                        Button("Subtle") {
+                            applyRGBPreset(intensity: 0.5, red: -1.0, green: 0.0, blue: 1.0, power: 2.0, radial: true)
+                        }
+                        Button("Classic") {
+                            applyRGBPreset(intensity: 0.7, red: -3.0, green: 0.0, blue: 3.0, power: 1.5, radial: true)
+                        }
+                        Button("VHS") {
+                            applyRGBPreset(intensity: 1.0, red: -8.0, green: 2.0, blue: 8.0, power: 0.5, radial: true)
+                        }
+                    }
+                    HStack {
+                        Button("Prism") {
+                            applyRGBPreset(intensity: 0.8, red: -5.0, green: 0.0, blue: 5.0, power: 1.0, radial: true)
+                        }
+                        Button("Drift") {
+                            applyRGBPreset(intensity: 0.6, red: -4.0, green: 0.0, blue: 4.0, power: 1.0, radial: false)
+                            renderConfigurations.chromaticAberrationAngle = 0.0
+                        }
+                    }
+                }
+
             }
         }.padding()
+    }
+
+    private func applyRGBPreset(intensity: Float, red: Float, green: Float, blue: Float, power: Float, radial: Bool) {
+        renderConfigurations.chromaticAberrationEnabled = true
+        renderConfigurations.chromaticAberrationUseSpectralMode = false
+        renderConfigurations.chromaticAberrationIntensity = intensity
+        renderConfigurations.chromaticAberrationRedOffset = red
+        renderConfigurations.chromaticAberrationGreenOffset = green
+        renderConfigurations.chromaticAberrationBlueOffset = blue
+        renderConfigurations.chromaticAberrationRadialPower = power
+        renderConfigurations.chromaticAberrationUseRadialMode = radial
+    }
+
+    private func applySpectralPreset(intensity: Float, dispersion: Float, refWavelength: Float, power: Float) {
+        renderConfigurations.chromaticAberrationEnabled = true
+        renderConfigurations.chromaticAberrationUseSpectralMode = true
+        renderConfigurations.chromaticAberrationIntensity = intensity
+        renderConfigurations.chromaticAberrationDispersionStrength = dispersion
+        renderConfigurations.chromaticAberrationReferenceWavelength = refWavelength
+        renderConfigurations.chromaticAberrationRadialPower = power
+        renderConfigurations.chromaticAberrationUseRadialMode = true
     }
 }
 

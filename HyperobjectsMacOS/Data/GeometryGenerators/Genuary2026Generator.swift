@@ -12,13 +12,13 @@ import SwiftUI
 private var currentTextMainTitle = "Genuary"
 private var mapMainTitle: [Int: Character] = [:]
 
-private var currentTextDay = "Day 30"
+private var currentTextDay = "Day 31"
 private var mapDay: [Int: Character] = [:]
 
 private var currentTextYear = "2026"
 private var mapYear: [Int: Character] = [:]
 
-private var currentTextPrompt = "Bugging out."
+private var currentTextPrompt = "Metal."
 private var mapPrompt: [Int: Character] = [:]
 
 private var currentTextCredit = "socratism.io"
@@ -32,14 +32,10 @@ protocol GenuaryDayGenerator {
         inputs: [String: Any],
         scene: GeometriesSceneBase,
         time: Double,
-        lineWidthBase: Float,
-        state: Genuary2026State
+        lineWidthBase: Float
     ) -> (lines: [Line], replacementProbability: Float)
 }
 
-class Genuary2026State {
-    
-}
 
 
 private var cityLayoutParams: [String: Any] = [
@@ -1572,8 +1568,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
                 inputs: inputs,
                 scene: scene,
                 time: timeAsFloat,
-                lineWidthBase: lineWidthBase,
-                state: Genuary2026State()
+                lineWidthBase: lineWidthBase
             )
             lines.append(contentsOf: result.lines)
             replacementProbability = result.replacementProbability
@@ -2062,8 +2057,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     endPoint: line.endPoint,
                     degree: line.degree,
                     controlPoints: line.controlPoints,
-                    lineWidthStart: lineWidthBase * 0.5,
-                    lineWidthEnd: lineWidthBase * 0.5
+                    lineWidthStart: lineWidthBase * 2.0,
+                    lineWidthEnd: lineWidthBase * 2.0
                 )
                 
                 transformedLine = transformedLine.applyMatrix(yearTransform)
@@ -2090,8 +2085,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     endPoint: line.endPoint,
                     degree: line.degree,
                     controlPoints: line.controlPoints,
-                    lineWidthStart: lineWidthBase * 0.5,
-                    lineWidthEnd: lineWidthBase * 0.5
+                    lineWidthStart: lineWidthBase,
+                    lineWidthEnd: lineWidthBase
                 )
                 
                 transformedLine = transformedLine.applyMatrix(dayTransform)
@@ -2119,8 +2114,8 @@ class Genuary2026Generator: CachedGeometryGenerator {
                     endPoint: line.endPoint,
                     degree: line.degree,
                     controlPoints: line.controlPoints,
-                    lineWidthStart: lineWidthBase * 0.5,
-                    lineWidthEnd: lineWidthBase * 0.5
+                    lineWidthStart: lineWidthBase,
+                    lineWidthEnd: lineWidthBase
                 )
                 
                 transformedLine = transformedLine.applyMatrix(promptTransform)

@@ -40,8 +40,22 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     
     @Published var sceneHasBackgroundColor: Bool = false
     @Published var backgroundColor: SIMD3<Float> = SIMD3<Float>(0.0, 0.0, 0.0)
-    
-    
+
+    /// Closure type for geometry-time overrides
+    typealias GeometryTimeOverrideClosure = (RenderOverrideContext) -> RenderConfigurationOverrides
+
+    /// Closure type for render-time overrides
+    typealias RenderTimeOverrideClosure = (RenderOverrideContext) -> RenderConfigurationOverrides
+
+    var geometryTimeOverride: GeometryTimeOverrideClosure?
+    var renderTimeOverride: RenderTimeOverrideClosure?
+
+    private let _cachedRenderOverrides = Atomic<RenderConfigurationOverrides>(value: .none)
+    var cachedRenderOverrides: RenderConfigurationOverrides {
+        get { _cachedRenderOverrides.get() }
+        set { _cachedRenderOverrides.set(newValue) }
+    }
+
     @Published var historyData: [AudioDataPoint] = []
     
     private let maxAudioHistoryDuration: TimeInterval = 30.0
@@ -242,12 +256,28 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         }
         return input
     }
-    
-    
+
+    func makeOverrideContext() -> RenderOverrideContext {
+        let inputDict: [String: Any] = Dictionary(uniqueKeysWithValues: inputs.map { ($0.name, $0.value) })
+        return RenderOverrideContext(
+            frameStamp: frameStamp,
+            audioSignal: audioSignal,
+            audioSignalProcessed: audioSignalProcessed,
+            inputs: inputDict
+        )
+    }
+
     func setWrappedGeometries() {
         self.cachedGeometries = self.generateAllGeometries().map { GeometryWrapped(geometry: $0) }
+
+        // Compute and cache geometry-time overrides
+        if let overrideClosure = geometryTimeOverride {
+            cachedRenderOverrides = overrideClosure(makeOverrideContext())
+        } else {
+            cachedRenderOverrides = .none
+        }
     }
-    
+
 }
 
 

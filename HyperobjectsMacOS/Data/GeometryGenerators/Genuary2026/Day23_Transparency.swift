@@ -14,8 +14,7 @@ struct Day23_Transparency: GenuaryDayGenerator {
         inputs: [String: Any],
         scene: GeometriesSceneBase,
         time: Double,
-        lineWidthBase: Float,
-        state: Genuary2026State
+        lineWidthBase: Float
     ) -> (lines: [Line], replacementProbability: Float) {
         var outputLines:[Line] = []
         

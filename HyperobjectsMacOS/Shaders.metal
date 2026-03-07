@@ -1261,10 +1261,150 @@ vertex VertexOut compute_vertex(uint vertexID [[vertex_id]]) {
     return out;
 }
 
-// Backdrop fragment shader
-fragment float4 compute_fragment(float4 fragCoord [[position]], texture2d<float> lineTexture [[texture(0)]]) {
-    constexpr sampler s(coord::pixel);
-    return lineTexture.sample(s, fragCoord.xy);
+// ============================================================================
+// Spectral Chromatic Aberration
+// Physically-based dispersion using CIE color matching functions
+// ============================================================================
+
+// CIE 1931 2-degree color matching functions (simplified, 9 samples from 400-700nm)
+// These convert spectral radiance to XYZ tristimulus values
+constant float WAVELENGTHS[9] = { 400, 440, 480, 520, 550, 580, 620, 660, 700 };
+
+// CIE x̄(λ) color matching function
+constant float CIE_X[9] = { 0.0143, 0.3483, 0.0956, 0.0633, 0.4334, 0.9163, 0.8544, 0.1649, 0.0114 };
+// CIE ȳ(λ) color matching function
+constant float CIE_Y[9] = { 0.0004, 0.0230, 0.1693, 0.7100, 0.9950, 0.8700, 0.3810, 0.0610, 0.0041 };
+// CIE z̄(λ) color matching function
+constant float CIE_Z[9] = { 0.0679, 1.7826, 0.8130, 0.0782, 0.0087, 0.0017, 0.0002, 0.0000, 0.0000 };
+
+// Convert XYZ to linear sRGB (D65 illuminant)
+float3 XYZtoRGB(float3 xyz) {
+    float3x3 M = float3x3(
+        float3( 3.2404542, -0.9692660,  0.0556434),
+        float3(-1.5371385,  1.8760108, -0.2040259),
+        float3(-0.4985314,  0.0415560,  1.0572252)
+    );
+    return M * xyz;
+}
+
+// Cauchy dispersion model: offset scales with 1/λ² relative to reference wavelength
+// This models how refractive index varies with wavelength in real glass
+float cauchyDispersion(float wavelength, float referenceWavelength) {
+    float refSq = referenceWavelength * referenceWavelength;
+    float lamSq = wavelength * wavelength;
+    // Offset is zero at reference wavelength, negative for longer λ, positive for shorter λ
+    return (refSq / lamSq) - 1.0;
+}
+
+// Backdrop fragment shader with chromatic aberration
+fragment float4 compute_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> lineTexture [[texture(0)]],
+    constant ChromaticAberrationParams& ca [[buffer(0)]]
+) {
+    float2 texSize = float2(lineTexture.get_width(), lineTexture.get_height());
+    float2 uv = in.position.xy / texSize;
+
+    // Early exit if CA disabled
+    if (ca.intensity < 0.001) {
+        constexpr sampler s(coord::pixel);
+        return lineTexture.sample(s, in.position.xy);
+    }
+
+    constexpr sampler s(coord::normalized, address::clamp_to_edge, filter::linear);
+
+    // Calculate direction and falloff for radial/uniform modes
+    float2 dir;
+    float falloff;
+
+    if (ca.useRadialMode) {
+        float2 center = float2(0.5, 0.5);
+        float2 fromCenter = uv - center;
+        float dist = length(fromCenter);
+        dir = normalize(fromCenter + 1e-6);
+        falloff = pow(dist * 2.0, ca.radialPower);
+    } else {
+        dir = ca.direction;
+        falloff = 1.0;
+    }
+
+    float4 aberrated;
+
+    if (ca.useSpectralMode) {
+        // ====================================================================
+        // SPECTRAL MODE: Physically-based continuous spectrum dispersion
+        // ====================================================================
+
+        // Accumulate XYZ tristimulus values by sampling at multiple wavelengths
+        float3 xyz = float3(0.0);
+        float totalWeight = 0.0;
+
+        for (int i = 0; i < 9; i++) {
+            float wavelength = WAVELENGTHS[i];
+
+            // Calculate dispersion offset for this wavelength using Cauchy model
+            float dispersion = cauchyDispersion(wavelength, ca.referenceWavelength);
+            float2 offset = dir * ca.dispersionStrength * dispersion * falloff / texSize;
+
+            // Sample the image at the dispersed position
+            float4 sample_color = lineTexture.sample(s, uv + offset);
+
+            // Convert sampled RGB to approximate spectral radiance at this wavelength
+            // This is an approximation - we weight by how much this wavelength contributes to RGB
+            float3 cmf = float3(CIE_X[i], CIE_Y[i], CIE_Z[i]);
+            float weight = cmf.x + cmf.y + cmf.z;
+
+            // Estimate spectral radiance from RGB sample
+            // Weight R, G, B channels by their spectral sensitivity at this wavelength
+            float spectralRadiance;
+            if (wavelength < 490) {
+                // Blue-violet region: primarily B channel
+                spectralRadiance = sample_color.b * 0.7 + sample_color.g * 0.2 + sample_color.r * 0.1;
+            } else if (wavelength < 580) {
+                // Green-yellow region: primarily G channel
+                spectralRadiance = sample_color.g * 0.7 + sample_color.r * 0.2 + sample_color.b * 0.1;
+            } else {
+                // Orange-red region: primarily R channel
+                spectralRadiance = sample_color.r * 0.7 + sample_color.g * 0.2 + sample_color.b * 0.1;
+            }
+
+            // Accumulate XYZ using color matching functions
+            xyz += cmf * spectralRadiance;
+            totalWeight += weight;
+        }
+
+        // Normalize
+        xyz /= totalWeight / 3.0;
+
+        // Convert XYZ to RGB
+        float3 rgb = XYZtoRGB(xyz);
+
+        // Clamp to valid range
+        rgb = clamp(rgb, 0.0, 1.0);
+
+        // Preserve original alpha
+        float a = lineTexture.sample(s, uv).a;
+        aberrated = float4(rgb, a);
+
+    } else {
+        // ====================================================================
+        // RGB MODE: Simple per-channel offset (stylized, not physically accurate)
+        // ====================================================================
+
+        float2 offsetR = dir * ca.redOffset * falloff / texSize;
+        float2 offsetG = dir * ca.greenOffset * falloff / texSize;
+        float2 offsetB = dir * ca.blueOffset * falloff / texSize;
+
+        float r = lineTexture.sample(s, uv + offsetR).r;
+        float g = lineTexture.sample(s, uv + offsetG).g;
+        float b = lineTexture.sample(s, uv + offsetB).b;
+        float a = lineTexture.sample(s, uv).a;
+
+        aberrated = float4(r, g, b, a);
+    }
+
+    float4 original = lineTexture.sample(s, uv);
+    return mix(original, aberrated, ca.intensity);
 }
 
 // Vertex shader

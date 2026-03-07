@@ -15,11 +15,34 @@ struct Day31_Shading: GenuaryDayGenerator {
         inputs: [String: Any],
         scene: GeometriesSceneBase,
         time: Double,
-        lineWidthBase: Float,
-        state: Genuary2026State
+        lineWidthBase: Float
     ) -> (lines: [Line], replacementProbability: Float) {
         var outputLines: [Line] = []
         
-        return (outputLines, 0.0) // default replacement probability
+        var cubeLines: [Line] = Cube(center: .zero, size: 0.9).wallOutlines()
+        
+        var r_m = matrix_rotation(angle: Float(time), axis: SIMD3<Float>(0.0, 1.0, 0.0))
+        
+        var scalingVec = SIMD3<Float>(repeating: 1.0)
+        
+        if Float.random(in: 0.0...1.0) < 0.5 {
+            let axisToScale: Int = Int.random(in: 0..<3)
+            scalingVec[axisToScale] = Float.random(in: 0.0...1.0)
+        }
+        
+        var s_m = matrix_scale(scale: scalingVec)
+        
+        
+        var full_mat = r_m * s_m
+        
+        for i in cubeLines.indices {
+            cubeLines[i] = cubeLines[i].applyMatrix(full_mat)
+            cubeLines[i].lineWidthStart = lineWidthBase
+            cubeLines[i].lineWidthEnd = lineWidthBase
+        }
+        
+        outputLines.append(contentsOf: cubeLines)
+        
+        return (outputLines, 0.1) // default replacement probability
     }
 }
