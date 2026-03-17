@@ -18,23 +18,40 @@ struct AudioSnapshot {
     let lowpassSmoothed: Float
 }
 
+struct AudioState {
+    var signal: Float = 0
+    var signalRaw: Float = 0
+    var signalProcessed: Double = 0
+    var signalsSmoothed: [Int: Float] = [:]
+    var signalsSmoothedProcessed: [Int: Double] = [:]
+    var lowpassRaw: Double = 0
+    var lowpassSmoothed: Double = 0
+    var lowpassProcessed: Double = 0
+}
+
 class GeometriesSceneBase: ObservableObject, GeometriesScene {
     let id = UUID()
     let name: String
     @Published var inputs: [SceneInput]
     @Published var inputGroups: [SceneInputGroup] = []
     @Published var geometryGenerators: [any GeometryGenerator]
-    @Published var changedInputs: Set<String> = []
-    @Published var cachedGeometries: [GeometryWrapped] = []
-    @Published var audioSignal: Float = 0.0
-    @Published var audioSignalsSmoothed: [Int:Float] = [:]
-    @Published var audioSignalRaw: Float = 0.0
-    @Published var audioSignalProcessed: Double = 0.0
-    @Published var audioSignalsSmoothedProcessed: [Int:Double] = [:]
-    @Published var audioSignalLowpassRaw: Double = 0.0
-    @Published var audioSignalLowpassSmoothed: Double = 0.0
-    @Published var audioSignalLowpassProcessed: Double = 0.0
-    @Published var frameStamp: Int = 0
+    var changedInputs: Set<String> = []
+    private let _cachedGeometries = Atomic<[GeometryWrapped]>(value: [])
+    var cachedGeometries: [GeometryWrapped] {
+        get { _cachedGeometries.get() }
+        set { _cachedGeometries.set(newValue) }
+    }
+    @Published var audioState = AudioState()
+
+    var audioSignal: Float { audioState.signal }
+    var audioSignalsSmoothed: [Int: Float] { audioState.signalsSmoothed }
+    var audioSignalRaw: Float { audioState.signalRaw }
+    var audioSignalProcessed: Double { audioState.signalProcessed }
+    var audioSignalsSmoothedProcessed: [Int: Double] { audioState.signalsSmoothedProcessed }
+    var audioSignalLowpassRaw: Double { audioState.lowpassRaw }
+    var audioSignalLowpassSmoothed: Double { audioState.lowpassSmoothed }
+    var audioSignalLowpassProcessed: Double { audioState.lowpassProcessed }
+    var frameStamp: Int = 0
     
     @Published var sceneHasBackgroundColor: Bool = false
     @Published var backgroundColor: SIMD3<Float> = SIMD3<Float>(0.0, 0.0, 0.0)
@@ -54,7 +71,11 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         set { _cachedRenderOverrides.set(newValue) }
     }
 
-    @Published var historyData: [AudioDataPoint] = []
+    private let _historyData = Atomic<[AudioDataPoint]>(value: [])
+    var historyData: [AudioDataPoint] {
+        get { _historyData.get() }
+        set { _historyData.set(newValue) }
+    }
     
     private let maxAudioHistoryDuration: TimeInterval = 30.0
     
@@ -215,15 +236,17 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
             processedVolume: Double(self.audioSignalProcessed),
             smoothedProcessedVolumes: self.audioSignalsSmoothedProcessed
         )
-        self.historyData.append(dataPoint)
+
+        // Single get + local mutation + single set (avoids multiple Atomic accesses)
+        var history = _historyData.get()
+        history.append(dataPoint)
 
         let cutoffTime = currentTime - self.maxAudioHistoryDuration
 
         // OPTIMIZATION: Efficiently remove old history
-        // Instead of iterating the whole array with removeAll, we find the count of old items and remove them in batch.
         // Since the array is sorted by time, we only need to check from the start.
         var removeCount = 0
-        for item in self.historyData {
+        for item in history {
             if item.timestamp < cutoffTime {
                 removeCount += 1
             } else {
@@ -232,15 +255,17 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         }
 
         if removeCount > 0 {
-            self.historyData.removeFirst(removeCount)
+            history.removeFirst(removeCount)
         }
 
         // Safety cap to prevent unbounded growth if timestamps drift
-        if self.historyData.count > 4000 {
-             let excess = self.historyData.count - 3600
-             self.historyData.removeFirst(excess)
+        if history.count > 4000 {
+             let excess = history.count - 3600
+             history.removeFirst(excess)
              print("⚠️ Audio History exceeded safety limit. Pruned \(excess) items.")
         }
+
+        _historyData.set(history)
     }
     
     func setChangedInputs(names: [String]) {
@@ -306,17 +331,25 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
 
 extension GeometriesSceneBase {
     @MainActor func applyAudioTick(_ m: AudioSnapshot, using processor: EnvelopeProcessor) {
-        // Update audio signal properties
-        audioSignal = m.smoothed
-        audioSignalsSmoothed = m.smoothedPerStep
-        audioSignalRaw = m.raw
-        audioSignalProcessed = processor.process(Double(m.smoothed))
-        audioSignalLowpassRaw = Double(m.lowpassRaw)
-        audioSignalLowpassSmoothed = Double(m.lowpassSmoothed)
-        audioSignalLowpassProcessed = processor.process(Double(m.lowpassSmoothed))
-        for (_, val) in audioSignalsSmoothed.enumerated() {
-            audioSignalsSmoothedProcessed[val.key] = processor.process(Double(val.value))
+        // Compute all audio values locally first
+        let processedSignal = processor.process(Double(m.smoothed))
+        let lowpassProcessed = processor.process(Double(m.lowpassSmoothed))
+        var smoothedProcessed: [Int: Double] = [:]
+        for (_, val) in m.smoothedPerStep.enumerated() {
+            smoothedProcessed[val.key] = processor.process(Double(val.value))
         }
+
+        // Single @Published assignment → 1 objectWillChange notification
+        audioState = AudioState(
+            signal: m.smoothed,
+            signalRaw: m.raw,
+            signalProcessed: processedSignal,
+            signalsSmoothed: m.smoothedPerStep,
+            signalsSmoothedProcessed: smoothedProcessed,
+            lowpassRaw: Double(m.lowpassRaw),
+            lowpassSmoothed: Double(m.lowpassSmoothed),
+            lowpassProcessed: lowpassProcessed
+        )
 
         // Update statefulFloat inputs with audio-driven accumulation
         for i in 0..<inputs.count {
