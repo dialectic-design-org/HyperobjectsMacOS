@@ -14,7 +14,7 @@ private final class TimeBox {
 
 @main
 struct HyperobjectsMacOSApp: App {
-    @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneGenuary2026())
+    @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneSwarm())
     @StateObject private var renderConfigurations = RenderConfigurations()
     @StateObject private var jsEngine = JSEngineManager()
     @StateObject private var fileMonitor = FileMonitor()
@@ -25,20 +25,13 @@ struct HyperobjectsMacOSApp: App {
     @State private var timer: Timer?
     
     @State private var latestScript: String = ""
-    
-    // A simple holder to avoid capturing self in the escaping closure during init
-    
-    
     private let timeBox: TimeBox
-    
     
     init() {
         print("Application initialized")
         // Initialize a box to hold time without capturing self
         let timeBox = TimeBox(0)
         self.timeBox = timeBox
-        
-        // Build the FileMonitor without capturing self
         
     }
     
@@ -59,7 +52,10 @@ struct HyperobjectsMacOSApp: App {
                         DispatchQueue.main.async {
                             latestScript = script
                             let outputState = jsEngine.outputState
+                            
                             applyScriptOutput(inputState: inputState, outputState: outputState, sceneManager: sceneManager)
+
+                            
                         }
                         
                     }
@@ -79,6 +75,11 @@ struct HyperobjectsMacOSApp: App {
                                 DispatchQueue.main.async {
                                     let outputState = jsEngine.outputState
                                     // print("output state: \(outputState)")
+                                    // Check if outputState contains a key called RESET
+                                    if outputState.keys.contains("RESET") {
+                                        print("Resetting scene to initial state")
+                                        sceneManager.currentScene.resetAllInputsToInitialValues()
+                                    }
                                     applyScriptOutput(inputState: inputState, outputState: outputState, sceneManager: sceneManager)
                                 }
                             }
@@ -172,9 +173,9 @@ private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox, au
     for input in currentSceneInputs {
         inputState[input.name] = input.toStateValue()
         inputState["audio_add_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationAddition)))
-        inputState["audio_multiply_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationAddition)))
-        inputState["audio_multiply_offset_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationAddition)))
-        inputState["audio_delay_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationAddition)))
+        inputState["audio_multiply_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationMultiplication)))
+        inputState["audio_multiply_offset_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationMultiplicationOffset)))
+        inputState["audio_delay_\(input.name)"] = StateValue(value: .float(Double(input.audioDelay)))
         inputState["audio_smoothed_source_\(input.name)"] = StateValue(value: .float(Double(input.audioSmoothedSource)))
         inputState["frame_tick_\(input.name)"] = StateValue(value: .float(Double(input.tickValueAdjustment)))
         

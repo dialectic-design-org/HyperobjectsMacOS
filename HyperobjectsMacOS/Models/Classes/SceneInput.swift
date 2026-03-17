@@ -33,8 +33,13 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
             }
         }
     }
+    var init_value: Any
     var audioSmoothedSource: Int = -1 // Negative 1 is the main source, others are specific smoothings
+    var init_audioSmoothedSource: Int = -1
+    
     var audioDelay: Float = 0.0
+    var init_audioDelay: Float = 0.0
+    
     var presetValues: [String: Any] = [:]
     var range: ClosedRange<Float> = 0...1
     var audioReactive: Bool = false
@@ -45,12 +50,22 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
     var audioAmplificationMultiplicationOffset: Float = 1.0
     var audioAmplificationMultiplicationOffsetRange: ClosedRange<Float> = -1...1
     
+    var init_audioAmplificationAddition: Float = 0.0
+    var init_audioAmplificationAdditionRange: ClosedRange<Float> = 0...1
+    var init_audioAmplificationMultiplication: Float = 0.0
+    var init_audioAmplificationMultiplicationRange: ClosedRange<Float> = 0...1
+    var init_audioAmplificationMultiplicationOffset: Float = 1.0
+    var init_audioAmplificationMultiplicationOffsetRange: ClosedRange<Float> = -1...1
+    
     var tickValueAdjustment: Double = 0.0
     var tickValueAdjustmentRange: ClosedRange<Double> = 0...1
     var tickValueAudioAdjustment: Double = 0.0
     var tickValueAudioAdjustmentRange: ClosedRange<Double> = 0...1
     var tickValueAudioAdjustmentOffset: Double = 0.0
     var tickValueAudioAdjustmentOffsetRange: ClosedRange<Double> = -1...1
+    
+    var init_tickValueAdjustment: Double = 0.0
+    
     
     private enum ValueKey: Equatable {
         case num(Float), bool(Bool), str(String)
@@ -162,7 +177,10 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
         self.name = name
         self.type = type
         self.inputGroupName = inputGroupName
+        
         self.value = value
+        self.init_value = value
+        
         self.presetValues = presetValues
         self.range = range
         self.audioReactive = audioReactive
@@ -174,11 +192,22 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
         self.audioAmplificationMultiplicationOffsetRange = audioAmplificationMultiplicationOffsetRange
         self.audioDelay = audioDelay
         
+        self.init_audioAmplificationAddition = audioAmplificationAddition
+        self.init_audioAmplificationAdditionRange = audioAmplificationAdditionRange
+        self.init_audioAmplificationMultiplication = audioAmplificationMultiplication
+        self.init_audioAmplificationMultiplicationRange = audioAmplificationMultiplicationRange
+        self.init_audioAmplificationMultiplicationOffset = audioAmplificationMultiplicationOffset
+        self.init_audioAmplificationMultiplicationOffsetRange = audioAmplificationMultiplicationOffsetRange
+        self.init_audioDelay = audioDelay
+        
         self.tickValueAdjustment = tickValueAdjustment
         self.tickValueAdjustmentRange = tickValueAdjustmentRange
         self.tickValueAudioAdjustment = tickValueAudioAdjustment
         self.tickValueAudioAdjustmentRange = tickValueAudioAdjustmentRange
         self.tickValueAudioAdjustmentOffset = tickValueAudioAdjustmentOffset
+        
+        self.init_tickValueAdjustment = tickValueAdjustment
+        
         
         recordValueChange(force: true)
     }
@@ -307,6 +336,17 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
             }))
         }
         return StateValue(value: .float(0.0))
+    }
+    
+    func resetToInitialValues() {
+        self.value = self.init_value
+        self.audioAmplificationAddition = self.init_audioAmplificationAddition
+        self.audioAmplificationMultiplication = self.init_audioAmplificationMultiplication
+        self.audioAmplificationMultiplicationOffset = self.init_audioAmplificationMultiplicationOffset
+        self.audioDelay = self.init_audioDelay
+        self.tickValueAdjustment = self.init_tickValueAdjustment
+        self.audioSmoothedSource = self.init_audioSmoothedSource
+
     }
 }
 

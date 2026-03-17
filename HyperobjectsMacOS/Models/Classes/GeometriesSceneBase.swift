@@ -60,6 +60,21 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     
     private let maxAudioHistoryDuration: TimeInterval = 30.0
     
+    private var _inputMap: [String: SceneInput]?
+    
+    private var inputMap: [String: SceneInput] {
+        if let map = _inputMap { return map }
+        let map = Dictionary(uniqueKeysWithValues:  inputs.map { ($0.name, $0) })
+        _inputMap = map
+        return map
+    }
+    
+    func invalidateInputCache() {
+        _inputMap = nil
+    }
+    
+    
+    
     init(name: String, inputs: [SceneInput], inputGroups: [SceneInputGroup] = [], geometryGenerators: [any GeometryGenerator]) {
         self.name = name
         self.inputs = inputs
@@ -251,10 +266,22 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     }
     
     func getInputWithName(name: String) -> SceneInput {
-        guard let input = inputs.first(where: { $0.name == name }) else {
-            fatalError("SceneInput named \(name) not found in inputs.")
+        guard let input = inputMap[name] else {
+            fatalError("SceneInput named \(name) not found")
         }
         return input
+//        guard let input = inputs.first(where: { $0.name == name }) else {
+//            fatalError("SceneInput named \(name) not found in inputs.")
+//        }
+//        return input
+    }
+    
+    func val_f(name: String, delay: Double = 0) -> Float {
+        let input = self.getInputWithName(name: name)
+        if input.type == .float {
+            return ensureValueIsFloat(input.getHistoryValue(millisecondsAgo: delay))
+        }
+        return 0.0
     }
 
     func makeOverrideContext() -> RenderOverrideContext {
@@ -275,6 +302,12 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
             cachedRenderOverrides = overrideClosure(makeOverrideContext())
         } else {
             cachedRenderOverrides = .none
+        }
+    }
+    
+    func resetAllInputsToInitialValues() {
+        for i in 0..<inputs.count {
+            inputs[i].resetToInitialValues()
         }
     }
 
