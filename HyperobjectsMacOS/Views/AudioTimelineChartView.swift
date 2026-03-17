@@ -44,95 +44,75 @@ struct AudioTimelineChartView: View {
                         .fontDesign(.monospaced)
                 }
             }.padding(8)
-            GeometryReader { geometry in
+            Canvas { context, size in
                 let drawingRect = CGRect(
                     x: padding,
                     y: padding,
-                    width: geometry.size.width - padding * 2,
-                    height: geometry.size.height - padding * 2
+                    width: size.width - padding * 2,
+                    height: size.height - padding * 2
                 )
-                
-                ZStack {
-                    // Background grid
-                    Path { path in
-                        // Horizontal lines (volume levels)
-                        for i in 0...4 {
-                            let y = drawingRect.minY + CGFloat(i) * drawingRect.height / 4
-                            path.move(to: CGPoint(x: drawingRect.minX, y: y))
-                            path.addLine(to: CGPoint(x: drawingRect.maxX, y: y))
-                        }
-                        
-                        // Vertical lines (time intervals)
-                        for i in 0...6 {
-                            let x = drawingRect.minX + CGFloat(i) * drawingRect.width / 6
-                            path.move(to: CGPoint(x: x, y: drawingRect.minY))
-                            path.addLine(to: CGPoint(x: x, y: drawingRect.maxY))
+
+                // Background grid
+                var gridPath = Path()
+                // Horizontal lines (volume levels)
+                for i in 0...4 {
+                    let y = drawingRect.minY + CGFloat(i) * drawingRect.height / 4
+                    gridPath.move(to: CGPoint(x: drawingRect.minX, y: y))
+                    gridPath.addLine(to: CGPoint(x: drawingRect.maxX, y: y))
+                }
+                // Vertical lines (time intervals)
+                for i in 0...6 {
+                    let x = drawingRect.minX + CGFloat(i) * drawingRect.width / 6
+                    gridPath.move(to: CGPoint(x: x, y: drawingRect.minY))
+                    gridPath.addLine(to: CGPoint(x: x, y: drawingRect.maxY))
+                }
+                context.stroke(gridPath, with: .color(.gray.opacity(0.3)), lineWidth: 0.5)
+
+                if !historyData.isEmpty {
+                    let filteredData = historyData.filter { $0.timestamp >= startTime }
+
+                    // Pixel-aware downsampling
+                    let maxPoints = max(1, Int(drawingRect.width))
+                    let sampleStride = max(1, filteredData.count / maxPoints)
+                    let sampledData: [AudioDataPoint]
+                    if sampleStride > 1 {
+                        sampledData = stride(from: 0, to: filteredData.count, by: sampleStride).map { filteredData[$0] }
+                    } else {
+                        sampledData = filteredData
+                    }
+
+                    // Single-pass path construction for all 3 lines
+                    var rawPath = Path()
+                    var smoothedPath = Path()
+                    var processedPath = Path()
+
+                    for (i, dp) in sampledData.enumerated() {
+                        let x = timeToX(dp.timestamp, in: drawingRect)
+                        let rawY = volumeToY(dp.rawVolume, in: drawingRect)
+                        let smoothedY = volumeToY(dp.smoothedVolume, in: drawingRect)
+                        let processedY = volumeToY(dp.processedVolume, in: drawingRect)
+
+                        if i == 0 {
+                            rawPath.move(to: CGPoint(x: x, y: rawY))
+                            smoothedPath.move(to: CGPoint(x: x, y: smoothedY))
+                            processedPath.move(to: CGPoint(x: x, y: processedY))
+                        } else {
+                            rawPath.addLine(to: CGPoint(x: x, y: rawY))
+                            smoothedPath.addLine(to: CGPoint(x: x, y: smoothedY))
+                            processedPath.addLine(to: CGPoint(x: x, y: processedY))
                         }
                     }
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
-                    
-                    if !historyData.isEmpty {
-                        let filteredData = historyData.filter { $0.timestamp >= startTime }
-                        
-                        // Raw volume line
-                        Path { path in
-                            for (index, dataPoint) in filteredData.enumerated() {
-                                let point = CGPoint(
-                                    x: timeToX(dataPoint.timestamp, in: drawingRect),
-                                    y: volumeToY(dataPoint.rawVolume, in: drawingRect)
-                                )
-                                
-                                if index == 0 {
-                                    path.move(to: point)
-                                } else {
-                                    path.addLine(to: point)
-                                }
-                            }
-                        }
-                        .stroke(Color.red.opacity(0.8), lineWidth: 1.5)
-                        
-                        // Smoothed volume line
-                        Path { path in
-                            for (index, dataPoint) in filteredData.enumerated() {
-                                let point = CGPoint(
-                                    x: timeToX(dataPoint.timestamp, in: drawingRect),
-                                    y: volumeToY(dataPoint.smoothedVolume, in: drawingRect)
-                                )
-                                
-                                if index == 0 {
-                                    path.move(to: point)
-                                } else {
-                                    path.addLine(to: point)
-                                }
-                            }
-                        }
-                        .stroke(Color.orange.opacity(0.8), lineWidth: 1.5)
-                        
-                        // Processed volume line
-                        Path { path in
-                            for (index, dataPoint) in filteredData.enumerated() {
-                                let point = CGPoint(
-                                    x: timeToX(dataPoint.timestamp, in: drawingRect),
-                                    y: volumeToY(dataPoint.processedVolume, in: drawingRect)
-                                )
-                                
-                                if index == 0 {
-                                    path.move(to: point)
-                                } else {
-                                    path.addLine(to: point)
-                                }
-                            }
-                        }
-                        .stroke(Color.green.opacity(0.8), lineWidth: 1.5)
-                        
-                        // Current time indicator
-                        Path { path in
-                            let currentX = timeToX(currentTime, in: drawingRect)
-                            path.move(to: CGPoint(x: currentX, y: drawingRect.minY))
-                            path.addLine(to: CGPoint(x: currentX, y: drawingRect.maxY))
-                        }
-                        .stroke(Color.blue.opacity(0.6), lineWidth: 2)
-                    }
+
+                    context.stroke(rawPath, with: .color(.red.opacity(0.8)), lineWidth: 1.5)
+                    context.stroke(smoothedPath, with: .color(.orange.opacity(0.8)), lineWidth: 1.5)
+                    context.stroke(processedPath, with: .color(.green.opacity(0.8)), lineWidth: 1.5)
+
+                    // Current time indicator
+                    var indicatorPath = Path()
+                    let currentX = timeToX(currentTime, in: drawingRect)
+                    indicatorPath.move(to: CGPoint(x: currentX, y: drawingRect.minY))
+                    indicatorPath.addLine(to: CGPoint(x: currentX, y: drawingRect.maxY))
+                    context.stroke(indicatorPath, with: .color(.blue.opacity(0.6)), lineWidth: 2)
                 }
             }
         }
