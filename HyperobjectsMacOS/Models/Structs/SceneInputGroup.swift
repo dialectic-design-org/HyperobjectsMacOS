@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct SceneInputGroup: Identifiable {
+struct SceneInputGroup: Identifiable, Equatable {
     var id: UUID
     var name: String
     var note: String?

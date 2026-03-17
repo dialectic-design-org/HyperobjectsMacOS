@@ -9,7 +9,10 @@ import SwiftUI
 
 struct InputGroupColumn: View, Equatable {
     static func == (l: Self, r: Self) -> Bool {
-        return false
+        guard l.$group.wrappedValue == r.$group.wrappedValue else { return false }
+        guard l.inputs.count == r.inputs.count else { return false }
+        guard l.titleOverride == r.titleOverride else { return false }
+        return zip(l.inputs, r.inputs).allSatisfy { $0.id == $1.id }
     }
     
     @Binding var group: SceneInputGroup

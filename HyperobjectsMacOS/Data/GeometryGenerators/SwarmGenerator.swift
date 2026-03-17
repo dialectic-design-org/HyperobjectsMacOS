@@ -414,6 +414,9 @@ class SwarmGenerator: CachedGeometryGenerator {
         
         var agentIndex: Int = Int(1 + brightnessAsInt)
         agentIndex = 4
+        if agentIndex >= sim.agents.count {
+            agentIndex = 0
+        }
         
         var selectedAgent = sim.agents[agentIndex]
         

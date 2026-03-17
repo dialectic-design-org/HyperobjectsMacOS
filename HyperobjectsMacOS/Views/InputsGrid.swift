@@ -7,24 +7,30 @@
 
 import SwiftUI
 
+extension Array where Element == SceneInput {
+    var structuralSignature: Int {
+        reduce(into: 0) { acc, i in
+            acc = acc &* 16777619 ^ i.id.hashValue ^ (i.inputGroupName?.hashValue ?? 0)
+        }
+    }
+}
+
 final class InputsGridModel: ObservableObject {
     @Published private(set) var grouped: [String: [SceneInput]] = [:]
     private var lastSignature: Int = 0
-    
+
     func update(inputs: [SceneInput], groups: inout [SceneInputGroup]) {
-        let sig = inputs.reduce(into: 0) { acc, i in
-            acc = acc &* 16777619 ^ i.id.hashValue ^ (i.inputGroupName?.hashValue ?? 0)
-        }
+        let sig = inputs.structuralSignature
         guard sig != lastSignature else { return }
         lastSignature = sig
-        
+
         // Rebuild groups
         let newGrouped = Dictionary(grouping: inputs, by: { ($0.inputGroupName ?? "").trimmingCharacters(in: .whitespaces) })
         grouped = newGrouped
-        
+
         let known = Set(groups.map { $0.name.trimmingCharacters(in: .whitespaces) })
         let needed = Set(newGrouped.keys).subtracting(known)
-        
+
         if !needed.isEmpty {
             groups.append(contentsOf: needed.map {
                 SceneInputGroup(
@@ -41,13 +47,15 @@ final class InputsGridModel: ObservableObject {
 
 struct InputsGrid: View, Equatable {
     static func == (l: Self, r: Self) -> Bool {
-        return false
+        l.structuralSignature == r.structuralSignature &&
+        l.$groups.wrappedValue == r.$groups.wrappedValue
     }
-    
+
+    let structuralSignature: Int
     let inputs: [SceneInput]
     @Binding var groups: [SceneInputGroup]
     @StateObject private var model = InputsGridModel()
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 4) {
             InputGroupColumn(
@@ -55,6 +63,7 @@ struct InputsGrid: View, Equatable {
                 inputs: model.grouped[""] ?? [],
                 titleOverride: "General"
             )
+            .equatable()
 
             // compute indices in the ORIGINAL groups array
             let declaredIndices = groups.indices.filter {
@@ -69,17 +78,15 @@ struct InputsGrid: View, Equatable {
                     inputs: model.grouped[g.wrappedValue.name] ?? [],
                     titleOverride: nil
                 )
+                .equatable()
                 .id(g.wrappedValue.name)
             }
         }
-        .task(id: inputs.map(\.id)) {
-            model.update(inputs: inputs, groups: &groups)
-        }
-        .onChange(of: inputs) { _, _ in
+        .task(id: structuralSignature) {
             model.update(inputs: inputs, groups: &groups)
         }
     }
-    
+
     private func bindingFor(name: String, in groups: Binding<[SceneInputGroup]>) -> Binding<SceneInputGroup> {
         if let idx = groups.wrappedValue.firstIndex(where: { $0.name == name }) {
             return groups[idx]
