@@ -16,7 +16,6 @@ struct RenderView: View {
     @State private var renderPoints: Bool = false
     @State private var renderLines: Bool = false
     var body: some View {
-        let geometries = currentScene.generateAllGeometries()
         ZStack(alignment: .topLeading) {
             MetalView(
                 rendererState: rendererState,
@@ -42,7 +41,7 @@ struct RenderView: View {
                         Text("Current scene:")
                         Text("\(currentScene.name)").fontWeight(.bold)
                     }
-                    Text("geometries count: \(geometries.count)")
+                    Text("geometries count: \(currentScene.cachedGeometries.count)")
                     
                     
                     FrameMetricsView(
