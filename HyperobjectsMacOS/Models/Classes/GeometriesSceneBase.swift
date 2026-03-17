@@ -31,8 +31,6 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     @Published var audioSignalRaw: Float = 0.0
     @Published var audioSignalProcessed: Double = 0.0
     @Published var audioSignalsSmoothedProcessed: [Int:Double] = [:]
-    @Published var audioSignalProcessedHistory: [Double] = []
-    
     @Published var audioSignalLowpassRaw: Double = 0.0
     @Published var audioSignalLowpassSmoothed: Double = 0.0
     @Published var audioSignalLowpassProcessed: Double = 0.0
@@ -184,39 +182,31 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         return geometries
     }
     
-    func updateFloatInputsWithAudio(_ audioValue: Float, audioMonitor: AudioInputMonitor) {
+    func updateFloatInputsWithAudio(smoothedVolumes: [Int: Float]) {
         var changedInputNames: [String] = []
 
-        
-        for (index, input) in inputs.enumerated() where input.type == .float {
-            // Only update if the value actually changed significantly
-            // if abs(input.valueAsFloat() - audioValue) > 0.001 {
-            if true {
-                changedInputNames.append(input.name)
-            }
+
+        for (_, input) in inputs.enumerated() where input.type == .float {
+            changedInputNames.append(input.name)
         }
-        
-        for (index, input) in inputs.enumerated() where input.type == .lines {
-            // Only update if the value actually changed significantly
-            // if abs(input.valueAsFloat() - audioValue) > 0.001 {
-            if true {
-                changedInputNames.append(input.name)
-            }
+
+        for (_, input) in inputs.enumerated() where input.type == .lines {
+            changedInputNames.append(input.name)
         }
-        
+
         // Batch notify all changes at once
         if !changedInputNames.isEmpty {
-            setChangedInputs(names: changedInputNames) // New batched method
+            setChangedInputs(names: changedInputNames)
         }
-        
-        
+
+
         let currentTime = Date().timeIntervalSince1970
-        
+
         var smoothedVolumesAsDouble: [Int: Double] = [:]
-        for (index, input) in audioMonitor.smoothedVolumes.enumerated() {
+        for (_, input) in smoothedVolumes.enumerated() {
             smoothedVolumesAsDouble[input.key] = Double(input.value)
         }
-        
+
         let dataPoint = AudioDataPoint(
             timestamp: currentTime,
             rawVolume: Double(self.audioSignalRaw),
@@ -226,9 +216,9 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
             smoothedProcessedVolumes: self.audioSignalsSmoothedProcessed
         )
         self.historyData.append(dataPoint)
-        
+
         let cutoffTime = currentTime - self.maxAudioHistoryDuration
-        
+
         // OPTIMIZATION: Efficiently remove old history
         // Instead of iterating the whole array with removeAll, we find the count of old items and remove them in batch.
         // Since the array is sorted by time, we only need to check from the start.
@@ -240,11 +230,11 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
                 break
             }
         }
-        
+
         if removeCount > 0 {
             self.historyData.removeFirst(removeCount)
         }
-        
+
         // Safety cap to prevent unbounded growth if timestamps drift
         if self.historyData.count > 4000 {
              let excess = self.historyData.count - 3600
@@ -316,6 +306,7 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
 
 extension GeometriesSceneBase {
     @MainActor func applyAudioTick(_ m: AudioSnapshot, using processor: EnvelopeProcessor) {
+        // Update audio signal properties
         audioSignal = m.smoothed
         audioSignalsSmoothed = m.smoothedPerStep
         audioSignalRaw = m.raw
@@ -326,8 +317,26 @@ extension GeometriesSceneBase {
         for (_, val) in audioSignalsSmoothed.enumerated() {
             audioSignalsSmoothedProcessed[val.key] = processor.process(Double(val.value))
         }
-        
-        
+
+        // Update statefulFloat inputs with audio-driven accumulation
+        for i in 0..<inputs.count {
+            if inputs[i].type == .statefulFloat {
+                let historicalAudioSignal = extractHistoricAudioValue(for: inputs[i])
+                if let floatValue = inputs[i].value as? Double {
+                    inputs[i].value = floatValue +
+                        inputs[i].tickValueAdjustment +
+                        inputs[i].tickValueAudioAdjustment *
+                        (historicalAudioSignal + inputs[i].tickValueAudioAdjustmentOffset)
+                }
+            }
+        }
+
+        // Mark changed inputs + record audio history
+        updateFloatInputsWithAudio(smoothedVolumes: m.smoothedPerStep)
+
+        // Regenerate geometries
+        setWrappedGeometries()
+
         frameStamp &+= 1
     }
 }
