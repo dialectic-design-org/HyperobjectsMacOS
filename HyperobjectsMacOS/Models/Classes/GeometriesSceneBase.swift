@@ -65,6 +65,20 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
 
     let renderBuffer = DoubleBuffer<RenderSnapshot>(RenderSnapshot())
 
+    private let _geometryGenerationRequested = Atomic<Bool>(value: false)
+
+    /// Called from the render thread. Dispatches geometry generation to main thread
+    /// if no generation is already pending. Uses fire-and-forget with backpressure.
+    func requestGeometryGeneration() {
+        guard !_geometryGenerationRequested.get() else { return }
+        _geometryGenerationRequested.set(true)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.setWrappedGeometries()
+            self._geometryGenerationRequested.set(false)
+        }
+    }
+
     private let _historyData = Atomic<[AudioDataPoint]>(value: [])
     var historyData: [AudioDataPoint] {
         get { _historyData.get() }
@@ -366,9 +380,6 @@ extension GeometriesSceneBase {
 
         // Mark changed inputs + record audio history
         updateFloatInputsWithAudio(smoothedVolumes: m.smoothedPerStep)
-
-        // Regenerate geometries
-        setWrappedGeometries()
 
         frameStamp &+= 1
     }

@@ -21,8 +21,7 @@ struct HyperobjectsMacOSApp: App {
     @StateObject private var audioMonitor = AudioInputMonitor()
     @State private var selectedFile: URL?
     @State private var isFilePickerPresented = false
-    @State private var appTime: Double = 0
-    @State private var timer: Timer?
+    @State private var jsTimer: DispatchSourceTimer?
     
     @State private var latestScript: String = ""
     private let timeBox: TimeBox
@@ -61,38 +60,41 @@ struct HyperobjectsMacOSApp: App {
                     }
                     
                     
-                    if timer == nil {
-                        let newTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { _ in
-                            appTime += 1.0 / 120.0
-                            timeBox.value = appTime
-                            // print("Script timer: runScriptOnFrameChange: \(renderConfigurations.runScriptOnFrameChange)")
+                    if jsTimer == nil {
+                        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInteractive))
+                        timer.schedule(deadline: .now(), repeating: 1.0 / 120.0)
+                        timer.setEventHandler { [weak sceneManager, weak jsEngine] in
+                            guard let sceneManager, let jsEngine else { return }
+
+                            timeBox.value += 1.0 / 120.0
+
                             if renderConfigurations.runScriptOnFrameChange && latestScript.isEmpty == false {
-                                
-                                var inputState = prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor)
-                                
+                                // Snapshot input state on main thread
+                                var inputState: [String: StateValue]!
+                                DispatchQueue.main.sync {
+                                    inputState = prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor)
+                                }
+
                                 _ = jsEngine.executeScript(latestScript, inputState: inputState)
-                                
+
                                 DispatchQueue.main.async {
                                     let outputState = jsEngine.outputState
-                                    // print("output state: \(outputState)")
-                                    // Check if outputState contains a key called RESET
                                     if outputState.keys.contains("RESET") {
-                                        print("Resetting scene to initial state")
                                         sceneManager.currentScene.resetAllInputsToInitialValues()
                                     }
                                     applyScriptOutput(inputState: inputState, outputState: outputState, sceneManager: sceneManager)
                                 }
                             }
                         }
-                        RunLoop.current.add(newTimer, forMode: .common)
-                        timer = newTimer
+                        timer.resume()
+                        jsTimer = timer
                     }
                     
                     sceneManager.currentScene.setWrappedGeometries()
                 }
                 .onDisappear {
-                    timer?.invalidate()
-                    timer = nil
+                    jsTimer?.cancel()
+                    jsTimer = nil
                 }
         }// Open it explicitly at launch (and keep a menu command for manual reopen)
         .commands {

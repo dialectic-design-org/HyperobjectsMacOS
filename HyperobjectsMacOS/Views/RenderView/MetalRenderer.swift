@@ -401,6 +401,9 @@ class MetalRenderer {
             return
         }
 
+        // Request fresh geometry generation for the next frame
+        scene.requestGeometryGeneration()
+
         let snapshot = scene.renderBuffer.consume()
 
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
