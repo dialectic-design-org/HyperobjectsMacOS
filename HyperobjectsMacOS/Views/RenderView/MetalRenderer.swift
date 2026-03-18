@@ -110,6 +110,18 @@ private func safeThreadsPerThreadgroup(_ pso: MTLComputePipelineState,
 }
 
 
+private struct FrameResources {
+    var linesBuffer: MTLBuffer
+    var quadraticCurvesBuffer: MTLBuffer
+    var cubicCurvesBuffer: MTLBuffer
+    var linearLinesScreenSpaceBuffer: MTLBuffer
+    var randomValuesBuffer: MTLBuffer
+    var binCounts: MTLBuffer
+    var binOffsets: MTLBuffer
+    var binList: MTLBuffer
+    var segAllocBuffer: MTLBuffer
+}
+
 class MetalRenderer {
     let device: MTLDevice
     let commandQueue: MTLCommandQueue
@@ -127,21 +139,15 @@ class MetalRenderer {
     var lineRenderTextureA: MTLTexture!
     var lineRenderTextureB: MTLTexture!
     let maxViewSize = 4096 * 2
-    
+
     // DYNAMIC BUFFER SIZING
     private var lineCount: Int = 10000
-    
-    private var linesBuffer: MTLBuffer!
-    private var quadraticCurvesBuffer: MTLBuffer!
-    private var cubicCurvesBuffer: MTLBuffer!
-    
-    private var linearLinesScreenSpaceBuffer: MTLBuffer!
-    private var randomValuesBuffer: MTLBuffer!
-    
-    private var binCounts: MTLBuffer!
-    private var binOffsets: MTLBuffer!
-    private var binList: MTLBuffer!
-    private var segAllocBuffer: MTLBuffer!
+
+    // TRIPLE BUFFERING
+    private let maxFramesInFlight = 3
+    private let frameSemaphore = DispatchSemaphore(value: 3)
+    private var frameResourceRing: [FrameResources] = []
+    private var currentFrameIndex = 0
     
     
     
@@ -184,38 +190,48 @@ class MetalRenderer {
         let binCols = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
         let binRows = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
         let totalBins = binCols * binRows
-        
-        // Re-allocate buffers with current lineCount
-        linesBuffer = device.makeBuffer(length: MemoryLayout<LinearSeg3D>.stride * lineCount, options: .storageModeShared)!
-        quadraticCurvesBuffer = device.makeBuffer(length: MemoryLayout<QuadraticSeg3D>.stride * lineCount, options: .storageModeShared)!
-        cubicCurvesBuffer = device.makeBuffer(length: MemoryLayout<CubicSeg3D>.stride * lineCount, options: .storageModeShared)!
-        linearLinesScreenSpaceBuffer = device.makeBuffer(length: MemoryLayout<LinearSegScreenSpace>.stride * lineCount, options: .storageModeShared)!
-        
-        // Bin list needs to hold potentially all lines in each bin (worst case) or a shared pool.
-        // The current implementation seems to use a fixed stride per bin: `offset += lineCount`.
-        // This implies binList size = lineCount * totalBins. This is huge but that's how it's written.
-        binList = device.makeBuffer(length: MemoryLayout<UInt32>.stride * lineCount * totalBins, options: .storageModeShared)!
-        
-        segAllocBuffer = device.makeBuffer(length: MemoryLayout<SegAlloc>.stride, options: .storageModeShared)!
-        
-        print("Allocated buffers for \(lineCount) lines.")
+
+        frameResourceRing = (0..<maxFramesInFlight).map { _ in
+            FrameResources(
+                linesBuffer: device.makeBuffer(length: MemoryLayout<LinearSeg3D>.stride * lineCount, options: .storageModeShared)!,
+                quadraticCurvesBuffer: device.makeBuffer(length: MemoryLayout<QuadraticSeg3D>.stride * lineCount, options: .storageModeShared)!,
+                cubicCurvesBuffer: device.makeBuffer(length: MemoryLayout<CubicSeg3D>.stride * lineCount, options: .storageModeShared)!,
+                linearLinesScreenSpaceBuffer: device.makeBuffer(length: MemoryLayout<LinearSegScreenSpace>.stride * lineCount, options: .storageModeShared)!,
+                randomValuesBuffer: device.makeBuffer(length: MemoryLayout<SIMD4<Float>>.stride * 1000, options: .storageModeShared)!,
+                binCounts: device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!,
+                binOffsets: device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!,
+                binList: device.makeBuffer(length: MemoryLayout<UInt32>.stride * lineCount * totalBins, options: .storageModeShared)!,
+                segAllocBuffer: device.makeBuffer(length: MemoryLayout<SegAlloc>.stride, options: .storageModeShared)!
+            )
+        }
+        print("Allocated triple-buffered resources for \(lineCount) lines.")
     }
     
     private func updateBufferCapacity(required: Int) {
         let minCapacity = 10000
-        
+
         if required > lineCount {
             let oldLineCount = lineCount
-            // Geometric growth
             lineCount = max(required, lineCount * 2)
             print("⚠️ Growing buffers: \(oldLineCount) -> \(lineCount) lines (Required: \(required))")
+            drainFrameSemaphore()
             createLineBuffers()
         } else if required < lineCount / 4 && lineCount > minCapacity {
             let oldLineCount = lineCount
-            // Shrink, but keep some headroom
             lineCount = max(minCapacity, required * 2)
             print("♻️ Shrinking buffers: \(oldLineCount) -> \(lineCount) lines (Required: \(required))")
+            drainFrameSemaphore()
             createLineBuffers()
+        }
+    }
+
+    /// Wait for all in-flight frames to complete before resizing buffers
+    private func drainFrameSemaphore() {
+        for _ in 0..<maxFramesInFlight {
+            frameSemaphore.wait()
+        }
+        for _ in 0..<maxFramesInFlight {
+            frameSemaphore.signal()
         }
     }
     
@@ -256,18 +272,8 @@ class MetalRenderer {
         uniformBuffer = device.makeBuffer(bytes: uniforms,
                                          length: MemoryLayout<VertexUniforms>.size,
                                          options: .storageModeShared)
-        
-        
-        let binCols = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
-        let binRows = (maxViewSize + Int(BIN_SIZE) - 1) / Int(BIN_SIZE)
-        let totalBins = binCols * binRows
-        
-        binCounts = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
-        binOffsets = device.makeBuffer(length: MemoryLayout<UInt32>.stride * totalBins, options: .storageModeShared)!
-        
-        randomValuesBuffer = device.makeBuffer(length:MemoryLayout<SIMD4<Float>>.stride * Int(1000), options: .storageModeShared)!
-        
-        // Create the line-dependent buffers
+
+        // Create triple-buffered line resources
         createLineBuffers()
         
     }
@@ -381,23 +387,37 @@ class MetalRenderer {
     }
     
     func render(drawable: CAMetalDrawable) {
+        // Block if 3 frames are already in flight
+        frameSemaphore.wait()
+
         guard let renderPipelineState = renderPipelineState,
               let computeToRenderPipelineState = computeToRenderPipelineState,
               let vertexBuffer = vertexBuffer,
               let indexBuffer = indexBuffer,
               let uniformBuffer = uniformBuffer,
-              let scene = currentScene else { return }
+              !frameResourceRing.isEmpty,
+              let scene = currentScene else {
+            frameSemaphore.signal()
+            return
+        }
 
         let snapshot = scene.renderBuffer.consume()
 
-        guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            frameSemaphore.signal()
+            return
+        }
 
         // Get effective overrides (merged geometry-time + render-time)
         let overrides = getEffectiveOverrides(base: snapshot.renderOverrides)
 
-        // DYNAMIC BUFFER SIZING: Ensure we have enough space
+        // DYNAMIC BUFFER SIZING: Ensure we have enough space (must happen before frame selection)
         let totalLineCount = snapshot.geometries.count
         updateBufferCapacity(required: totalLineCount)
+
+        // Select this frame's buffer set (after potential resize)
+        let frame = frameResourceRing[currentFrameIndex % maxFramesInFlight]
+        currentFrameIndex += 1
         
         drawCounter += 1
         
@@ -414,23 +434,23 @@ class MetalRenderer {
         
         var testPoints: [SIMD3<Float>] = []
         
-        let linesPtr = linesBuffer.contents().bindMemory(to: LinearSeg3D.self, capacity: lineCount)
-        
-        let quadraticCurvesPtr = quadraticCurvesBuffer.contents().bindMemory(to: QuadraticSeg3D.self, capacity: lineCount)
-        
-        let cubicCurvesPtr = cubicCurvesBuffer.contents().bindMemory(to: CubicSeg3D.self, capacity: lineCount)
-        
-        let randomValuesPtr = randomValuesBuffer.contents().bindMemory(to: SIMD4<Float>.self, capacity: Int(1000))
-        
+        let linesPtr = frame.linesBuffer.contents().bindMemory(to: LinearSeg3D.self, capacity: lineCount)
+
+        let quadraticCurvesPtr = frame.quadraticCurvesBuffer.contents().bindMemory(to: QuadraticSeg3D.self, capacity: lineCount)
+
+        let cubicCurvesPtr = frame.cubicCurvesBuffer.contents().bindMemory(to: CubicSeg3D.self, capacity: lineCount)
+
+        let randomValuesPtr = frame.randomValuesBuffer.contents().bindMemory(to: SIMD4<Float>.self, capacity: Int(1000))
+
         // Wipe all lines in the buffer so new ones can be set.
-        let byteCount = linesBuffer.length
-        memset(linesBuffer.contents(), 0, byteCount)
-        
-        let byteCountQuadratic = quadraticCurvesBuffer.length
-        memset(quadraticCurvesBuffer.contents(), 0, byteCountQuadratic)
-        
-        let byteCountCubic = cubicCurvesBuffer.length
-        memset(cubicCurvesBuffer.contents(), 0, byteCountCubic)
+        let byteCount = frame.linesBuffer.length
+        memset(frame.linesBuffer.contents(), 0, byteCount)
+
+        let byteCountQuadratic = frame.quadraticCurvesBuffer.length
+        memset(frame.quadraticCurvesBuffer.contents(), 0, byteCountQuadratic)
+
+        let byteCountCubic = frame.cubicCurvesBuffer.length
+        memset(frame.cubicCurvesBuffer.contents(), 0, byteCountCubic)
         
         
         var gIndex: Int = 0
@@ -546,8 +566,8 @@ class MetalRenderer {
             print("View size: \(viewW)x\(viewH), Bin grid: \(binCols)x\(binRows)")
         }
         
-        let binCountsPtr = binCounts.contents().bindMemory(to: UInt32.self, capacity: totalBins)
-        let binOffsetsPtr = binOffsets.contents().bindMemory(to: UInt32.self, capacity: totalBins)
+        let binCountsPtr = frame.binCounts.contents().bindMemory(to: UInt32.self, capacity: totalBins)
+        let binOffsetsPtr = frame.binOffsets.contents().bindMemory(to: UInt32.self, capacity: totalBins)
         var offset: UInt32 = 0
         for i in 0..<totalBins {
             binCountsPtr[i] = 0
@@ -666,23 +686,23 @@ class MetalRenderer {
         
         
         var segAlloc = SegAlloc(next: 0, capacity: uint32(lineCount));
-        var segAllocPtr = segAllocBuffer.contents().bindMemory(to: SegAlloc.self, capacity: Int(1))
+        var segAllocPtr = frame.segAllocBuffer.contents().bindMemory(to: SegAlloc.self, capacity: Int(1))
         // Reset to 0 for each frame
         segAllocPtr[0] = segAlloc
         
         if renderSDFLines {
             if let transformLinearEncoder = commandBuffer.makeComputeCommandEncoder() {
                 transformLinearEncoder.setComputePipelineState(transformLinear!)
-                transformLinearEncoder.setBuffer(linesBuffer,      offset:0, index:0)
+                transformLinearEncoder.setBuffer(frame.linesBuffer,      offset:0, index:0)
                 transformLinearEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
                 transformLinearEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:2)
-                transformLinearEncoder.setBuffer(linearLinesScreenSpaceBuffer,      offset:0, index:3)
-                transformLinearEncoder.setBuffer(binCounts,     offset:0, index:4)
-                transformLinearEncoder.setBuffer(binOffsets,    offset:0, index:5)
-                transformLinearEncoder.setBuffer(binList,       offset:0, index:6)
+                transformLinearEncoder.setBuffer(frame.linearLinesScreenSpaceBuffer,      offset:0, index:3)
+                transformLinearEncoder.setBuffer(frame.binCounts,     offset:0, index:4)
+                transformLinearEncoder.setBuffer(frame.binOffsets,    offset:0, index:5)
+                transformLinearEncoder.setBuffer(frame.binList,       offset:0, index:6)
                 transformLinearEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
-                transformLinearEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8)
-                transformLinearEncoder.setBuffer(randomValuesBuffer, offset: 0, index: 9)
+                transformLinearEncoder.setBuffer(frame.segAllocBuffer, offset: 0, index: 8)
+                transformLinearEncoder.setBuffer(frame.randomValuesBuffer, offset: 0, index: 9)
                 
                 let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
                                  height: 1,
@@ -695,16 +715,16 @@ class MetalRenderer {
             
             if let transformQuadraticEncoder = commandBuffer.makeComputeCommandEncoder() {
                 transformQuadraticEncoder.setComputePipelineState(transformQuad!)
-                transformQuadraticEncoder.setBuffer(quadraticCurvesBuffer, offset: 0, index: 0)
+                transformQuadraticEncoder.setBuffer(frame.quadraticCurvesBuffer, offset: 0, index: 0)
                 transformQuadraticEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
                 transformQuadraticEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:2)
-                transformQuadraticEncoder.setBuffer(linearLinesScreenSpaceBuffer,      offset:0, index:3)
-                transformQuadraticEncoder.setBuffer(binCounts,     offset:0, index:4)
-                transformQuadraticEncoder.setBuffer(binOffsets,    offset:0, index:5)
-                transformQuadraticEncoder.setBuffer(binList,       offset:0, index:6)
+                transformQuadraticEncoder.setBuffer(frame.linearLinesScreenSpaceBuffer,      offset:0, index:3)
+                transformQuadraticEncoder.setBuffer(frame.binCounts,     offset:0, index:4)
+                transformQuadraticEncoder.setBuffer(frame.binOffsets,    offset:0, index:5)
+                transformQuadraticEncoder.setBuffer(frame.binList,       offset:0, index:6)
                 transformQuadraticEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
-                transformQuadraticEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8)
-                transformQuadraticEncoder.setBuffer(randomValuesBuffer, offset: 0, index: 9)
+                transformQuadraticEncoder.setBuffer(frame.segAllocBuffer, offset: 0, index: 8)
+                transformQuadraticEncoder.setBuffer(frame.randomValuesBuffer, offset: 0, index: 9)
                 
                 let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
                                  height: 1,
@@ -717,16 +737,16 @@ class MetalRenderer {
             
             if let transformCubicEncoder = commandBuffer.makeComputeCommandEncoder() {
                 transformCubicEncoder.setComputePipelineState(transformCubic!)
-                transformCubicEncoder.setBuffer(cubicCurvesBuffer, offset: 0, index: 0)
+                transformCubicEncoder.setBuffer(frame.cubicCurvesBuffer, offset: 0, index: 0)
                 transformCubicEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
                 transformCubicEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:2)
-                transformCubicEncoder.setBuffer(linearLinesScreenSpaceBuffer,      offset:0, index:3)
-                transformCubicEncoder.setBuffer(binCounts,     offset:0, index:4)
-                transformCubicEncoder.setBuffer(binOffsets,    offset:0, index:5)
-                transformCubicEncoder.setBuffer(binList,       offset:0, index:6)
+                transformCubicEncoder.setBuffer(frame.linearLinesScreenSpaceBuffer,      offset:0, index:3)
+                transformCubicEncoder.setBuffer(frame.binCounts,     offset:0, index:4)
+                transformCubicEncoder.setBuffer(frame.binOffsets,    offset:0, index:5)
+                transformCubicEncoder.setBuffer(frame.binList,       offset:0, index:6)
                 transformCubicEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
-                transformCubicEncoder.setBuffer(segAllocBuffer, offset: 0, index: 8)
-                transformCubicEncoder.setBuffer(randomValuesBuffer, offset: 0, index: 9)
+                transformCubicEncoder.setBuffer(frame.segAllocBuffer, offset: 0, index: 8)
+                transformCubicEncoder.setBuffer(frame.randomValuesBuffer, offset: 0, index: 9)
                 
                 let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
                                  height: 1,
@@ -743,12 +763,12 @@ class MetalRenderer {
             if let drawLinesEncoder = commandBuffer.makeComputeCommandEncoder() {
                 drawLinesEncoder.setComputePipelineState(renderPSO!)
                 drawLinesEncoder.setTexture(writeTexture, index: 0)
-                drawLinesEncoder.setBuffer(linearLinesScreenSpaceBuffer,      offset:0, index:0)
-                drawLinesEncoder.setBuffer(binCounts,     offset:0, index:1)
-                drawLinesEncoder.setBuffer(binOffsets,    offset:0, index:2)
-                drawLinesEncoder.setBuffer(binList,       offset:0, index:3)
+                drawLinesEncoder.setBuffer(frame.linearLinesScreenSpaceBuffer,      offset:0, index:0)
+                drawLinesEncoder.setBuffer(frame.binCounts,     offset:0, index:1)
+                drawLinesEncoder.setBuffer(frame.binOffsets,    offset:0, index:2)
+                drawLinesEncoder.setBuffer(frame.binList,       offset:0, index:3)
                 drawLinesEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:4)
-                drawLinesEncoder.setBuffer(randomValuesBuffer, offset: 0, index: 5)
+                drawLinesEncoder.setBuffer(frame.randomValuesBuffer, offset: 0, index: 5)
                 
                 let w  = renderPSO!.threadExecutionWidth
                 let h  = renderPSO!.maxTotalThreadsPerThreadgroup / w
@@ -774,7 +794,10 @@ class MetalRenderer {
         computeToRenderRenderPassDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)
         // computeToRenderRenderPassDescriptor.colorAttachments[0].storeAction = .store
         
-        guard let computeToRenderRenderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: computeToRenderRenderPassDescriptor) else { return }
+        guard let computeToRenderRenderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: computeToRenderRenderPassDescriptor) else {
+            frameSemaphore.signal()
+            return
+        }
         
         computeToRenderRenderEncoder.setRenderPipelineState(computeToRenderPipelineState)
         computeToRenderRenderEncoder.setFragmentTexture(readTexture, index: 0)
@@ -810,7 +833,10 @@ class MetalRenderer {
         
         
         
-        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
+        guard let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+            frameSemaphore.signal()
+            return
+        }
         
         renderEncoder.setRenderPipelineState(renderPipelineState)
 
@@ -854,7 +880,10 @@ class MetalRenderer {
             bytes: testPoints,
             length: testPoints.count * MemoryLayout<SIMD3<Float>>.stride,
             options: []
-        ) else { return }
+        ) else {
+            frameSemaphore.signal()
+            return
+        }
         
         
         
@@ -882,8 +911,10 @@ class MetalRenderer {
         }
         
         renderEncoder.endEncoding()
+        commandBuffer.addCompletedHandler { [weak self] _ in
+            self?.frameSemaphore.signal()
+        }
         commandBuffer.present(drawable)
         commandBuffer.commit()
-        commandBuffer.waitUntilCompleted()
     }
 }
