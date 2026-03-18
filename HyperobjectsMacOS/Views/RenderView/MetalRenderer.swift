@@ -442,15 +442,6 @@ class MetalRenderer {
 
         let randomValuesPtr = frame.randomValuesBuffer.contents().bindMemory(to: SIMD4<Float>.self, capacity: Int(1000))
 
-        // Wipe all lines in the buffer so new ones can be set.
-        let byteCount = frame.linesBuffer.length
-        memset(frame.linesBuffer.contents(), 0, byteCount)
-
-        let byteCountQuadratic = frame.quadraticCurvesBuffer.length
-        memset(frame.quadraticCurvesBuffer.contents(), 0, byteCountQuadratic)
-
-        let byteCountCubic = frame.cubicCurvesBuffer.length
-        memset(frame.cubicCurvesBuffer.contents(), 0, byteCountCubic)
         
         
         var gIndex: Int = 0
@@ -682,7 +673,9 @@ class MetalRenderer {
         
         let renderSDFLines = renderConfigs?.renderSDFLines ?? false
         
-        var segCount: Int32 = Int32(gIndex)
+        var linearCount: Int32 = Int32(linearLinesIndex)
+        var quadraticCount: Int32 = Int32(quadraticLinesIndex)
+        var cubicCount: Int32 = Int32(cubicLinesIndex)
         
         
         var segAlloc = SegAlloc(next: 0, capacity: uint32(lineCount));
@@ -691,7 +684,7 @@ class MetalRenderer {
         segAllocPtr[0] = segAlloc
         
         if renderSDFLines {
-            if let transformLinearEncoder = commandBuffer.makeComputeCommandEncoder() {
+            if linearLinesIndex > 0, let transformLinearEncoder = commandBuffer.makeComputeCommandEncoder() {
                 transformLinearEncoder.setComputePipelineState(transformLinear!)
                 transformLinearEncoder.setBuffer(frame.linesBuffer,      offset:0, index:0)
                 transformLinearEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
@@ -700,20 +693,20 @@ class MetalRenderer {
                 transformLinearEncoder.setBuffer(frame.binCounts,     offset:0, index:4)
                 transformLinearEncoder.setBuffer(frame.binOffsets,    offset:0, index:5)
                 transformLinearEncoder.setBuffer(frame.binList,       offset:0, index:6)
-                transformLinearEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
+                transformLinearEncoder.setBytes(&linearCount,       length: MemoryLayout<Int32>.stride, index:7)
                 transformLinearEncoder.setBuffer(frame.segAllocBuffer, offset: 0, index: 8)
                 transformLinearEncoder.setBuffer(frame.randomValuesBuffer, offset: 0, index: 9)
-                
+
                 let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
                                  height: 1,
                                  depth: 1)
-                
-                transformLinearEncoder.dispatchThreads(MTLSize(width: lineCount, height: 1, depth: 1),
+
+                transformLinearEncoder.dispatchThreads(MTLSize(width: linearLinesIndex, height: 1, depth: 1),
                                                  threadsPerThreadgroup: tg)
-                transformLinearEncoder.endEncoding()          // ← guarantees completion before the next encoder
+                transformLinearEncoder.endEncoding()
             }
-            
-            if let transformQuadraticEncoder = commandBuffer.makeComputeCommandEncoder() {
+
+            if quadraticLinesIndex > 0, let transformQuadraticEncoder = commandBuffer.makeComputeCommandEncoder() {
                 transformQuadraticEncoder.setComputePipelineState(transformQuad!)
                 transformQuadraticEncoder.setBuffer(frame.quadraticCurvesBuffer, offset: 0, index: 0)
                 transformQuadraticEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
@@ -722,20 +715,20 @@ class MetalRenderer {
                 transformQuadraticEncoder.setBuffer(frame.binCounts,     offset:0, index:4)
                 transformQuadraticEncoder.setBuffer(frame.binOffsets,    offset:0, index:5)
                 transformQuadraticEncoder.setBuffer(frame.binList,       offset:0, index:6)
-                transformQuadraticEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
+                transformQuadraticEncoder.setBytes(&quadraticCount,       length: MemoryLayout<Int32>.stride, index:7)
                 transformQuadraticEncoder.setBuffer(frame.segAllocBuffer, offset: 0, index: 8)
                 transformQuadraticEncoder.setBuffer(frame.randomValuesBuffer, offset: 0, index: 9)
-                
+
                 let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
                                  height: 1,
                                  depth: 1)
-                
-                transformQuadraticEncoder.dispatchThreads(MTLSize(width: lineCount, height: 1, depth: 1),
+
+                transformQuadraticEncoder.dispatchThreads(MTLSize(width: quadraticLinesIndex, height: 1, depth: 1),
                                                  threadsPerThreadgroup: tg)
-                transformQuadraticEncoder.endEncoding()          // ← guarantees completion before the next encoder
+                transformQuadraticEncoder.endEncoding()
             }
-            
-            if let transformCubicEncoder = commandBuffer.makeComputeCommandEncoder() {
+
+            if cubicLinesIndex > 0, let transformCubicEncoder = commandBuffer.makeComputeCommandEncoder() {
                 transformCubicEncoder.setComputePipelineState(transformCubic!)
                 transformCubicEncoder.setBuffer(frame.cubicCurvesBuffer, offset: 0, index: 0)
                 transformCubicEncoder.setBytes(&MVP,           length:MemoryLayout<float4x4>.stride, index:1)
@@ -744,17 +737,17 @@ class MetalRenderer {
                 transformCubicEncoder.setBuffer(frame.binCounts,     offset:0, index:4)
                 transformCubicEncoder.setBuffer(frame.binOffsets,    offset:0, index:5)
                 transformCubicEncoder.setBuffer(frame.binList,       offset:0, index:6)
-                transformCubicEncoder.setBytes(&segCount,       length: MemoryLayout<Int32>.stride, index:7)
+                transformCubicEncoder.setBytes(&cubicCount,       length: MemoryLayout<Int32>.stride, index:7)
                 transformCubicEncoder.setBuffer(frame.segAllocBuffer, offset: 0, index: 8)
                 transformCubicEncoder.setBuffer(frame.randomValuesBuffer, offset: 0, index: 9)
-                
+
                 let tg = MTLSize(width: transformLinear!.threadExecutionWidth,
                                  height: 1,
                                  depth: 1)
-                
-                transformCubicEncoder.dispatchThreads(MTLSize(width: lineCount, height: 1, depth: 1),
+
+                transformCubicEncoder.dispatchThreads(MTLSize(width: cubicLinesIndex, height: 1, depth: 1),
                                                  threadsPerThreadgroup: tg)
-                transformCubicEncoder.endEncoding()          // ← guarantees completion before the next encoder
+                transformCubicEncoder.endEncoding()
             }
             
             
