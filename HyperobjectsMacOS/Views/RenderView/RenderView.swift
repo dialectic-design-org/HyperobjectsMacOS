@@ -19,6 +19,8 @@ struct RenderView: View {
         ZStack(alignment: .topLeading) {
             MetalView(
                 rendererState: rendererState,
+                currentScene: currentScene,
+                renderConfigs: renderConfigs,
                 resolutionMode: $resolutionMode,
                 resolution: $resolution
             ).frame(minWidth: 300, minHeight: 300)

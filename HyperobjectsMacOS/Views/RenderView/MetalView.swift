@@ -11,8 +11,8 @@ import MetalKit
 
 struct MetalView: NSViewRepresentable {
     @ObservedObject var rendererState: RendererState
-    @EnvironmentObject var currentScene: GeometriesSceneBase
-    @EnvironmentObject var renderConfigs: RenderConfigurations
+    let currentScene: GeometriesSceneBase
+    let renderConfigs: RenderConfigurations
     @Binding var resolutionMode: ResolutionMode
     @Binding var resolution: CGSize // Bind the resolution to a parent view
     
@@ -42,8 +42,11 @@ struct MetalView: NSViewRepresentable {
     }
     
     func updateNSView(_ view: MTKView, context: Context) {
-        // print("metalView updateNSView current scene: \(currentScene.name)")
-        context.coordinator.renderer?.updateCurrentScene(currentScene)
+        // Only update if the scene object itself changed (e.g. scene switch),
+        // not on every @Published property change.
+        if context.coordinator.renderer?.currentScene !== currentScene {
+            context.coordinator.renderer?.updateCurrentScene(currentScene)
+        }
     }
     
     func makeCoordinator() -> Coordinator {
