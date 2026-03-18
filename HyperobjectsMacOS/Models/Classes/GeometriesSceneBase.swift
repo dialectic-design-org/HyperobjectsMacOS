@@ -36,11 +36,7 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     @Published var inputGroups: [SceneInputGroup] = []
     @Published var geometryGenerators: [any GeometryGenerator]
     var changedInputs: Set<String> = []
-    private let _cachedGeometries = Atomic<[GeometryWrapped]>(value: [])
-    var cachedGeometries: [GeometryWrapped] {
-        get { _cachedGeometries.get() }
-        set { _cachedGeometries.set(newValue) }
-    }
+    var cachedGeometries: [GeometryWrapped] = []
     @Published var audioState = AudioState()
 
     var audioSignal: Float { audioState.signal }
@@ -65,11 +61,9 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     var geometryTimeOverride: GeometryTimeOverrideClosure?
     var renderTimeOverride: RenderTimeOverrideClosure?
 
-    private let _cachedRenderOverrides = Atomic<RenderConfigurationOverrides>(value: .none)
-    var cachedRenderOverrides: RenderConfigurationOverrides {
-        get { _cachedRenderOverrides.get() }
-        set { _cachedRenderOverrides.set(newValue) }
-    }
+    var cachedRenderOverrides: RenderConfigurationOverrides = .none
+
+    let renderBuffer = DoubleBuffer<RenderSnapshot>(RenderSnapshot())
 
     private let _historyData = Atomic<[AudioDataPoint]>(value: [])
     var historyData: [AudioDataPoint] {
@@ -318,6 +312,12 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         } else {
             cachedRenderOverrides = .none
         }
+
+        // Publish consistent snapshot for the render thread
+        renderBuffer.publish(RenderSnapshot(
+            geometries: cachedGeometries,
+            renderOverrides: cachedRenderOverrides
+        ))
     }
     
     func resetAllInputsToInitialValues() {

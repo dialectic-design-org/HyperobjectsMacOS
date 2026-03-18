@@ -47,10 +47,10 @@ extension MetalRenderer {
     }
 
     /// Gets effective overrides by merging geometry-time and render-time
-    func getEffectiveOverrides() -> RenderConfigurationOverrides {
+    func getEffectiveOverrides(base: RenderConfigurationOverrides) -> RenderConfigurationOverrides {
         guard let scene = currentScene else { return .none }
 
-        var combined = scene.cachedRenderOverrides
+        var combined = base
 
         if let renderTimeClosure = scene.renderTimeOverride {
             let context = scene.makeOverrideContext()
@@ -387,14 +387,16 @@ class MetalRenderer {
               let indexBuffer = indexBuffer,
               let uniformBuffer = uniformBuffer,
               let scene = currentScene else { return }
-        
+
+        let snapshot = scene.renderBuffer.consume()
+
         guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
 
         // Get effective overrides (merged geometry-time + render-time)
-        let overrides = getEffectiveOverrides()
+        let overrides = getEffectiveOverrides(base: snapshot.renderOverrides)
 
         // DYNAMIC BUFFER SIZING: Ensure we have enough space
-        let totalLineCount = scene.cachedGeometries.count
+        let totalLineCount = snapshot.geometries.count
         updateBufferCapacity(required: totalLineCount)
         
         drawCounter += 1
@@ -439,9 +441,9 @@ class MetalRenderer {
         var quadraticLinesIndex: Int = 0
         var cubicLinesIndex: Int = 0
         
-        for gWrapped in scene.cachedGeometries {
+        for gWrapped in snapshot.geometries {
             let geometry = gWrapped.geometry
-            geometriesTime = Float(gIndex) / Float(scene.cachedGeometries.count)
+            geometriesTime = Float(gIndex) / Float(snapshot.geometries.count)
             switch geometry.type {
             case .line:
                 if let lineGeometry = geometry as? Line {
