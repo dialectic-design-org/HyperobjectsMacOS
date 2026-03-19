@@ -119,6 +119,12 @@ class SwarmGenerator: CachedGeometryGenerator {
         let boidsClusterStartIndex = intFromInputs(inputs, name: "BoidsClusterStartNr")
         let boidsClusterEndIndex = intFromInputs(inputs, name: "BoidsClusterEndNr")
         
+        let showBoidsBodies = stringFromInputs(inputs, name: "BoidsBodies") == "SHOW"
+        let showPerceptionLines = stringFromInputs(inputs, name: "PerceptionLines") == "SHOW"
+        let showAllBoidsBounds = stringFromInputs(inputs, name: "AllBoidsBounds") == "SHOW"
+        let showBoidsClusterBounds = stringFromInputs(inputs, name: "BoidsClusterBounds") == "SHOW"
+        let showBoidsPairBounds = stringFromInputs(inputs, name: "BoidsPairBounds") == "SHOW"
+        
         
         let sceneRotationY = floatFromInputs(inputs, name: "Stateful_Rotation_X")
         let boundarySize = floatFromInputs(inputs, name: "BoundarySize")
@@ -353,7 +359,8 @@ class SwarmGenerator: CachedGeometryGenerator {
                 
                 
                 for i in agent.positionHistory.indices.dropFirst() {
-                    if i % 1 == 0 {
+                    let traceT = Float(i) / Float(agent.positionHistory.count - 1)
+                    if i % 1 == 0 && traceT < scene.val_f(name: "AllBoidsTraceLengthFactor", delay: Double(traceT) * 1000) {
                         let prevPos = agent.positionHistory[i - 1]
                         let pos = agent.positionHistory[i]
                         let traceT = Float(i) / Float(agent.positionHistory.count - 1)
@@ -412,6 +419,36 @@ class SwarmGenerator: CachedGeometryGenerator {
             lines.append(perceptionLine)
         }
         
+        // Bounds
+        
+        // All boids bounds
+        
+        let allBoidIDs: [Int] = Array(0..<sim.agents.count)
+        var allBoidsBoundsLines = sim.boundsAsBoxLines(ids: allBoidIDs, padding: 0.0)
+        
+        for i in allBoidsBoundsLines.indices {
+            allBoidsBoundsLines[i] = allBoidsBoundsLines[i].applyMatrix(outputScale)
+        }
+        
+        lines.append(contentsOf: allBoidsBoundsLines)
+
+        // Boids pair bounds
+        let pairIDs = [boidPairAIndex, boidPairBIndex]
+        var pairBoundsLines = sim.boundsAsBoxLines(ids: pairIDs, padding: 0.0)
+        for i in pairBoundsLines.indices {
+            pairBoundsLines[i] = pairBoundsLines[i].applyMatrix(outputScale)
+        }
+        lines.append(contentsOf: pairBoundsLines)
+
+        // Boids cluster bounds
+        let clusterIDs = Array(boidsClusterStartIndex...boidsClusterEndIndex)
+        var clusterBoundsLines = sim.boundsAsBoxLines(ids: clusterIDs, padding: 0.0)
+        for i in clusterBoundsLines.indices {
+            clusterBoundsLines[i] = clusterBoundsLines[i].applyMatrix(outputScale)
+        }
+        lines.append(contentsOf: clusterBoundsLines)
+
+        // Selected boid lines to all boids bounding box
         
         // Camera modes
         // 1: "world_center" - Center on world

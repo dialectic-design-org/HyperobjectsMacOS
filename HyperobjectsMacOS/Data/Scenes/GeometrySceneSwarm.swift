@@ -13,6 +13,12 @@ func generateGeometrySceneSwarm() -> GeometriesSceneBase {
         name: "Swarm Scene",
         inputs: [
             SceneInput(name: "BoidsCount", type: .integer, value: 80, range: 1...200),
+
+            SceneInput(name: "BoidsBodies", type: .string, value: "SHOW", presetValues: ["SHOW":"SHOW", "HIDE":"HIDE"]),
+            SceneInput(name: "PerceptionLines", type: .string, value: "HIDE", presetValues: ["SHOW":"SHOW", "HIDE":"HIDE"]),
+            SceneInput(name: "AllBoidsBounds", type: .string, value: "HIDE", presetValues: ["SHOW":"SHOW", "HIDE":"HIDE"]),
+            SceneInput(name: "BoidsPairBounds", type: .string, value: "HIDE", presetValues: ["SHOW":"SHOW", "HIDE":"HIDE"]),
+            SceneInput(name: "BoidsClusterBounds", type: .string, value: "HIDE", presetValues: ["SHOW":"SHOW", "HIDE":"HIDE"]),
             
             SceneInput(name: "SelectedBoidIndex", type: .integer, value: 0, range: 1...200),
             SceneInput(name: "BoidPairAIndex", type: .integer, value: 1, range: 1...200),
@@ -20,6 +26,7 @@ func generateGeometrySceneSwarm() -> GeometriesSceneBase {
             SceneInput(name: "BoidsClusterStartNr", type: .integer, value: 10, range: 1...200),
             SceneInput(name: "BoidsClusterEndNr", type: .integer, value: 30, range: 1...200),
             
+            SceneInput(name: "BoundsPadding", type: .float, value: 0.05, range: 0.0...5.0),
 
             SceneInput(name: "BoidsTraceInterval", type: .integer, value: 50, range: 1...200),
 
@@ -69,6 +76,9 @@ func generateGeometrySceneSwarm() -> GeometriesSceneBase {
             SceneInput(name: "AllBoidsTraceEndA", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
 
             SceneInput(name: "AllBoidsTraceLineWidth", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
+
+            SceneInput(name: "AllBoidsTraceLengthFactor", type: .float, value: 0.0, range: 0.0...1.0),
+            SceneInput(name: "AllBoidsTraceLengthFactorIndexDelay", type: .float, value: 0.0, range: 0.0...1.0),
             
             SceneInput(name: "BoidsOrganicR", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
             SceneInput(name: "BoidsOrganicG", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),

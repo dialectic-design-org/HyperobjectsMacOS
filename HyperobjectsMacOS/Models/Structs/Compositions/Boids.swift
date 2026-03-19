@@ -199,4 +199,50 @@ class FishSchoolSimulation {
             )
         }
     }
+
+    func bounds(ids: [Int], padding: Float) -> (min: SIMD3<Float>, max: SIMD3<Float>)? {
+        let selectedAgents = agents.filter { ids.contains($0.id) }
+        guard !selectedAgents.isEmpty else { return nil }
+        
+        var minPoint = SIMD3<Float>(Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude)
+        var maxPoint = SIMD3<Float>(-Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude)
+        
+        for agent in selectedAgents {
+            minPoint = min(minPoint, agent.position)
+            maxPoint = max(maxPoint, agent.position)
+        }
+        
+        // Add padding
+        let paddingVec = SIMD3<Float>(repeating: padding)
+        minPoint -= paddingVec
+        maxPoint += paddingVec
+        
+        return (min: minPoint, max: maxPoint)
+    }
+
+    // use Cube intermediary class to generate a box bounds
+    func boundsAsBoxLines(ids: [Int], padding: Float) -> [Line] {
+        guard let bounds = bounds(ids: ids, padding: padding) else { return [] }
+        let min = bounds.min
+        let max = bounds.max
+        
+        let corners = [
+            SIMD3<Float>(min.x, min.y, min.z),
+            SIMD3<Float>(max.x, min.y, min.z),
+            SIMD3<Float>(max.x, max.y, min.z),
+            SIMD3<Float>(min.x, max.y, min.z),
+            SIMD3<Float>(min.x, min.y, max.z),
+            SIMD3<Float>(max.x, min.y, max.z),
+            SIMD3<Float>(max.x, max.y, max.z),
+            SIMD3<Float>(min.x, max.y, max.z)
+        ]
+        
+        let edges = [
+            (0, 1), (1, 2), (2, 3), (3, 0), // bottom face
+            (4, 5), (5, 6), (6, 7), (7, 4), // top face
+            (0, 4), (1, 5), (2, 6), (3, 7)  // vertical edges
+        ]
+        
+        return edges.map { Line(startPoint: corners[$0.0], endPoint: corners[$0.1]) }
+    }
 }
