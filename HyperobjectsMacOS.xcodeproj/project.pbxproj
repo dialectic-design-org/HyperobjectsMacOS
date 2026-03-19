@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		3E74843F2F6B459D003120F9 /* Syphon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3E74843D2F6B4581003120F9 /* Syphon.framework */; };
+		3E7484402F6B459D003120F9 /* Syphon.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 3E74843D2F6B4581003120F9 /* Syphon.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		3E6C17E02CB9276400AA8991 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -23,10 +28,25 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		3E7484412F6B459D003120F9 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				3E7484402F6B459D003120F9 /* Syphon.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		3E6C17CE2CB9276300AA8991 /* HyperobjectsMacOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HyperobjectsMacOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3E6C17DF2CB9276400AA8991 /* HyperobjectsMacOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HyperobjectsMacOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3E6C17E92CB9276400AA8991 /* HyperobjectsMacOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HyperobjectsMacOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3E74843D2F6B4581003120F9 /* Syphon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Syphon.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +72,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3E74843F2F6B459D003120F9 /* Syphon.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,6 +96,7 @@
 		3E6C17C52CB9276300AA8991 = {
 			isa = PBXGroup;
 			children = (
+				3E74843D2F6B4581003120F9 /* Syphon.framework */,
 				3E6C17D02CB9276300AA8991 /* HyperobjectsMacOS */,
 				3E6C17E22CB9276400AA8991 /* HyperobjectsMacOSTests */,
 				3E6C17EC2CB9276400AA8991 /* HyperobjectsMacOSUITests */,
@@ -102,6 +124,7 @@
 				3E6C17CA2CB9276300AA8991 /* Sources */,
 				3E6C17CB2CB9276300AA8991 /* Frameworks */,
 				3E6C17CC2CB9276300AA8991 /* Resources */,
+				3E7484412F6B459D003120F9 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -195,6 +218,8 @@
 			);
 			mainGroup = 3E6C17C52CB9276300AA8991;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3E6C17CF2CB9276300AA8991 /* Products */;
 			projectDirPath = "";
@@ -411,6 +436,10 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "using for visualisation";
@@ -451,6 +480,10 @@
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "using for visualisation";

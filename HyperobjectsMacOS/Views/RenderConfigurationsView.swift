@@ -10,6 +10,7 @@ import SwiftUI
 struct RenderConfigurationsView: View {
     @EnvironmentObject var sceneManager: SceneManager
     @EnvironmentObject var renderConfigurations: RenderConfigurations
+    @EnvironmentObject var videoStreamManager: VideoStreamManager
     
     @State private var camDistance: Float = 5.0
     
@@ -201,6 +202,24 @@ struct RenderConfigurationsView: View {
                         }
                     }
                 }
+
+                Divider().padding(.vertical, 8)
+
+                // Video Output
+                Text("Video Output").font(.headline)
+
+                Toggle("Syphon Output", isOn: $videoStreamManager.syphonEnabled)
+                    .onChange(of: videoStreamManager.syphonEnabled) { _, enabled in
+                        if enabled {
+                            videoStreamManager.startSyphon()
+                        } else {
+                            videoStreamManager.stopSyphon()
+                        }
+                    }
+
+                Toggle("NDI Output", isOn: $videoStreamManager.ndiEnabled)
+                    .disabled(true)
+                    .help("NDI support coming soon")
 
             }
         }.padding()

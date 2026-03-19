@@ -19,6 +19,7 @@ struct HyperobjectsMacOSApp: App {
     @StateObject private var jsEngine = JSEngineManager()
     @StateObject private var fileMonitor = FileMonitor()
     @StateObject private var audioMonitor = AudioInputMonitor()
+    @StateObject private var videoStreamManager = VideoStreamManager()
     @State private var selectedFile: URL?
     @State private var isFilePickerPresented = false
     @State private var jsTimer: DispatchSourceTimer?
@@ -39,6 +40,7 @@ struct HyperobjectsMacOSApp: App {
             ContentView()
                 .environmentObject(sceneManager.currentScene)
                 .environmentObject(renderConfigurations)
+                .environmentObject(videoStreamManager)
                 .onAppear {
                     print("Main content view onappear")
                     fileMonitor.setCallback { [weak sceneManager, weak jsEngine] script in
@@ -108,6 +110,7 @@ struct HyperobjectsMacOSApp: App {
         Window("\(secondaryRenderWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: secondaryRenderWindowConfig.id) {
             secondaryRenderWindowConfig.content.environmentObject(sceneManager.currentScene)
                                                .environmentObject(renderConfigurations)
+                                               .environmentObject(videoStreamManager)
         }
         
         Window("\(sceneInputsWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: sceneInputsWindowConfig.id) {
@@ -121,6 +124,7 @@ struct HyperobjectsMacOSApp: App {
         Window("\(renderConfigurationsWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: renderConfigurationsWindowConfig.id) {
             renderConfigurationsWindowConfig.content.environmentObject(sceneManager.currentScene)
                                                     .environmentObject(renderConfigurations)
+                                                    .environmentObject(videoStreamManager)
         }
         
         Window("\(sceneGeometriesListWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: sceneGeometriesListWindowConfig.id) {
@@ -194,7 +198,9 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
         
         guard let inVal = inputState[key] else {
             // print("[State Change] New key in output not present in input: \(key) => \(outVal)")
-            print("inVal not available for key \(key)")
+            if key != "RESET" {
+                print("inVal not available for key \(key)")
+            }
             continue
         }
         

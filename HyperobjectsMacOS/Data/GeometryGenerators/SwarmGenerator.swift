@@ -112,7 +112,12 @@ class SwarmGenerator: CachedGeometryGenerator {
         
         // Generate select inter-boid geometries (e.g. nearness vectors)
         
+        let selectedBoidIndex = intFromInputs(inputs, name: "SelectedBoidIndex")
+        let boidPairAIndex = intFromInputs(inputs, name: "BoidPairAIndex")
+        let boidPairBIndex = intFromInputs(inputs, name: "BoidPairBIndex")
         
+        let boidsClusterStartIndex = intFromInputs(inputs, name: "BoidsClusterStartNr")
+        let boidsClusterEndIndex = intFromInputs(inputs, name: "BoidsClusterEndNr")
         
         
         let sceneRotationY = floatFromInputs(inputs, name: "Stateful_Rotation_X")
@@ -302,9 +307,23 @@ class SwarmGenerator: CachedGeometryGenerator {
             organicColor.w = 1.0
             
             
-            var baseBrightnessColor = SIMD4<Float>(repeating: getFloat(brightnessInput.getHistoryValue(millisecondsAgo: normID * 1000)))
+            var baseBrightnessColor = SIMD4<Float>(repeating: getFloat(brightnessInput.getHistoryValue(millisecondsAgo: normID * 1000))) * 0.1
             
-            var finalColor = organicColor + baseBrightnessColor
+            let baseBoidsIndexDelay = scene.val_f(name: "BoidsBaseIndexDelay")
+            
+            let baseRDelay = scene.val_f(name: "BoidsBaseR_IndexDelay") * 1000
+            let baseGDelay = scene.val_f(name: "BoidsBaseG_IndexDelay") * 1000
+            let baseBDelay = scene.val_f(name: "BoidsBaseB_IndexDelay") * 1000
+            let baseADelay = scene.val_f(name: "BoidsBaseA_IndexDelay") * 1000
+            
+            let baseBoidsColor = SIMD4<Float>(
+                scene.val_f(name: "BoidsBaseR", delay: Double(baseRDelay)),
+                scene.val_f(name: "BoidsBaseG", delay: Double(baseGDelay)),
+                scene.val_f(name: "BoidsBaseB", delay: Double(baseBDelay)),
+                scene.val_f(name: "BoidsBaseA", delay: Double(baseADelay))
+            )
+            
+            var finalColor = organicColor + baseBrightnessColor + baseBoidsColor
             
             let baseCube = Cube(center: SIMD3<Float>(0, 0, 0), size: 1.0)
             let baseLines = baseCube.wallOutlines()
@@ -412,8 +431,7 @@ class SwarmGenerator: CachedGeometryGenerator {
         
         // print(brightnessFloat, brightnessAsInt)
         
-        var agentIndex: Int = Int(1 + brightnessAsInt)
-        agentIndex = 4
+        var agentIndex: Int = selectedBoidIndex
         if agentIndex >= sim.agents.count {
             agentIndex = 0
         }

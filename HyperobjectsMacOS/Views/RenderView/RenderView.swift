@@ -10,6 +10,7 @@ import SwiftUI
 struct RenderView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
     @EnvironmentObject var renderConfigs: RenderConfigurations
+    @EnvironmentObject var videoStreamManager: VideoStreamManager
     @StateObject private var rendererState = RendererState()
     @State private var resolutionMode: ResolutionMode = .fixed
     @State private var resolution: CGSize = CGSize(width: 1000, height: 1000) // Default resolution
@@ -21,6 +22,7 @@ struct RenderView: View {
                 rendererState: rendererState,
                 currentScene: currentScene,
                 renderConfigs: renderConfigs,
+                videoStreamManager: videoStreamManager,
                 resolutionMode: $resolutionMode,
                 resolution: $resolution
             ).frame(minWidth: 300, minHeight: 300)

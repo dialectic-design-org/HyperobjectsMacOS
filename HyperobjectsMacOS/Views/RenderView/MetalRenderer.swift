@@ -159,6 +159,9 @@ class MetalRenderer {
     
     // Reference to the state
     weak var rendererState: RendererState?
+
+    // Video streaming (Syphon / NDI)
+    var videoStreamManager: VideoStreamManager?
     
     init?(rendererState: RendererState, currentScene: GeometriesSceneBase, renderConfigs: RenderConfigurations) {
         self.rendererState = rendererState
@@ -907,6 +910,10 @@ class MetalRenderer {
         }
         
         renderEncoder.endEncoding()
+
+        // Publish frame to Syphon/NDI before presenting
+        videoStreamManager?.publishFrame(commandBuffer: commandBuffer, sourceTexture: drawable.texture)
+
         commandBuffer.addCompletedHandler { [weak self] _ in
             self?.frameSemaphore.signal()
         }

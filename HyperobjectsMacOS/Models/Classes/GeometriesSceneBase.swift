@@ -79,13 +79,10 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         }
     }
 
-    private let _historyData = Atomic<[AudioDataPoint]>(value: [])
+    let audioHistory = AudioHistory(capacity: 3600)
     var historyData: [AudioDataPoint] {
-        get { _historyData.get() }
-        set { _historyData.set(newValue) }
+        audioHistory.snapshot()
     }
-    
-    private let maxAudioHistoryDuration: TimeInterval = 30.0
     
     private var _inputMap: [String: SceneInput]?
     
@@ -142,8 +139,8 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     }
     
     func extractHistoricAudioValue(for input: SceneInput) -> Double {
-        // Clamp historyData to latest 120 samples
-        let clampedHistory = Array(historyData.suffix(120))
+        // Only copy the last 120 samples (avoids full snapshot)
+        let clampedHistory = audioHistory.suffix(120)
         
         let historyLength = clampedHistory.count
         guard historyLength > 0 else {
@@ -245,35 +242,8 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
             smoothedProcessedVolumes: self.audioSignalsSmoothedProcessed
         )
 
-        // Single get + local mutation + single set (avoids multiple Atomic accesses)
-        var history = _historyData.get()
-        history.append(dataPoint)
-
-        let cutoffTime = currentTime - self.maxAudioHistoryDuration
-
-        // OPTIMIZATION: Efficiently remove old history
-        // Since the array is sorted by time, we only need to check from the start.
-        var removeCount = 0
-        for item in history {
-            if item.timestamp < cutoffTime {
-                removeCount += 1
-            } else {
-                break
-            }
-        }
-
-        if removeCount > 0 {
-            history.removeFirst(removeCount)
-        }
-
-        // Safety cap to prevent unbounded growth if timestamps drift
-        if history.count > 4000 {
-             let excess = history.count - 3600
-             history.removeFirst(excess)
-             print("⚠️ Audio History exceeded safety limit. Pruned \(excess) items.")
-        }
-
-        _historyData.set(history)
+        // Ring buffer handles capacity — no pruning needed
+        audioHistory.append(dataPoint)
     }
     
     func setChangedInputs(names: [String]) {

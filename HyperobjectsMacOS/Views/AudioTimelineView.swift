@@ -39,20 +39,22 @@ struct AudioTimelineView: View {
                 }
             }
             
-            AudioTimelineChartView(historyData: currentScene.historyData)
+            let historySnapshot = currentScene.historyData
+
+            AudioTimelineChartView(historyData: historySnapshot)
                 .frame(height: 220)
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(8)
-            
+
             // Legend
             HStack(spacing: 20) {
                 LegendItem(color: .red, label: "Raw")
                 LegendItem(color: .orange, label: "Smoothed")
                 LegendItem(color: .green, label: "Processed")
-                
+
                 Spacer()
-                
-                Text("\(currentScene.historyData.count) samples")
+
+                Text("\(historySnapshot.count) samples")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
