@@ -84,6 +84,28 @@ func colorToVector(_ color: Color) -> vector_float3 {
     return vector_float3(Float(red), Float(green), Float(blue))
 }
 
+func colorToVec4(_ color: Color) -> vector_float4 {
+    let nsColor = NSColor(color) // Convert SwiftUI.Color to NSColor
+
+    // Convert to calibrated RGB color space
+    guard let rgbColor = nsColor.usingColorSpace(.deviceRGB) else {
+        return vector_float4(0, 0, 0, 1) // Fallback
+    }
+
+    var red: CGFloat = 0
+    var green: CGFloat = 0
+    var blue: CGFloat = 0
+    var alpha: CGFloat = 0
+
+    rgbColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+
+    return vector_float4(Float(red), Float(green), Float(blue), Float(alpha))
+}
+
+func vec4ToColor(_ vec: vector_float4) -> Color {
+    return Color(red: Double(vec.x), green: Double(vec.y), blue: Double(vec.z), opacity: Double(vec.w))
+}
+
 
 func mix(_ a: Float, _ b: Float, _ mixValue: Float) -> Float {
     return a + mixValue * (b - a)

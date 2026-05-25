@@ -20,6 +20,14 @@ func generateGeometrySceneSwarm() -> GeometriesSceneBase {
             SceneInput(name: "BoidsPairBounds", type: .string, value: "HIDE", presetValues: ["SHOW":"SHOW", "HIDE":"HIDE"]),
             SceneInput(name: "BoidsClusterBounds", type: .string, value: "HIDE", presetValues: ["SHOW":"SHOW", "HIDE":"HIDE"]),
             
+
+            SceneInput(name: "GlobalLineWidthFactor", type: .float, value: 1.0, range: 0.0...5.0),
+            SceneInput(name: "GlobalLineWidthFactorIndexDelay", type: .float, value: 0.0, range: 0.0...1.0),
+
+            SceneInput(name: "CubeFlatteningFactor", type: .float, value: 1.0, range: 0.0...1.0),
+            SceneInput(name: "CubeFlatteningFactorIndexDelay", type: .float, value: 1.0, range: 0.0...1.0),
+
+
             SceneInput(name: "SelectedBoidIndex", type: .integer, value: 0, range: 1...200),
             SceneInput(name: "BoidPairAIndex", type: .integer, value: 1, range: 1...200),
             SceneInput(name: "BoidPairBIndex", type: .integer, value: 2, range: 1...200),
@@ -45,16 +53,16 @@ func generateGeometrySceneSwarm() -> GeometriesSceneBase {
             SceneInput(name:"Stateful_Rotation_X", type: .statefulFloat, inputGroupName: "Rotation", value: 0.01, tickValueAdjustmentRange: -0.1...0.1),
             
             
-            SceneInput(name: "BoidsBaseR", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0, audioAmplificationAddition: 1.0),
-            SceneInput(name: "BoidsBaseG", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0, audioAmplificationAddition: 1.0),
-            SceneInput(name: "BoidsBaseB", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0, audioAmplificationAddition: 1.0),
+            SceneInput(name: "BoidsBaseR", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
+            SceneInput(name: "BoidsBaseG", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
+            SceneInput(name: "BoidsBaseB", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
             SceneInput(name: "BoidsBaseA", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
             SceneInput(name: "BoidsBaseTotal", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
             SceneInput(name: "BoidsBaseIndexDelay", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
             
-            SceneInput(name: "BoidsBaseR_IndexDelay", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
-            SceneInput(name: "BoidsBaseG_IndexDelay", type: .float, inputGroupName: "Color", value: 0.12, range: 0.0...1.0),
-            SceneInput(name: "BoidsBaseB_IndexDelay", type: .float, inputGroupName: "Color", value: 0.20, range: 0.0...1.0),
+            SceneInput(name: "BoidsBaseR_IndexDelay", type: .float, inputGroupName: "Color", value: 0.5, range: 0.0...1.0),
+            SceneInput(name: "BoidsBaseG_IndexDelay", type: .float, inputGroupName: "Color", value: 0.5, range: 0.0...1.0),
+            SceneInput(name: "BoidsBaseB_IndexDelay", type: .float, inputGroupName: "Color", value: 0.5, range: 0.0...1.0),
             SceneInput(name: "BoidsBaseA_IndexDelay", type: .float, inputGroupName: "Color", value: 0.01, range: 0.0...1.0),
 
 
@@ -80,12 +88,13 @@ func generateGeometrySceneSwarm() -> GeometriesSceneBase {
             SceneInput(name: "AllBoidsTraceLengthFactor", type: .float, value: 0.0, range: 0.0...1.0),
             SceneInput(name: "AllBoidsTraceLengthFactorIndexDelay", type: .float, value: 0.0, range: 0.0...1.0),
             
-            SceneInput(name: "BoidsOrganicR", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
-            SceneInput(name: "BoidsOrganicG", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
-            SceneInput(name: "BoidsOrganicB", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
+            SceneInput(name: "BoidsOrganicR", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0, audioAmplificationAddition: 1.0),
+            SceneInput(name: "BoidsOrganicG", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0, audioAmplificationAddition: 1.0),
+            SceneInput(name: "BoidsOrganicB", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0, audioAmplificationAddition: 1.0),
             SceneInput(name: "BoidsOrganicA", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
             
             SceneInput(name: "BoidsOrganicTotal", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
+            SceneInput(name: "BoidsOrganicTotalIndexDelay", type: .float, inputGroupName: "Color", value: 0.5, range: 0.0...1.0),
             
             
             SceneInput(name: "SelectedBoidR", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
@@ -99,11 +108,13 @@ func generateGeometrySceneSwarm() -> GeometriesSceneBase {
             SceneInput(name: "DistanceToSelectedBoidRangeStartG", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
             SceneInput(name: "DistanceToSelectedBoidRangeStartB", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
             SceneInput(name: "DistanceToSelectedBoidRangeStartA", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
+            
             SceneInput(name: "DistanceToSelectedBoidRangeEndR", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
             SceneInput(name: "DistanceToSelectedBoidRangeEndG", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
             SceneInput(name: "DistanceToSelectedBoidRangeEndB", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0), 
             SceneInput(name: "DistanceToSelectedBoidRangeEndA", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
             SceneInput(name: "DistanceToSelectedBoidRangeTotal", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
+            
             SceneInput(name: "DistanceToSelectedBoidDistanceDelay", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...5.0),
             
             SceneInput(name: "BoidsClusterR", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
@@ -111,6 +122,13 @@ func generateGeometrySceneSwarm() -> GeometriesSceneBase {
             SceneInput(name: "BoidsClusterB", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
             SceneInput(name: "BoidsClusterA", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
             SceneInput(name: "BoidsClusterTotal", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
+
+
+            SceneInput(name: "BoidsClusterBoundsR", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
+            SceneInput(name: "BoidsClusterBoundsG", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
+            SceneInput(name: "BoidsClusterBoundsB", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
+            SceneInput(name: "BoidsClusterBoundsA", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
+            SceneInput(name: "BoidsClusterBoundsTotal", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
             
             
             SceneInput(name: "BoidsPairA_R", type: .float, inputGroupName: "Color", value: 0.1, range: 0.0...1.0),
@@ -135,14 +153,31 @@ func generateGeometrySceneSwarm() -> GeometriesSceneBase {
             SceneInput(name: "BoidsPairConnectionEndG", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
             SceneInput(name: "BoidsPairConnectionEndB", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
             SceneInput(name: "BoidsPairConnectionEndA", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
+
+            SceneInput(name: "BoidsPairBoundsR", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
+            SceneInput(name: "BoidsPairBoundsG", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
+            SceneInput(name: "BoidsPairBoundsB", type: .float, inputGroupName: "Color", value: 0.05, range: 0.0...1.0),
+            SceneInput(name: "BoidsPairBoundsA", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
+            SceneInput(name: "BoidsPairBoundsTotal", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
             
-            SceneInput(name: "PerceptionLinesBaseR", type: .float, inputGroupName: "Color", value: 0.2, range: 0.0...1.0),
-            SceneInput(name: "PerceptionLinesBaseG", type: .float, inputGroupName: "Color", value: 0.2, range: 0.0...1.0),
-            SceneInput(name: "PerceptionLinesBaseB", type: .float, inputGroupName: "Color", value: 0.2, range: 0.0...1.0),
+
+
+            
+            SceneInput(name: "PerceptionLinesBaseR", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
+            SceneInput(name: "PerceptionLinesBaseG", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
+            SceneInput(name: "PerceptionLinesBaseB", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
             SceneInput(name: "PerceptionLinesBaseA", type: .float, inputGroupName: "Color", value: 1.0, range: 0.0...1.0),
             SceneInput(name: "PerceptionLinesTotal", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
+            
             SceneInput(name: "PerceptionLinesIndexDelay", type: .float, inputGroupName: "Color", value: 0.5, range: 0.0...5.0),
 
+            SceneInput(name: "ZAxisHSLGradientNormalizationFactor", type: .float, inputGroupName: "Color", value: 0.5, range: 0.0...1.0),
+            SceneInput(name: "ZAxisHSLGradientOffset", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...10.0),
+            SceneInput(name: "ZAxisHSLGradientTotal", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
+
+            SceneInput(name: "ZAxisHSLGradientNormalizationFactorIndexDelay", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
+            SceneInput(name: "ZAxisHSLGradientOffsetIndexDelay", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...10.0),
+            SceneInput(name: "ZAxisHSLGradientTotalIndexDelay", type: .float, inputGroupName: "Color", value: 0.0, range: 0.0...1.0),
         ],
         geometryGenerators: [
             SwarmGenerator()

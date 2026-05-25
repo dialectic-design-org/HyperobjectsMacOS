@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 class SwarmGenerator: CachedGeometryGenerator {
     init() {
@@ -206,6 +207,9 @@ class SwarmGenerator: CachedGeometryGenerator {
             let speed = length(agent.velocity)
             let direction = speed > 0.001 ? normalize(agent.velocity) : SIMD3<Float>(0, 0, 1)
             
+            // Boid index time val from 0 to 1
+            let t: Float = 1.0 - (Float(agent.id) / Float(sim.agents.count - 1))
+            
             // Build Rotation Matrix (LookAt)
             // Z-axis points in direction of velocity
             let zAxis = direction
@@ -228,11 +232,14 @@ class SwarmGenerator: CachedGeometryGenerator {
             // Muscle / Deformation Logic
             // Strech based on speed ("Muscle Exertion")
             // Breathing / Pulse effect
+
+
+            let cubeFlatteningFactor = scene.val_f(name: "CubeFlatteningFactor", delay: Double(1000 * scene.val_f(name: "CubeFlatteningFactorIndexDelay") * t))
             let pulse = 1.0 + sin(Float(currentTime) * 4.0 + Float(agent.id)) * 0.1
             let lengthScale = (0.5 + speed * 0.2) * pulse
             let widthScale = (0.5 - speed * 0.05) * pulse // Conservation of volume-ish
             
-            let scaleMatrix = matrix_float4x4(diagonal: SIMD4<Float>(widthScale, widthScale, lengthScale, 1.0))
+            let scaleMatrix = matrix_float4x4(diagonal: SIMD4<Float>(widthScale, widthScale, lengthScale * cubeFlatteningFactor, 1.0))
             
             // Translation
             let translationMatrix = matrix_float4x4(
@@ -273,7 +280,6 @@ class SwarmGenerator: CachedGeometryGenerator {
             // 2. Chromatic Audio Brightness
             // Different delays for R, G, B components to create chromatic aberration on transients
             // Normalized ID 0..1 assuming ~100 agents
-            let normID = Double(agent.id) / 100.0
             
             func getFloat(_ val: Any?) -> Float {
                 if let v = val as? Float { return v }
@@ -282,15 +288,15 @@ class SwarmGenerator: CachedGeometryGenerator {
                 return 0.0
             }
             
-            let rDelay = normID * 50.0
-            let gDelay = 35.0 + normID * 35.0
-            let bDelay = 70.0 + normID * 50.0
+            let rDelay = t * 500.0
+            let gDelay = 35.0 + t * 350.0
+            let bDelay = 70.0 + t * 930.0
             
-            let rVal = getFloat(brightnessInput.getHistoryValue(millisecondsAgo: rDelay)) * getFloat(organicR.getHistoryValue(millisecondsAgo: 0))
-            let gVal = getFloat(brightnessInput.getHistoryValue(millisecondsAgo: gDelay)) * getFloat(organicG.getHistoryValue(millisecondsAgo: 0))
-            let bVal = getFloat(brightnessInput.getHistoryValue(millisecondsAgo: bDelay)) * getFloat(organicB.getHistoryValue(millisecondsAgo: 0))
+            let rVal = getFloat(organicR.getHistoryValue(millisecondsAgo: Double(rDelay)))
+            let gVal = getFloat(organicG.getHistoryValue(millisecondsAgo: Double(gDelay)))
+            let bVal = getFloat(organicB.getHistoryValue(millisecondsAgo: Double(bDelay)))
             
-            let minLight: Float = 0.3
+            let minLight: Float = 0.1
             let chromaticBrightness = SIMD4<Float>(
                 rVal * 2.0 + minLight,
                 gVal * 2.0 + minLight,
@@ -298,7 +304,7 @@ class SwarmGenerator: CachedGeometryGenerator {
                 1.0
             )
             
-            var organicColor = baseColor * chromaticBrightness * getFloat(organicTotal.getHistoryValue(millisecondsAgo: 0))
+            var organicColor = baseColor * chromaticBrightness
             
             
             // Desaturate into dark gray on the darker side
@@ -311,16 +317,22 @@ class SwarmGenerator: CachedGeometryGenerator {
             organicColor = mix(organicColor, organicColor, t: tSat)
             
             organicColor.w = 1.0
+            var boidsOrganicTotalIndexDelay = scene.val_f(name: "BoidsOrganicTotalIndexDelay") * 1000 * t
+            organicColor = organicColor * scene.val_f(name: "BoidsOrganicTotal", delay: Double(boidsOrganicTotalIndexDelay))
             
             
-            var baseBrightnessColor = SIMD4<Float>(repeating: getFloat(brightnessInput.getHistoryValue(millisecondsAgo: normID * 1000))) * 0.1
+            let baseBrightnessColor = SIMD4<Float>(
+                repeating: getFloat(
+                    brightnessInput.getHistoryValue(millisecondsAgo: Double(t) * 1000)
+                )
+            ) * 0.1
             
-            let baseBoidsIndexDelay = scene.val_f(name: "BoidsBaseIndexDelay")
+            let baseBoidsIndexDelay = scene.val_f(name: "BoidsBaseIndexDelay") * 1000 * t
             
-            let baseRDelay = scene.val_f(name: "BoidsBaseR_IndexDelay") * 1000
-            let baseGDelay = scene.val_f(name: "BoidsBaseG_IndexDelay") * 1000
-            let baseBDelay = scene.val_f(name: "BoidsBaseB_IndexDelay") * 1000
-            let baseADelay = scene.val_f(name: "BoidsBaseA_IndexDelay") * 1000
+            let baseRDelay = scene.val_f(name: "BoidsBaseR_IndexDelay") * 1000 * t + baseBoidsIndexDelay
+            let baseGDelay = scene.val_f(name: "BoidsBaseG_IndexDelay") * 1000 * t + baseBoidsIndexDelay
+            let baseBDelay = scene.val_f(name: "BoidsBaseB_IndexDelay") * 1000 * t + baseBoidsIndexDelay
+            let baseADelay = scene.val_f(name: "BoidsBaseA_IndexDelay") * 1000 * t + baseBoidsIndexDelay
             
             let baseBoidsColor = SIMD4<Float>(
                 scene.val_f(name: "BoidsBaseR", delay: Double(baseRDelay)),
@@ -329,18 +341,39 @@ class SwarmGenerator: CachedGeometryGenerator {
                 scene.val_f(name: "BoidsBaseA", delay: Double(baseADelay))
             )
             
-            var finalColor = organicColor + baseBrightnessColor + baseBoidsColor
+
+            let zAxisGradientScale = HSLGradient(saturation: 1.0, lightness: 0.5)
+            
+            let zAxisHSLGradientNormalizationFactorIndexDelay = scene.val_f(name: "ZAxisHSLGradientNormalizationFactorIndexDelay")
+            let zAxisHSLGradientNormalizationFactor = scene.val_f(name: "ZAxisHSLGradientNormalizationFactor", delay: Double(1000 * zAxisHSLGradientNormalizationFactorIndexDelay * t))
+            
+            let zAxisHSLGradientOffsetDelay = scene.val_f(name: "ZAxisHSLGradientOffsetIndexDelay")
+            let zAxisHSLGradientOffset = scene.val_f(name: "ZAxisHSLGradientOffset", delay: Double(1000 * zAxisHSLGradientOffsetDelay * t))
+            let agentPosWithOffset = (agent.position.z + 5.0) + zAxisHSLGradientOffset
+            var zPosNormalized = Double((agentPosWithOffset) / 10.0 * zAxisHSLGradientNormalizationFactor)
+            // zPosNormalized = zPosNormalized
+            let zAxisGradientTotalIndexDelay = scene.val_f(name: "ZAxisHSLGradientTotalIndexDelay") * 1000 * t
+            let zAxisGradientTotal = scene.val_f(name: "ZAxisHSLGradientTotal", delay: Double(zAxisGradientTotalIndexDelay))
+            
+            let zAxisGradientColor = zAxisGradientScale.color(at: zPosNormalized) * zAxisGradientTotal
+            
+
+            var finalColor = organicColor + baseBoidsColor + zAxisGradientColor
             
             let baseCube = Cube(center: SIMD3<Float>(0, 0, 0), size: 1.0)
             let baseLines = baseCube.wallOutlines()
 
+
+            let globalLineWidthFactorIndexDelay = scene.val_f(name: "GlobalLineWidthFactorIndexDelay") * 1000 * t
+            let globalLineWidthFactor = scene.val_f(name: "GlobalLineWidthFactor",  delay: Double(globalLineWidthFactorIndexDelay))
+            
             // Apply to lines
             for line in baseLines {
                 var transformedLine = line
                 transformedLine = transformedLine.applyMatrix(finalMatrix)
                 
-                transformedLine.lineWidthStart = 1.5
-                transformedLine.lineWidthEnd = 1.5
+                transformedLine.lineWidthStart = 1.5 * globalLineWidthFactor
+                transformedLine.lineWidthEnd = 1.5 * globalLineWidthFactor
                 
                 // Apply color
                 transformedLine.colorStart = finalColor
@@ -355,28 +388,27 @@ class SwarmGenerator: CachedGeometryGenerator {
             
             
             // Agent traces
-            if agent.id % boidsTraceInterval == 0 {
+            if boidsTraceInterval > 0 && agent.id % boidsTraceInterval == 0 {
+                let traceLengthFactor = scene.val_f(name: "AllBoidsTraceLengthFactor")
+                let maxTraceIndex = Int(Float(agent.positionHistory.count - 1) * traceLengthFactor)
+                let startIndex = max(0, agent.positionHistory.count - 1 - maxTraceIndex)
                 
-                
-                for i in agent.positionHistory.indices.dropFirst() {
-                    let traceT = Float(i) / Float(agent.positionHistory.count - 1)
-                    if i % 1 == 0 && traceT < scene.val_f(name: "AllBoidsTraceLengthFactor", delay: Double(traceT) * 1000) {
-                        let prevPos = agent.positionHistory[i - 1]
-                        let pos = agent.positionHistory[i]
-                        let traceT = Float(i) / Float(agent.positionHistory.count - 1)
-                        let traceTdt = Float(1.0) / Float(agent.positionHistory.count - 1)
-                        
-                        let startColor = traceStartOKLCH.lerp(to: traceEndOKLCH, t: traceT)
-                        let endColor = traceStartOKLCH.lerp(to: traceEndOKLCH, t: traceT + traceTdt)
-                        
-                        var line = Line(startPoint: prevPos, endPoint: pos)
-                        line.setBasicEndPointColors(startColor: startColor.simd4(alpha: 1.0), endColor: endColor.simd4(alpha: 1.0))
-                        line.lineWidthStart = 1.5
-                        line.lineWidthEnd = 1.5
-                        line = line.applyMatrix(outputScale)
-                        
-                        outputLines.append(line)
-                    }
+                for i in (startIndex + 1)..<agent.positionHistory.count {
+                    let traceT = Float(i - startIndex) / Float(max(1, agent.positionHistory.count - 1 - startIndex))
+                    let prevPos = agent.positionHistory[i - 1]
+                    let pos = agent.positionHistory[i]
+                    let traceTdt = Float(1.0) / Float(max(1, agent.positionHistory.count - 1 - startIndex))
+                    
+                    let startColor = traceStartOKLCH.lerp(to: traceEndOKLCH, t: 1.0 - traceT)
+                    let endColor = traceStartOKLCH.lerp(to: traceEndOKLCH, t: 1.0 - traceT - traceTdt)
+                    
+                    var line = Line(startPoint: prevPos, endPoint: pos)
+                    line = line.setBasicEndPointColors(startColor: startColor.simd4(alpha: 1.0), endColor: endColor.simd4(alpha: 1.0))
+                    line.lineWidthStart = 1.5 * globalLineWidthFactor
+                    line.lineWidthEnd = 1.5 * globalLineWidthFactor
+                    line = line.applyMatrix(outputScale)
+                    
+                    outputLines.append(line)
                 }
             }
         }
@@ -385,68 +417,106 @@ class SwarmGenerator: CachedGeometryGenerator {
         
         
         // Perception lines
-        var perceptions = sim.perceptionsAgents()
-        
-        let perceptionLineColor = SIMD4<Float>(
-            scene.val_f(name: "PerceptionLinesBaseR"),
-            scene.val_f(name: "PerceptionLinesBaseG"),
-            scene.val_f(name: "PerceptionLinesBaseB"),
-            scene.val_f(name: "PerceptionLinesBaseA"))
-        
-        var perceptionLinesIndexDelay = floatFromInputs(inputs, name: "PerceptionLinesIndexDelay")
-        
-        var perceptionT: Float = 0.0
-        var perceptions_i: Int = 0
-        var totalPerceptions: Int = perceptions.count
-        for p in perceptions {
-            let perceptionTdt: Float = 1.0 / Float(totalPerceptions)
-            perceptionT += perceptionTdt
+        if showPerceptionLines {
+            var perceptions = sim.perceptionsAgents()
             
             let perceptionLineColor = SIMD4<Float>(
-                scene.val_f(name: "PerceptionLinesBaseR", delay: Double(perceptionT * perceptionLinesIndexDelay * 1000.0)),
-                scene.val_f(name: "PerceptionLinesBaseG", delay: Double(perceptionT * perceptionLinesIndexDelay * 1000.0)),
-                scene.val_f(name: "PerceptionLinesBaseB", delay: Double(perceptionT * perceptionLinesIndexDelay * 1000.0)),
+                scene.val_f(name: "PerceptionLinesBaseR"),
+                scene.val_f(name: "PerceptionLinesBaseG"),
+                scene.val_f(name: "PerceptionLinesBaseB"),
                 scene.val_f(name: "PerceptionLinesBaseA"))
-            var perceptionLine = Line(
-                startPoint: p.a.position,
-                endPoint: p.b.position
-            )
             
-            perceptionLine = perceptionLine.setBasicEndPointColors(startColor: perceptionLineColor, endColor: perceptionLineColor)
-            perceptionLine.lineWidthStart = 1.5
-            perceptionLine.lineWidthEnd = 1.5
-            perceptionLine = perceptionLine.applyMatrix(outputScale)
-            lines.append(perceptionLine)
+            var perceptionLinesIndexDelay = floatFromInputs(inputs, name: "PerceptionLinesIndexDelay")
+            
+            var perceptionT: Float = 0.0
+            var perceptions_i: Int = 0
+            var totalPerceptions: Int = perceptions.count
+            for p in perceptions {
+                let perceptionTdt: Float = 1.0 / Float(totalPerceptions)
+                perceptionT += perceptionTdt
+
+                let globalLineWidthFactorIndexDelay = scene.val_f(name: "GlobalLineWidthFactorIndexDelay") * 1000 * perceptionT
+                let globalLineWidthFactor = scene.val_f(name: "GlobalLineWidthFactor",  delay: Double(globalLineWidthFactorIndexDelay))
+            
+                
+                let perceptionLineColor = SIMD4<Float>(
+                    scene.val_f(name: "PerceptionLinesBaseR", delay: Double(perceptionT * perceptionLinesIndexDelay * 1000.0)),
+                    scene.val_f(name: "PerceptionLinesBaseG", delay: Double(perceptionT * perceptionLinesIndexDelay * 1000.0)),
+                    scene.val_f(name: "PerceptionLinesBaseB", delay: Double(perceptionT * perceptionLinesIndexDelay * 1000.0)),
+                    scene.val_f(name: "PerceptionLinesBaseA"))
+                var perceptionLine = Line(
+                    startPoint: p.a.position,
+                    endPoint: p.b.position
+                )
+                
+                perceptionLine = perceptionLine.setBasicEndPointColors(startColor: perceptionLineColor, endColor: perceptionLineColor)
+                perceptionLine.lineWidthStart = 1.5 * globalLineWidthFactor
+                perceptionLine.lineWidthEnd = 1.5 * globalLineWidthFactor
+                perceptionLine = perceptionLine.applyMatrix(outputScale)
+                lines.append(perceptionLine)
+            }
         }
         
         // Bounds
         
         // All boids bounds
         
-        let allBoidIDs: [Int] = Array(0..<sim.agents.count)
-        var allBoidsBoundsLines = sim.boundsAsBoxLines(ids: allBoidIDs, padding: 0.0)
-        
-        for i in allBoidsBoundsLines.indices {
-            allBoidsBoundsLines[i] = allBoidsBoundsLines[i].applyMatrix(outputScale)
+        if showAllBoidsBounds {
+            let allBoidIDs: [Int] = Array(0..<sim.agents.count)
+            
+            let allBoidsBoundsColor: SIMD4<Float> = SIMD4<Float>(
+                scene.val_f(name: "AllBoidsBoundsR"),
+                scene.val_f(name: "AllBoidsBoundsG"),
+                scene.val_f(name: "AllBoidsBoundsB"),
+                scene.val_f(name: "AllBoidsBoundsA"))
+            
+            var allBoidsBoundsLines = sim.boundsAsBoxLines(ids: allBoidIDs, padding: 0.0)
+            
+            for i in allBoidsBoundsLines.indices {
+                allBoidsBoundsLines[i] = allBoidsBoundsLines[i].applyMatrix(outputScale)
+                allBoidsBoundsLines[i] = allBoidsBoundsLines[i].setBasicEndPointColors(startColor: allBoidsBoundsColor, endColor: allBoidsBoundsColor)
+            }
+            
+            lines.append(contentsOf: allBoidsBoundsLines)
         }
-        
-        lines.append(contentsOf: allBoidsBoundsLines)
 
         // Boids pair bounds
-        let pairIDs = [boidPairAIndex, boidPairBIndex]
-        var pairBoundsLines = sim.boundsAsBoxLines(ids: pairIDs, padding: 0.0)
-        for i in pairBoundsLines.indices {
-            pairBoundsLines[i] = pairBoundsLines[i].applyMatrix(outputScale)
+        if showBoidsPairBounds {
+            let pairIDs = [boidPairAIndex, boidPairBIndex]
+            
+            let boidsPairBoundsColor: SIMD4<Float> = SIMD4<Float>(
+                scene.val_f(name: "BoidsPairBoundsR"),
+                scene.val_f(name: "BoidsPairBoundsG"),
+                scene.val_f(name: "BoidsPairBoundsB"),
+                scene.val_f(name: "BoidsPairBoundsA"))
+            
+            
+            var pairBoundsLines = sim.boundsAsBoxLines(ids: pairIDs, padding: 0.0)
+            for i in pairBoundsLines.indices {
+                pairBoundsLines[i] = pairBoundsLines[i].applyMatrix(outputScale)
+                pairBoundsLines[i] = pairBoundsLines[i].setBasicEndPointColors(startColor: boidsPairBoundsColor, endColor: boidsPairBoundsColor)
+            }
+            lines.append(contentsOf: pairBoundsLines)
         }
-        lines.append(contentsOf: pairBoundsLines)
 
         // Boids cluster bounds
-        let clusterIDs = Array(boidsClusterStartIndex...boidsClusterEndIndex)
-        var clusterBoundsLines = sim.boundsAsBoxLines(ids: clusterIDs, padding: 0.0)
-        for i in clusterBoundsLines.indices {
-            clusterBoundsLines[i] = clusterBoundsLines[i].applyMatrix(outputScale)
+        if showBoidsClusterBounds {
+            let clusterIDs = Array(boidsClusterStartIndex...boidsClusterEndIndex)
+            
+            let boidsClusterBoundsColor: SIMD4<Float> = SIMD4<Float>(
+                scene.val_f(name: "BoidsClusterBoundsR"),
+                scene.val_f(name: "BoidsClusterBoundsG"),
+                scene.val_f(name: "BoidsClusterBoundsB"),
+                scene.val_f(name: "BoidsClusterBoundsA"))
+            
+            
+            var clusterBoundsLines = sim.boundsAsBoxLines(ids: clusterIDs, padding: 0.0)
+            for i in clusterBoundsLines.indices {
+                clusterBoundsLines[i] = clusterBoundsLines[i].applyMatrix(outputScale)
+                clusterBoundsLines[i] = clusterBoundsLines[i].setBasicEndPointColors(startColor: boidsClusterBoundsColor, endColor: boidsClusterBoundsColor)
+            }
+            lines.append(contentsOf: clusterBoundsLines)
         }
-        lines.append(contentsOf: clusterBoundsLines)
 
         // Selected boid lines to all boids bounding box
         

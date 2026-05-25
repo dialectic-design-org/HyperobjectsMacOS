@@ -12,6 +12,20 @@ private final class TimeBox {
     init(_ value: Double) { self.value = value }
 }
 
+private final class ScriptInputCache {
+    private var current: [String: StateValue] = [:]
+    private let lock = NSLock()
+    
+    func update(_ next: [String: StateValue]) {
+        lock.lock(); current = next; lock.unlock()
+    }
+    
+    func snapshot() -> [String: StateValue] {
+        lock.lock(); defer { lock.unlock() }
+        return current
+    }
+}
+
 @main
 struct HyperobjectsMacOSApp: App {
     @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneSwarm())
@@ -20,12 +34,14 @@ struct HyperobjectsMacOSApp: App {
     @StateObject private var fileMonitor = FileMonitor()
     @StateObject private var audioMonitor = AudioInputMonitor()
     @StateObject private var videoStreamManager = VideoStreamManager()
+    @StateObject private var midiManager = MIDIManager()
     @State private var selectedFile: URL?
     @State private var isFilePickerPresented = false
     @State private var jsTimer: DispatchSourceTimer?
     
     @State private var latestScript: String = ""
     private let timeBox: TimeBox
+    private let scriptInputCache = ScriptInputCache()
     
     init() {
         print("Application initialized")
@@ -41,12 +57,32 @@ struct HyperobjectsMacOSApp: App {
                 .environmentObject(sceneManager.currentScene)
                 .environmentObject(renderConfigurations)
                 .environmentObject(videoStreamManager)
+                .environmentObject(audioMonitor)
+                .onChange(of: audioMonitor.smoothedVolume) { _, _ in
+                    let snap = AudioSnapshot(
+                        raw: audioMonitor.volume,
+                        smoothed: audioMonitor.smoothedVolume,
+                        smoothedPerStep: audioMonitor.smoothedVolumes,
+                        lowpassRaw: Float(audioMonitor.lowpassVolume),
+                        lowpassSmoothed: Float(audioMonitor.lowpassVolume)
+                    )
+                    sceneManager.currentScene.applyAudioTick(snap, using: sceneManager.currentScene.currentProcessor)
+                    scriptInputCache.update(prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor))
+                }
+                .onChange(of: midiManager.lastCCUpdate) { _, _ in
+                    let k7 = midiManager.controls.ccValue(controller: 7, interpolate: true)
+                    let k8 = midiManager.controls.ccValue(controller: 8, interpolate: true)
+                    let envelope = sceneManager.currentScene.sigmoidEnvelope
+                    envelope.steepness = 0.0 + pow(k7 * 3, 5)
+                    envelope.threshold = k8
+                }
                 .onAppear {
                     print("Main content view onappear")
+                    audioMonitor.startMonitoring()
                     fileMonitor.setCallback { [weak sceneManager, weak jsEngine] script in
                         guard let sceneManager = sceneManager, let jsEngine = jsEngine else { return }
                         
-                        var inputState = prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor)
+                        let inputState = prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor)
                         
                         _ = jsEngine.executeScript(script, inputState: inputState)
                         
@@ -71,11 +107,7 @@ struct HyperobjectsMacOSApp: App {
                             timeBox.value += 1.0 / 120.0
 
                             if renderConfigurations.runScriptOnFrameChange && latestScript.isEmpty == false {
-                                // Snapshot input state on main thread
-                                var inputState: [String: StateValue]!
-                                DispatchQueue.main.sync {
-                                    inputState = prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor)
-                                }
+                                let inputState = scriptInputCache.snapshot()
 
                                 _ = jsEngine.executeScript(latestScript, inputState: inputState)
 
@@ -146,6 +178,10 @@ struct HyperobjectsMacOSApp: App {
         Window(sceneSelectorViewWindowConfig.title, id: sceneSelectorViewWindowConfig.id) {
             sceneSelectorViewWindowConfig.content.environmentObject(sceneManager)
         }
+        
+        Window("\(midiLogWindowConfig.title)", id: midiLogWindowConfig.id) {
+            midiLogWindowConfig.content.environmentObject(midiManager)
+        }
     }
     
 }
@@ -162,7 +198,8 @@ private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox, au
         return Double($0)
     }
     
-    let recentVolumesProcessed = sceneManager.currentScene.historyData.map {
+    let cutoff = (sceneManager.currentScene.audioHistory.suffix(1).first?.timestamp ?? 0) - 10.0
+    let recentVolumesProcessed = sceneManager.currentScene.historyData(since: cutoff).map {
         return $0.processedVolume
     }
     
@@ -263,6 +300,12 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
                 if input.type == .colorInput {
                     let nsColor = NSColor(deviceRed: b[0], green: b[1], blue: b[2], alpha: b[3])
                     input.value = Color(nsColor: nsColor)
+                }
+            }
+        case (.string(_), .string(let b)):
+            if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
+                if input.type == .string {
+                    input.value = b
                 }
             }
         case (.lineSegments(let a), .lineSegments(let b)):

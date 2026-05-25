@@ -47,6 +47,22 @@ final class AudioHistory {
         defer { lock.unlock() }
         return _suffix(_count)
     }
+    
+    func snapshot(since cutoff: Double) -> [AudioDataPoint] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard _count > 0 else { return [] }
+        
+        var n = 0
+        while n < _count {
+            let idx = (head - 1 - n + capacity) % capacity
+            guard let p = storage[idx], p.timestamp >= cutoff else {
+                break
+            }
+            n += 1
+        }
+        return _suffix(n)
+    }
 
     // Internal unlocked helper — caller must hold lock
     private func _suffix(_ n: Int) -> [AudioDataPoint] {

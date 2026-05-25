@@ -10,6 +10,8 @@ import SwiftUI
 struct AudioTimelineView: View {
     @ObservedObject var currentScene: GeometriesSceneBase
     var audioMonitor: AudioInputMonitor
+    @StateObject private var viewModel = AudioTimelineViewModel()
+    @State private var timeWindowSeconds: Double = 30.0
     
     let smoothingSampleCountOptions = [
         1,
@@ -39,9 +41,10 @@ struct AudioTimelineView: View {
                 }
             }
             
-            let historySnapshot = currentScene.historyData
+            // let cutoff = (currentScene.audioHistory.suffix(1).first?.timestamp ?? 0.0) - 30.0
+            // let historySnapshot = currentScene.historyData(since: cutoff)
 
-            AudioTimelineChartView(historyData: historySnapshot)
+            AudioTimelineChartView(historyData: viewModel.historySnapshot)
                 .frame(height: 220)
                 .background(Color.gray.opacity(0.1))
                 .cornerRadius(8)
@@ -54,7 +57,7 @@ struct AudioTimelineView: View {
 
                 Spacer()
 
-                Text("\(historySnapshot.count) samples")
+                Text("\(viewModel.historySnapshot.count) samples")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -62,5 +65,11 @@ struct AudioTimelineView: View {
         .padding()
         .background(Color.secondary.opacity(0.1))
         .cornerRadius(8)
+        .onAppear {
+            viewModel.bind(to: currentScene, windowSeconds: timeWindowSeconds)
+        }
+        .onChange(of: ObjectIdentifier(currentScene)) { _, _ in
+            viewModel.bind(to: currentScene, windowSeconds: timeWindowSeconds)
+        }
     }
 }

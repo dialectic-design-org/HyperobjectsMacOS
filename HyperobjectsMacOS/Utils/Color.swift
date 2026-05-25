@@ -216,3 +216,45 @@ class ColorScale {
         return Color(red: r, green: g, blue: b)
     }
 }
+
+class HSLGradient {
+    private let saturation: Double
+    private let lightness: Double
+
+    init(saturation: Double = 1.0, lightness: Double = 0.5) {
+        self.saturation = saturation
+        self.lightness = lightness
+    }
+
+    /// Returns SIMD4<Float> (r, g, b, 1.0) at position `t` (0…1) mapping to hue 0°–360°.
+    func color(at t: Double) -> SIMD4<Float> {
+        let t = max(0.0, min(t, 1.0))
+        let rgb = hslToRGB(t, saturation, lightness)
+        return SIMD4<Float>(Float(rgb.x), Float(rgb.y), Float(rgb.z), 1.0)
+    }
+
+    private func hslToRGB(_ h: Double, _ s: Double, _ l: Double) -> SIMD3<Double> {
+        func hueToRGB(_ p: Double, _ q: Double, _ t: Double) -> Double {
+            var t = t
+            if t < 0.0 { t += 1.0 }
+            if t > 1.0 { t -= 1.0 }
+            if t < 1.0 / 6.0 { return p + (q - p) * 6.0 * t }
+            if t < 1.0 / 2.0 { return q }
+            if t < 2.0 / 3.0 { return p + (q - p) * (2.0 / 3.0 - t) * 6.0 }
+            return p
+        }
+
+        if s == 0.0 {
+            return SIMD3(repeating: l)
+        }
+
+        let q = l < 0.5 ? l * (1.0 + s) : (l + s - l * s)
+        let p = 2.0 * l - q
+
+        let r = hueToRGB(p, q, h + 1.0 / 3.0)
+        let g = hueToRGB(p, q, h)
+        let b = hueToRGB(p, q, h - 1.0 / 3.0)
+
+        return SIMD3(r, g, b)
+    }
+}

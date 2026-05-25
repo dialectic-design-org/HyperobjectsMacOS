@@ -70,6 +70,13 @@ let sceneSelectorViewWindowConfig = WindowInfo(
     content: AnyView(SceneSelectorView())
 )
 
+let midiLogWindowConfig = WindowInfo(
+    id: "midi_log",
+    title: "MIDI Log",
+    showOnLoad: false,
+    content: AnyView(MIDILogView())
+)
+
 
 let allWindows: [WindowInfo] = [
     windowsManagerWindowConfig,
@@ -80,5 +87,6 @@ let allWindows: [WindowInfo] = [
     viewportFrontViewWindowConfig,
     viewportSideViewWindowConfig,
     viewportTopViewWindowConfig,
-    sceneSelectorViewWindowConfig
+    sceneSelectorViewWindowConfig,
+    midiLogWindowConfig
 ]

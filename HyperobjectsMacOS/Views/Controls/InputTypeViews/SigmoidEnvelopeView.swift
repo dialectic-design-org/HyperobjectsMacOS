@@ -11,7 +11,6 @@ struct SigmoidEnvelopeView: View {
     @ObservedObject var envelope: SigmoidEnvelope
     let currentInput: Double
     let currentOutput: Double
-    @State private var steepness: Double = 10.0
     @Binding var selectedEnvelopeType: EnvelopeType
     
     var body: some View {
@@ -28,9 +27,7 @@ struct SigmoidEnvelopeView: View {
                     HStack {
                         Text("Steepness:")
                             .frame(width: 80, alignment: .leading)
-                        Slider(value: $steepness, in: 0.1...200.0).onChange(of: steepness) { oldValue, newValue in
-                            envelope.steepness = newValue
-                        }.controlSize(.mini)
+                        Slider(value: $envelope.steepness, in: 0.1...200.0).controlSize(.mini)
                         Text(String(format: "%.1f", envelope.steepness))
                             .frame(width: 40, alignment: .trailing)
                     }

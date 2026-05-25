@@ -10,19 +10,15 @@ import SwiftUI
 struct RealtimePanel: View {
     @EnvironmentObject var renderConfigurations: RenderConfigurations
     @ObservedObject var currentScene: GeometriesSceneBase
-    @StateObject var audioMonitor: AudioInputMonitor
+    @ObservedObject var audioMonitor: AudioInputMonitor
     @Binding var selectedEnvelopeType: EnvelopeType
     var sigmoidEnvelope: SigmoidEnvelope
     var freeformEnvelope: FreeformEnvelope
-    
-    var currentProcessor: EnvelopeProcessor {
-        selectedEnvelopeType == .sigmoid ? sigmoidEnvelope : freeformEnvelope
-    }
-    
+
     var body: some View {
         VStack(alignment: .leading) {
             // visualizers; bind only to values they need
-            
+
             if renderConfigurations.showAudioControls {
                 Rectangle()
                     .fill(Color(
@@ -33,10 +29,10 @@ struct RealtimePanel: View {
                     .frame(width: CGFloat(500 - (audioMonitor.smoothedVolume * 500)), height: 10)
                     .cornerRadius(5)
 
-                
+
                 AudioTimelineView(currentScene: currentScene, audioMonitor: audioMonitor)
 
-                
+
                 HStack {
                     AudioVisualizerView(
                         currentVolume: Double(audioMonitor.volume),
@@ -50,8 +46,8 @@ struct RealtimePanel: View {
                         processedVolume: currentScene.audioSignalLowpassProcessed,
                         title: "Lowpass"
                     )
-                }
-    
+                }.transaction { $0.disablesAnimations = true }
+
                 EnvelopeSwitcher(
                     selectedEnvelopeType: $selectedEnvelopeType,
                     sigmoidEnvelope: sigmoidEnvelope,
@@ -60,18 +56,6 @@ struct RealtimePanel: View {
                     output: currentScene.audioSignalProcessed
                 )
             }
-        }
-        .onAppear { audioMonitor.startMonitoring() }
-        .onDisappear { audioMonitor.stopMonitoring() }
-        .onChange(of: audioMonitor.smoothedVolume) { _, _ in
-            let snap = AudioSnapshot(
-                raw: audioMonitor.volume,
-                smoothed: audioMonitor.smoothedVolume,
-                smoothedPerStep: audioMonitor.smoothedVolumes,
-                lowpassRaw: Float(audioMonitor.lowpassVolume),
-                lowpassSmoothed: Float(audioMonitor.lowpassVolume)
-            )
-            currentScene.applyAudioTick(snap, using: currentProcessor)
         }
     }
 }

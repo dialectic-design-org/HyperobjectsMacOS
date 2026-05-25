@@ -91,7 +91,7 @@ class FishSchoolSimulation {
             let delayVal = ensureValueIsFloat(delayInput!.getHistoryValue(millisecondsAgo: 0.0))
             if let input = speedInput {
                 let delay = Double(agent.id) * 30.0 * Double(delayVal) // 30ms delay per index
-                let val = ensureValueIsFloat(input.getHistoryValue(millisecondsAgo: delay))
+                let val = 0.01 + ensureValueIsFloat(input.getHistoryValue(millisecondsAgo: delay))
                 addedSpeed = val
             }
             

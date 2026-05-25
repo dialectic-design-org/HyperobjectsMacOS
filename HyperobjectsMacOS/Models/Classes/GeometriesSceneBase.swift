@@ -39,6 +39,14 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     var cachedGeometries: [GeometryWrapped] = []
     @Published var audioState = AudioState()
 
+    let sigmoidEnvelope = SigmoidEnvelope()
+    let freeformEnvelope = FreeformEnvelope()
+    @Published var selectedEnvelopeType: EnvelopeType = .sigmoid
+
+    var currentProcessor: EnvelopeProcessor {
+        selectedEnvelopeType == .sigmoid ? sigmoidEnvelope : freeformEnvelope
+    }
+
     var audioSignal: Float { audioState.signal }
     var audioSignalsSmoothed: [Int: Float] { audioState.signalsSmoothed }
     var audioSignalRaw: Float { audioState.signalRaw }
@@ -80,8 +88,8 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     }
 
     let audioHistory = AudioHistory(capacity: 3600)
-    var historyData: [AudioDataPoint] {
-        audioHistory.snapshot()
+    func historyData(since cutoff: Double) -> [AudioDataPoint] {
+        audioHistory.snapshot(since: cutoff)
     }
     
     private var _inputMap: [String: SceneInput]?

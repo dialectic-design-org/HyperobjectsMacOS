@@ -334,6 +334,10 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
                     )
                 )
             }))
+        } else if self.type == .string {
+            if let stringValue = self.value as? String {
+                return StateValue(value: .string(stringValue))
+            }
         }
         return StateValue(value: .float(0.0))
     }

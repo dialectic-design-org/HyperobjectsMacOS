@@ -24,6 +24,7 @@ struct StateValue {
     enum Value {
         case float(Double)
         case floatArray([Double])
+        case string(String)
         case vector3(SIMD3<Double>)
         case vector4(SIMD4<Double>)
         case object([String: Value])
@@ -40,6 +41,8 @@ extension StateValue {
             return f
         case .floatArray(let a):
             return a as Any
+        case .string(let s):
+            return s
         case .vector3(let v):
             return ["x": v.x, "y": v.y, "z": v.z]
         case .vector4(let v):
@@ -63,6 +66,9 @@ extension StateValue {
     }
     
     static func fromJSONValue(_ jsonValue: Any) -> StateValue? {
+        if let str = jsonValue as? String {
+            return StateValue(value: .string(str))
+        }
         if let number = jsonValue as? Double {
             return StateValue(value: .float(number))
         } else if let dict = jsonValue as? [String: Any] {
@@ -441,6 +447,8 @@ extension StateValue {
             return JSValue(double: f, in: context)
         case .floatArray(let a):
             return JSValue(object: a, in: context)
+        case .string(let s):
+            return JSValue(object: s, in: context)
         case .vector3(let v):
             let obj = JSValue(newObjectIn: context)
             obj?.setValue(v.x, forProperty: "x")

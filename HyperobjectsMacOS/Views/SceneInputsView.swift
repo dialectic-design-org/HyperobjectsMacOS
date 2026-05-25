@@ -12,22 +12,9 @@ import UniformTypeIdentifiers
 struct SceneInputsView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
     @EnvironmentObject var audioMonitor: AudioInputMonitor
-    @StateObject private var sigmoidEnvelope = SigmoidEnvelope()
-    @StateObject private var freeformEnvelope = FreeformEnvelope()    
-    @State private var selectedEnvelopeType: EnvelopeType = .sigmoid
-    
-    
-    var currentProcessor: EnvelopeProcessor {
-        switch selectedEnvelopeType {
-        case .sigmoid:
-            return sigmoidEnvelope
-        case .freeform:
-            return freeformEnvelope
-        }
-    }
-    
 
-    
+
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
@@ -35,9 +22,9 @@ struct SceneInputsView: View {
                 RealtimePanel(
                     currentScene: currentScene,
                     audioMonitor: audioMonitor,
-                    selectedEnvelopeType: $selectedEnvelopeType,
-                    sigmoidEnvelope: sigmoidEnvelope,
-                    freeformEnvelope: freeformEnvelope
+                    selectedEnvelopeType: $currentScene.selectedEnvelopeType,
+                    sigmoidEnvelope: currentScene.sigmoidEnvelope,
+                    freeformEnvelope: currentScene.freeformEnvelope
                 )
                 InputsGrid(
                     structuralSignature: currentScene.inputs.structuralSignature,
