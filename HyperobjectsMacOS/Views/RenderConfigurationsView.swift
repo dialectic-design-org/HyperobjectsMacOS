@@ -101,6 +101,7 @@ struct RenderConfigurationsView: View {
 
                 Text("Band Field").font(.headline)
                 Toggle("Enable band displacement", isOn: $renderConfigurations.bandFieldDisplacementEnabled)
+                Toggle("Force band field render every frame", isOn: $renderConfigurations.bandFieldForceRenderEveryFrame)
                 Text("Extra bin overlap: \(String(format: "%.1f", renderConfigurations.bandFieldExtraBinOverlapPx)) px")
                 Slider(value: $renderConfigurations.bandFieldExtraBinOverlapPx, in: 0...256)
                 

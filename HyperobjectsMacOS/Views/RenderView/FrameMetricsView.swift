@@ -43,3 +43,27 @@ struct FrameMetricsView: View {
         .frame(maxWidth: 250)
     }
 }
+
+struct RenderStageMetricsView: View {
+    @ObservedObject var rendererState: RendererState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Render stages")
+                .font(.system(size: 12, weight: .bold))
+            Text("Encode: \(String(format: "%.2f", rendererState.renderEncodeMs)) ms")
+                .font(.system(size: 12, weight: .medium))
+            Text("Frame wait: \(String(format: "%.2f", rendererState.frameWaitMs)) ms")
+                .font(.system(size: 12, weight: .medium))
+            Text("Band prep: \(String(format: "%.2f", rendererState.bandPrepMs)) ms")
+                .font(.system(size: 12, weight: .medium))
+            Text("Band pass: \(rendererState.bandRenderEncoded ? "encoded" : "skipped")")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(rendererState.bandRenderEncoded ? .orange : .green)
+        }
+        .padding(8)
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(6)
+        .frame(maxWidth: 250)
+    }
+}

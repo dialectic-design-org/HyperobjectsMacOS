@@ -54,6 +54,7 @@ struct RenderView: View {
                     FrameMetricsView(
                         timingManager: rendererState.frameTimingManager
                     )
+                    RenderStageMetricsView(rendererState: rendererState)
 
                 }.padding(8)
             }

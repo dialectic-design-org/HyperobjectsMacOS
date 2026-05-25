@@ -26,6 +26,20 @@ private final class ScriptInputCache {
     }
 }
 
+private final class ScriptOutputWarningCache {
+    private var boolTypeMismatchKeys: Set<String> = []
+    private let lock = NSLock()
+
+    func warnBoolTypeMismatchOnce(key: String, input: StateValue, output: StateValue) {
+        lock.lock()
+        let isNew = boolTypeMismatchKeys.insert(key).inserted
+        lock.unlock()
+        if isNew {
+            print("[State Change] Ignoring bool output for numeric key \(key): \(input) -> \(output)")
+        }
+    }
+}
+
 @main
 struct HyperobjectsMacOSApp: App {
     @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneSwarm())
@@ -43,6 +57,7 @@ struct HyperobjectsMacOSApp: App {
     @State private var latestScript: String = ""
     private let timeBox: TimeBox
     private let scriptInputCache = ScriptInputCache()
+    private let scriptOutputWarningCache = ScriptOutputWarningCache()
     
     init() {
         print("Application initialized")
@@ -107,7 +122,7 @@ struct HyperobjectsMacOSApp: App {
                         
                         _ = jsEngine.executeScript(script, inputState: inputState) { outputState in
                             latestScript = script
-                            applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene, bandFieldManager: bandFieldManager)
+                            applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene, bandFieldManager: bandFieldManager, warningCache: scriptOutputWarningCache)
                             targetScene.refreshSceneInputSnapshot()
                         }
                     }
@@ -131,7 +146,7 @@ struct HyperobjectsMacOSApp: App {
                                     if outputState.keys.contains("RESET") {
                                         targetScene.resetAllInputsToInitialValues()
                                     }
-                                    applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene, bandFieldManager: bandFieldManager)
+                                    applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene, bandFieldManager: bandFieldManager, warningCache: scriptOutputWarningCache)
                                     targetScene.refreshSceneInputSnapshot()
                                 }
                             }
@@ -257,7 +272,7 @@ private func prepareScriptInput(scene: GeometriesSceneBase, timeBox: TimeBox, au
 }
 
 
-func applyScriptOutput(inputState: [String: StateValue], outputState: [String: StateValue], scene: GeometriesSceneBase, bandFieldManager: BandFieldManager) {
+private func applyScriptOutput(inputState: [String: StateValue], outputState: [String: StateValue], scene: GeometriesSceneBase, bandFieldManager: BandFieldManager, warningCache: ScriptOutputWarningCache) {
     // Compare outputState to inputState and print changes only (no scene mutation yet)
     let epsilon: Double = 1e-6
     if outputState["bands"] == nil {
@@ -280,6 +295,9 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
         }
         
         switch (inVal.value, outVal.value) {
+        case (.float, .bool):
+            warningCache.warnBoolTypeMismatchOnce(key: key, input: inVal, output: outVal)
+            continue
         case (.float(let a), .float(let b)):
             // Only apply state change above certain difference
             // if abs(Double(a) - Double(b)) > epsilon {

@@ -83,6 +83,7 @@ class RenderConfigurations: ObservableObject {
 
     @Published var bandFieldDisplacementEnabled: Bool = true
     @Published var bandFieldExtraBinOverlapPx: Float = 0.0
+    @Published var bandFieldForceRenderEveryFrame: Bool = false
 
 
 }
@@ -94,7 +95,7 @@ enum BandFieldPreviewMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-struct BandFieldBand {
+struct BandFieldBand: Equatable {
     var center: Float
     var halfWidth: Float
     var featherW: Float
@@ -107,14 +108,14 @@ struct BandFieldBand {
     var gradMode: UInt32
 }
 
-struct BandFieldLayer {
+struct BandFieldLayer: Equatable {
     var axis: UInt32
     var blendMode: UInt32
     var opacity: Float
     var bands: [BandFieldBand]
 }
 
-struct BandFieldState {
+struct BandFieldState: Equatable {
     var enabled: Bool = false
     var xAmplitudePx: Float = 0
     var yAmplitudePx: Float = 0
@@ -153,28 +154,70 @@ struct BandFieldUniforms {
 }
 
 final class BandFieldManager: ObservableObject {
-    @Published private(set) var state = BandFieldState()
+    private(set) var state = BandFieldState()
     @Published var previewMode: BandFieldPreviewMode = .rawRGB
-    @Published private(set) var warningMessage: String?
+    private(set) var warningMessage: String?
 
     let maxBands = 256
+    private let lock = NSLock()
+    private var version: UInt64 = 0
+    private var cachedShaderBands: [ShaderBandFieldBand] = []
+    private var cachedUniforms = BandFieldUniforms()
 
     func apply(_ value: StateValue) {
         do {
-            state = try Self.parse(value, maxBands: maxBands)
+            let nextState = try Self.parse(value, maxBands: maxBands)
+            let nextBands = Self.makeShaderBands(from: nextState, maxBands: maxBands)
+            let nextUniforms = Self.makeUniforms(from: nextState, bandCount: nextBands.count, previewMode: .rawRGB)
+            lock.lock()
+            if nextState == state {
+                warningMessage = nil
+                lock.unlock()
+                return
+            }
+            version &+= 1
+            cachedShaderBands = nextBands
+            cachedUniforms = nextUniforms
+            state = nextState
             warningMessage = nil
+            lock.unlock()
         } catch {
-            state = BandFieldState()
-            warningMessage = "Invalid bands output: \(error)"
+            setDisabledState(warning: "Invalid bands output: \(error)")
         }
     }
 
     func disable() {
-        state = BandFieldState()
-        warningMessage = nil
+        setDisabledState(warning: nil)
+    }
+
+    private func setDisabledState(warning: String?) {
+        let disabled = BandFieldState()
+        lock.lock()
+        if state == disabled {
+            warningMessage = warning
+            lock.unlock()
+            return
+        }
+        version &+= 1
+        cachedShaderBands = []
+        cachedUniforms = BandFieldUniforms()
+        state = disabled
+        warningMessage = warning
+        lock.unlock()
+    }
+
+    func snapshot() -> (version: UInt64, bands: [ShaderBandFieldBand], uniforms: BandFieldUniforms, state: BandFieldState, warningMessage: String?) {
+        lock.lock()
+        let result = (version, cachedShaderBands, cachedUniforms, state, warningMessage)
+        lock.unlock()
+        return result
     }
 
     func shaderBands() -> [ShaderBandFieldBand] {
+        Self.makeShaderBands(from: state, maxBands: maxBands)
+    }
+
+    private static func makeShaderBands(from state: BandFieldState, maxBands: Int) -> [ShaderBandFieldBand] {
         var output: [ShaderBandFieldBand] = []
         output.reserveCapacity(min(maxBands, state.layers.reduce(0) { $0 + $1.bands.count }))
         for layer in state.layers {
@@ -200,16 +243,25 @@ final class BandFieldManager: ObservableObject {
 
     func uniforms(previewMode: BandFieldPreviewMode? = nil) -> BandFieldUniforms {
         let mode = previewMode ?? self.previewMode
+        let current = snapshot()
+        return Self.makeUniforms(from: current.state, bandCount: current.bands.count, previewMode: mode)
+    }
+
+    private static func makeUniforms(from state: BandFieldState, bandCount: Int, previewMode: BandFieldPreviewMode) -> BandFieldUniforms {
         return BandFieldUniforms(
-            bandCount: UInt32(shaderBands().count),
+            bandCount: UInt32(bandCount),
             enabled: state.enabled ? 1 : 0,
             xAmplitudePx: state.xAmplitudePx,
             yAmplitudePx: state.yAmplitudePx,
-            previewMode: mode == .rawRGB ? 0 : 1
+            previewMode: previewMode == .rawRGB ? 0 : 1
         )
     }
 
     func samplePreviewColor(x: Double, y: Double, mode: BandFieldPreviewMode) -> Color {
+        Self.samplePreviewColor(state: snapshot().state, x: x, y: y, mode: mode)
+    }
+
+    static func samplePreviewColor(state: BandFieldState, x: Double, y: Double, mode: BandFieldPreviewMode) -> Color {
         guard state.enabled else { return Color.black.opacity(0.2) }
         let ndc = SIMD2<Float>(Float(x) * 2 - 1, 1 - Float(y) * 2)
         var premul = SIMD4<Float>(0, 0, 0, 0)

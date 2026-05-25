@@ -157,6 +157,9 @@ class MetalRenderer {
     
     private var currentTextureWidth: Int = 0
     private var currentTextureHeight: Int = 0
+    private var lastBandFieldVersion: UInt64 = UInt64.max
+    private var lastBandFieldWidth: Int = 0
+    private var lastBandFieldHeight: Int = 0
     
     var rotation: Float = 0.0
     var drawCounter: Int = 0
@@ -410,8 +413,11 @@ class MetalRenderer {
     }
     
     func render(drawable: CAMetalDrawable) {
+        let frameWaitStart = CFAbsoluteTimeGetCurrent()
         // Block if 3 frames are already in flight
         frameSemaphore.wait()
+        let frameWaitMs = (CFAbsoluteTimeGetCurrent() - frameWaitStart) * 1000
+        let renderStart = CFAbsoluteTimeGetCurrent()
 
         guard let renderPipelineState = renderPipelineState,
               let computeToRenderPipelineState = computeToRenderPipelineState,
@@ -566,6 +572,9 @@ class MetalRenderer {
             createLineRenderTexture(width: viewW, height: viewH)
             currentTextureWidth = viewW
             currentTextureHeight = viewH
+            lastBandFieldVersion = UInt64.max
+            lastBandFieldWidth = 0
+            lastBandFieldHeight = 0
         }
         
         
@@ -712,22 +721,39 @@ class MetalRenderer {
         // Reset to 0 for each frame
         segAllocPtr[0] = segAlloc
 
+        let bandPrepStart = CFAbsoluteTimeGetCurrent()
         var bandUniforms = BandFieldUniforms()
+        var bandBands: [ShaderBandFieldBand] = []
+        var bandVersion: UInt64 = 0
         if let bandFieldManager, renderConfigs?.bandFieldDisplacementEnabled ?? false {
-            let bands = bandFieldManager.shaderBands()
-            bandUniforms = bandFieldManager.uniforms(previewMode: .rawRGB)
-            bandUniforms.enabled = bandFieldManager.state.enabled ? 1 : 0
-            bandUniforms.bandCount = UInt32(bands.count)
-            if !bands.isEmpty, let bandFieldBandBuffer {
-                bands.withUnsafeBytes { raw in
-                    if let base = raw.baseAddress {
-                        memcpy(bandFieldBandBuffer.contents(), base, raw.count)
-                    }
+            let snapshot = bandFieldManager.snapshot()
+            bandVersion = snapshot.version
+            bandBands = snapshot.bands
+            bandUniforms = snapshot.uniforms
+        }
+
+        let shouldRenderBandField = bandUniforms.enabled != 0 &&
+            bandUniforms.bandCount > 0 &&
+            (renderConfigs?.bandFieldDisplacementEnabled ?? false) &&
+            ((renderConfigs?.bandFieldForceRenderEveryFrame ?? false) ||
+             bandVersion != lastBandFieldVersion ||
+            viewW != lastBandFieldWidth ||
+             viewH != lastBandFieldHeight)
+        let bandPrepMs = (CFAbsoluteTimeGetCurrent() - bandPrepStart) * 1000
+
+        if shouldRenderBandField, !bandBands.isEmpty, let bandFieldBandBuffer {
+            bandBands.withUnsafeBytes { raw in
+                if let base = raw.baseAddress {
+                    memcpy(bandFieldBandBuffer.contents(), base, raw.count)
                 }
             }
         }
 
-        if let bandFieldTexture, let renderBandFieldPSO, let bandEncoder = commandBuffer.makeComputeCommandEncoder() {
+        if shouldRenderBandField,
+           let bandFieldTexture,
+           let renderBandFieldPSO,
+           let bandFieldBandBuffer,
+           let bandEncoder = commandBuffer.makeComputeCommandEncoder() {
             bandEncoder.setComputePipelineState(renderBandFieldPSO)
             bandEncoder.setTexture(bandFieldTexture, index: 0)
             bandEncoder.setBuffer(bandFieldBandBuffer, offset: 0, index: 0)
@@ -735,6 +761,9 @@ class MetalRenderer {
             let tptg = safeThreadsPerThreadgroup(renderBandFieldPSO, preferred: MTLSize(width: 16, height: 16, depth: 1))
             bandEncoder.dispatchThreads(MTLSize(width: viewW, height: viewH, depth: 1), threadsPerThreadgroup: tptg)
             bandEncoder.endEncoding()
+            lastBandFieldVersion = bandVersion
+            lastBandFieldWidth = viewW
+            lastBandFieldHeight = viewH
         }
         
         if renderSDFLines {
@@ -963,6 +992,13 @@ class MetalRenderer {
 
         // Publish frame to Syphon/NDI before presenting
         videoStreamManager?.publishFrame(commandBuffer: commandBuffer, sourceTexture: drawable.texture)
+
+        rendererState?.publishRenderMetrics(
+            bandPrepMs: bandPrepMs,
+            bandRenderEncoded: shouldRenderBandField,
+            renderEncodeMs: (CFAbsoluteTimeGetCurrent() - renderStart) * 1000,
+            frameWaitMs: frameWaitMs
+        )
 
         commandBuffer.addCompletedHandler { [weak self] _ in
             self?.frameSemaphore.signal()
