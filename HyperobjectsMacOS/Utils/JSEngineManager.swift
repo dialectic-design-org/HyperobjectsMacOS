@@ -188,6 +188,21 @@ class JSEngineManager: ObservableObject {
             self?.setupContext()
         }
     }
+
+    func reset() {
+        jsQueue.async { [weak self] in
+            guard let self else { return }
+            self.setupContext()
+            self.consecutiveErrors = 0
+            DispatchQueue.main.async {
+                self.outputState = [:]
+                self.errorMessage = nil
+                self.warningMessage = nil
+                self.lastExecutionTime = nil
+                self.executionDuration = 0
+            }
+        }
+    }
     
     func setupContext() {
         context = JSContext()
@@ -211,7 +226,7 @@ class JSEngineManager: ObservableObject {
         context?.evaluateScript(scriptToEvaluate)
     }
     
-    func executeScript(_ script: String, inputState: [String: StateValue]) -> Bool {
+    func executeScript(_ script: String, inputState: [String: StateValue], completion: (([String: StateValue]) -> Void)? = nil) -> Bool {
         let requestTime = CFAbsoluteTimeGetCurrent()
         
         jsQueue.async { [weak self] in
@@ -341,6 +356,7 @@ class JSEngineManager: ObservableObject {
                 }
             }
             context.setObject(jsInputState, forKeyedSubscript: "inputState" as NSString)
+            context.setObject(JSValue(undefinedIn: context), forKeyedSubscript: "outputState" as NSString)
             
             // Execute the user function
             let userMain = context.objectForKeyedSubscript("userMain")
@@ -401,6 +417,7 @@ class JSEngineManager: ObservableObject {
                     self.errorMessage = nil
                     self.lastExecutionTime = Date()
                     self.executionDuration = duration
+                    completion?(parsedOutput)
                 }
                 return
             } else {

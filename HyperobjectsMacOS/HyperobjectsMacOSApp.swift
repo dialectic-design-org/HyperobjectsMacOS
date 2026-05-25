@@ -67,7 +67,7 @@ struct HyperobjectsMacOSApp: App {
                         lowpassSmoothed: Float(audioMonitor.lowpassVolume)
                     )
                     sceneManager.currentScene.applyAudioTick(snap, using: sceneManager.currentScene.currentProcessor)
-                    scriptInputCache.update(prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor))
+                    scriptInputCache.update(prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
                 }
                 .onChange(of: midiManager.lastCCUpdate) { _, _ in
                     let k7 = midiManager.controls.ccValue(controller: 7, interpolate: true)
@@ -76,54 +76,60 @@ struct HyperobjectsMacOSApp: App {
                     envelope.steepness = 0.0 + pow(k7 * 3, 5)
                     envelope.threshold = k8
                 }
+                .onChange(of: midiManager.lastSignalUpdate) { _, _ in
+                    scriptInputCache.update(prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
+                }
                 .onChange(of: renderConfigurations.geometryTriggerMode) { _, newMode in
                     sceneManager.currentScene.setGeometryTriggerMode(newMode)
                 }
                 .onChange(of: ObjectIdentifier(sceneManager.currentScene)) { _, _ in
                     // New scene defaults to .onRenderRequest — push the user's current choice.
                     sceneManager.currentScene.setGeometryTriggerMode(renderConfigurations.geometryTriggerMode)
+                    scriptInputCache.update(prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
+                }
+                .onChange(of: fileMonitor.unloadToken) { _, _ in
+                    latestScript = ""
+                    jsEngine.reset()
+                    scriptInputCache.update(prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
+                    sceneManager.currentScene.refreshSceneInputSnapshot()
                 }
                 .onAppear {
                     print("Main content view onappear")
                     audioMonitor.startMonitoring()
-                    fileMonitor.setCallback { [weak sceneManager, weak jsEngine] script in
-                        guard let sceneManager = sceneManager, let jsEngine = jsEngine else { return }
+                    fileMonitor.setCallback { [weak sceneManager, weak jsEngine, weak midiManager] script in
+                        guard let sceneManager = sceneManager, let jsEngine = jsEngine, let midiManager = midiManager else { return }
                         
-                        let inputState = prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor)
+                        let targetScene = sceneManager.currentScene
+                        let inputState = prepareScriptInput(scene: targetScene, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls)
                         
-                        _ = jsEngine.executeScript(script, inputState: inputState)
-                        
-                        DispatchQueue.main.async {
+                        _ = jsEngine.executeScript(script, inputState: inputState) { outputState in
                             latestScript = script
-                            let outputState = jsEngine.outputState
-
-                            applyScriptOutput(inputState: inputState, outputState: outputState, sceneManager: sceneManager)
-                            sceneManager.currentScene.refreshSceneInputSnapshot()
+                            applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene)
+                            targetScene.refreshSceneInputSnapshot()
                         }
-                        
                     }
                     
                     
                     if jsTimer == nil {
                         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInteractive))
                         timer.schedule(deadline: .now(), repeating: 1.0 / 120.0)
-                        timer.setEventHandler { [weak sceneManager, weak jsEngine] in
-                            guard let sceneManager, let jsEngine else { return }
+                        timer.setEventHandler { [weak sceneManager, weak jsEngine, weak midiManager] in
+                            guard let sceneManager, let jsEngine, let midiManager else { return }
 
                             timeBox.value += 1.0 / 120.0
 
                             if renderConfigurations.runScriptOnFrameChange && latestScript.isEmpty == false {
-                                let inputState = scriptInputCache.snapshot()
+                                var inputState = scriptInputCache.snapshot()
+                                inputState["time"] = StateValue(value: .float(timeBox.value))
+                                inputState["midi"] = midiManager.controls.javascriptStateValue()
 
-                                _ = jsEngine.executeScript(latestScript, inputState: inputState)
-
-                                DispatchQueue.main.async {
-                                    let outputState = jsEngine.outputState
+                                let targetScene = sceneManager.currentScene
+                                _ = jsEngine.executeScript(latestScript, inputState: inputState) { outputState in
                                     if outputState.keys.contains("RESET") {
-                                        sceneManager.currentScene.resetAllInputsToInitialValues()
+                                        targetScene.resetAllInputsToInitialValues()
                                     }
-                                    applyScriptOutput(inputState: inputState, outputState: outputState, sceneManager: sceneManager)
-                                    sceneManager.currentScene.refreshSceneInputSnapshot()
+                                    applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene)
+                                    targetScene.refreshSceneInputSnapshot()
                                 }
                             }
                         }
@@ -197,10 +203,14 @@ struct HyperobjectsMacOSApp: App {
 }
 
 
-private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox, audioMonitor: AudioInputMonitor) -> [String: StateValue] {
+private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox, audioMonitor: AudioInputMonitor, midiControls: MIDIControlState) -> [String: StateValue] {
+    prepareScriptInput(scene: sceneManager.currentScene, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiControls)
+}
+
+private func prepareScriptInput(scene: GeometriesSceneBase, timeBox: TimeBox, audioMonitor: AudioInputMonitor, midiControls: MIDIControlState) -> [String: StateValue] {
     
-    var latestAudioAmplitude = sceneManager.currentScene.audioSignalProcessed.isZero ? 0.0 : sceneManager.currentScene.audioSignalProcessed.magnitude
-    let smoothedAudioAmplitudes = sceneManager.currentScene.audioSignalsSmoothedProcessed.map {
+    var latestAudioAmplitude = scene.audioSignalProcessed.isZero ? 0.0 : scene.audioSignalProcessed.magnitude
+    let smoothedAudioAmplitudes = scene.audioSignalsSmoothedProcessed.map {
         return $0.value
     }
     
@@ -208,8 +218,8 @@ private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox, au
         return Double($0)
     }
     
-    let cutoff = (sceneManager.currentScene.audioHistory.suffix(1).first?.timestamp ?? 0) - 10.0
-    let recentVolumesProcessed = sceneManager.currentScene.historyData(since: cutoff).map {
+    let cutoff = (scene.audioHistory.suffix(1).first?.timestamp ?? 0) - 10.0
+    let recentVolumesProcessed = scene.historyData(since: cutoff).map {
         return $0.processedVolume
     }
     
@@ -219,10 +229,11 @@ private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox, au
         "smoothedAudioAmplitudes": StateValue(value: .floatArray(smoothedAudioAmplitudes)),
         "recentVolumesRaw": StateValue(value: .floatArray(recentVolumes)),
         "recentVolumesProcessed": StateValue(value: .floatArray(recentVolumesProcessed)),
+        "midi": midiControls.javascriptStateValue(),
         "width": StateValue(value: .float(800.0)),
         "height": StateValue(value: .float(600.0))
     ]
-    let currentSceneInputs = sceneManager.currentScene.inputs
+    let currentSceneInputs = scene.inputs
     for input in currentSceneInputs {
         inputState[input.name] = input.toStateValue()
         inputState["audio_add_\(input.name)"] = StateValue(value: .float(Double(input.audioAmplificationAddition)))
@@ -237,7 +248,7 @@ private func prepareScriptInput(sceneManager: SceneManager, timeBox: TimeBox, au
 }
 
 
-func applyScriptOutput(inputState: [String: StateValue], outputState: [String: StateValue], sceneManager: SceneManager) {
+func applyScriptOutput(inputState: [String: StateValue], outputState: [String: StateValue], scene: GeometriesSceneBase) {
     // Compare outputState to inputState and print changes only (no scene mutation yet)
     let epsilon: Double = 1e-6
     for (key, outVal) in outputState {
@@ -261,40 +272,40 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
                     // print("Audio add prefix")
                     // get key without prefix
                     let audioKey = String(key.dropFirst("audio_add_".count))
-                    if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
                         input.audioAmplificationAddition = Float(b)
                     }
                 } else if  key.isEmpty == false, key.hasPrefix("audio_multiply_offset_") {
                     // get key without prefix
                     let audioKey = String(key.dropFirst("audio_multiply_offset_".count))
-                    if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
                         input.audioAmplificationMultiplicationOffset = Float(b)
                     }
                 } else if  key.isEmpty == false, key.hasPrefix("audio_multiply_") {
                     // get key without prefix
                     let audioKey = String(key.dropFirst("audio_multiply_".count))
-                    if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
                         input.audioAmplificationMultiplication = Float(b)
                     }
                 }else if  key.isEmpty == false, key.hasPrefix("audio_delay_") {
                     // get key without prefix
                     let audioKey = String(key.dropFirst("audio_delay_".count))
-                    if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
                         input.audioDelay = Float(b)
                     }
                 } else if key.isEmpty == false, key.hasPrefix("frame_tick_") {
                     let audioKey = String(key.dropFirst("frame_tick_".count))
-                    if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
                         input.tickValueAdjustment = Double(b)
                     }
                 } else if key.isEmpty == false, key.hasPrefix("audio_smoothed_source_") {
                     let audioKey = String(key.dropFirst("audio_smoothed_source_".count))
-                    if let input = sceneManager.currentScene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
                         input.audioSmoothedSource = Int(b)
                     }
                 } else {
                     // Update the matching input safely by name, avoiding optional-call and enum ambiguity
-                    if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
+                    if let input = scene.inputs.first(where: { $0.name == key }) {
                         
                         if input.type == .float {
                             input.value = Double(b)
@@ -306,20 +317,20 @@ func applyScriptOutput(inputState: [String: StateValue], outputState: [String: S
                     }
                 }
         case (.vector4(let a), .vector4(let b)):
-            if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
+            if let input = scene.inputs.first(where: { $0.name == key }) {
                 if input.type == .colorInput {
                     let nsColor = NSColor(deviceRed: b[0], green: b[1], blue: b[2], alpha: b[3])
                     input.value = Color(nsColor: nsColor)
                 }
             }
         case (.string(_), .string(let b)):
-            if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
+            if let input = scene.inputs.first(where: { $0.name == key }) {
                 if input.type == .string {
                     input.value = b
                 }
             }
         case (.lineSegments(let a), .lineSegments(let b)):
-            if let input = sceneManager.currentScene.inputs.first(where: { $0.name == key }) {
+            if let input = scene.inputs.first(where: { $0.name == key }) {
                 var newLines: [Line] = []
                 for scriptLine in b {
                     let start = SIMD3<Float>(Float(scriptLine.start.x), Float(scriptLine.start.y), Float(scriptLine.start.z))
@@ -371,4 +382,3 @@ private struct OpenMainWindowCommand: Commands {
         }
     }
 }
-

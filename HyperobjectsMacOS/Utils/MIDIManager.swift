@@ -12,6 +12,7 @@ import Combine
 
 class MIDIManager: ObservableObject {
     @Published var logEntries: [String] = []
+    @Published var lastSignalUpdate: UInt64 = 0
     @Published var lastCCUpdate: UInt64 = 0
     
     let controls = MIDIControlState()
@@ -107,8 +108,22 @@ class MIDIManager: ObservableObject {
         
         controls.ingest(bytes: dataArray, timeStamp: pkt.timeStamp)
         
-        if let status = dataArray.first, status & 0xF0 == 0xB0, dataArray.count >= 3 {
-            DispatchQueue.main.async { self.lastCCUpdate &+= 1 }
+        let channelMessages = MIDIControlState.channelVoiceMessages(in: dataArray)
+        let hasSceneSignal = channelMessages.contains { message in
+            switch message.type {
+            case 0x80, 0x90, 0xB0:
+                return true
+            default:
+                return false
+            }
+        }
+        let hasCC = channelMessages.contains { $0.type == 0xB0 }
+
+        if hasSceneSignal || hasCC {
+            DispatchQueue.main.async {
+                if hasSceneSignal { self.lastSignalUpdate &+= 1 }
+                if hasCC { self.lastCCUpdate &+= 1 }
+            }
         }
     }
     

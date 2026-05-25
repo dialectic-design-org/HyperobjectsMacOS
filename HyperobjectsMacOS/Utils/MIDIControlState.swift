@@ -24,6 +24,9 @@ struct ADSR {
 }
 
 final class MIDIControlState {
+    static let defaultKnobControllers: [UInt8] = Array(1...8)
+    static let defaultPadNotes: [UInt8] = Array(36...43)
+
     var defaultADSR: ADSR = .default
     var historyWindow: TimeInterval = 120
     var maxSamplesPerControl = 4096
@@ -54,6 +57,7 @@ final class MIDIControlState {
     private var ccHistory: [CCKey: [Sample]] = [:]
     private var noteSpans: [NoteKey: [NoteSpan]] = [:]
     private var pitchBend: [UInt8: [Sample]] = [:]
+    private var emittedSnapshotWarnings: Set<String> = []
     
     private func withLock<T>(_ body: () -> T) -> T {
         lock.lock(); defer { lock.unlock() }
@@ -64,6 +68,12 @@ final class MIDIControlState {
         let t = timeStamp == 0 ? now() : Self.machToSeconds(timeStamp)
         withLock {
             for msg in Self.channelVoiceMessages(in: bytes) { record(msg, at: t) }
+        }
+    }
+
+    func ingest(bytes: [UInt8], atSeconds time: TimeInterval) {
+        withLock {
+            for msg in Self.channelVoiceMessages(in: bytes) { record(msg, at: time) }
         }
     }
     
@@ -200,12 +210,151 @@ final class MIDIControlState {
         }
     }
 
+    // MARK: JavaScript snapshot
+
+    /// Stable nested object exposed to scene scripts as `inputState.midi`.
+    /// Values are sampled at one timestamp so knobs, gates, and envelopes are frame-consistent.
+    func javascriptStateValue(
+        channel requestedChannel: UInt8 = 1,
+        knobControllers requestedKnobControllers: [UInt8] = MIDIControlState.defaultKnobControllers,
+        padNotes requestedPadNotes: [UInt8] = MIDIControlState.defaultPadNotes,
+        adsr requestedADSR: ADSR? = nil,
+        at time: TimeInterval? = nil
+    ) -> StateValue {
+        let t = time ?? now()
+        let object = withLock {
+            let channel = sanitizedChannel(requestedChannel)
+            let knobControllers = sanitizedMIDINumbers(
+                requestedKnobControllers,
+                fallback: Self.defaultKnobControllers,
+                warningKey: "knobControllers"
+            )
+            let padNotes = sanitizedMIDINumbers(
+                requestedPadNotes,
+                fallback: Self.defaultPadNotes,
+                warningKey: "padNotes"
+            )
+            let adsr = sanitizedADSR(requestedADSR ?? defaultADSR)
+
+            return buildMIDIObject(
+                channel: channel,
+                knobControllers: knobControllers,
+                padNotes: padNotes,
+                adsr: adsr,
+                at: t
+            )
+        }
+        return StateValue(value: .object(object))
+    }
+
     // MARK: Internal helpers
+
+    private func buildMIDIObject(
+        channel: UInt8,
+        knobControllers: [UInt8],
+        padNotes: [UInt8],
+        adsr: ADSR,
+        at t: TimeInterval
+    ) -> [String: StateValue.Value] {
+        var knobs: [String: StateValue.Value] = [:]
+        knobs.reserveCapacity(knobControllers.count)
+        for (index, controller) in knobControllers.enumerated() {
+            let raw = ccHistory[CCKey(channel: channel, controller: controller)].flatMap {
+                $0.isEmpty ? nil : Self.sample($0, at: t, interpolate: true)
+            } ?? 0
+            let value = Self.clampedFinite(raw / 127.0, min: 0, max: 1, fallback: 0)
+            knobs["k\(index + 1)"] = .object([
+                "cc": .float(Double(controller)),
+                "channel": .float(Double(channel)),
+                "raw": .float(Self.clampedFinite(raw, min: 0, max: 127, fallback: 0)),
+                "value": .float(value)
+            ])
+        }
+
+        var pads: [String: StateValue.Value] = [:]
+        pads.reserveCapacity(padNotes.count)
+        for (index, note) in padNotes.enumerated() {
+            let span = activeSpan(channel: channel, note: note, at: t)
+            let gate: Double
+            if let span, span.offTime == nil || span.offTime.map({ t < $0 }) == true {
+                gate = 1
+            } else {
+                gate = 0
+            }
+            let adsrValue = span.map {
+                Self.clampedFinite(Self.adsrLevel(at: t, span: $0, adsr: adsr, peak: $0.velocity / 127.0), min: 0, max: 1, fallback: 0)
+            } ?? 0
+            let velocity = adsrValue > 0 ? Self.clampedFinite((span?.velocity ?? 0) / 127.0, min: 0, max: 1, fallback: 0) : 0
+            pads["p\(index + 1)"] = .object([
+                "note": .float(Double(note)),
+                "channel": .float(Double(channel)),
+                "gate": .float(gate),
+                "adsr": .float(adsrValue),
+                "velocity": .float(velocity)
+            ])
+        }
+
+        return [
+            "knobs": .object(knobs),
+            "pads": .object(pads)
+        ]
+    }
+
+    private func sanitizedChannel(_ channel: UInt8) -> UInt8 {
+        if channel >= 1 && channel <= 16 { return channel }
+        emitSnapshotWarningOnce("channel", message: "MIDI snapshot channel \(channel) is invalid; falling back to channel 1")
+        return 1
+    }
+
+    private func sanitizedMIDINumbers(_ values: [UInt8], fallback: [UInt8], warningKey: String) -> [UInt8] {
+        let valid = values.filter { $0 <= 127 }
+        if valid.isEmpty {
+            emitSnapshotWarningOnce(warningKey, message: "MIDI snapshot \(warningKey) is empty; falling back to defaults")
+            return fallback
+        }
+        return valid
+    }
+
+    private func sanitizedADSR(_ adsr: ADSR) -> ADSR {
+        func duration(_ value: TimeInterval, fallback: TimeInterval, key: String) -> TimeInterval {
+            guard value.isFinite, value >= 0 else {
+                emitSnapshotWarningOnce("adsr.\(key)", message: "MIDI ADSR \(key) is invalid; falling back to \(fallback)")
+                return fallback
+            }
+            return value
+        }
+
+        let sustain: Double
+        if adsr.sustain.isFinite {
+            sustain = min(max(adsr.sustain, 0), 1)
+        } else {
+            emitSnapshotWarningOnce("adsr.sustain", message: "MIDI ADSR sustain is invalid; falling back to \(ADSR.default.sustain)")
+            sustain = ADSR.default.sustain
+        }
+
+        return ADSR(
+            attack: duration(adsr.attack, fallback: ADSR.default.attack, key: "attack"),
+            decay: duration(adsr.decay, fallback: ADSR.default.decay, key: "decay"),
+            sustain: sustain,
+            release: duration(adsr.release, fallback: ADSR.default.release, key: "release")
+        )
+    }
+
+    private func emitSnapshotWarningOnce(_ key: String, message: String) {
+        guard !emittedSnapshotWarnings.contains(key) else { return }
+        emittedSnapshotWarnings.insert(key)
+        os_log(.error, "%{public}@", message)
+    }
 
     private func activeSpan(channel: UInt8, note: UInt8, at t: TimeInterval) -> NoteSpan? {
         guard let spans = noteSpans[NoteKey(channel: channel, note: note)] else { return nil }
         for span in spans.reversed() where span.onTime <= t { return span }   // newest wins
         return nil
+    }
+
+    private static func clampedFinite(_ value: Double, min lower: Double, max upper: Double, fallback: Double) -> Double {
+        guard value.isFinite else { return fallback }
+        return Swift.min(Swift.max(value, lower), upper)
     }
 
     /// Last value at/before `t` (held), optionally linearly interpolated to the next.

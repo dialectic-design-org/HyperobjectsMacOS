@@ -11,6 +11,7 @@ import Combine
 
 class FileMonitor: ObservableObject {
     @Published var isMonitoring = false
+    @Published var unloadToken: UInt64 = 0
     private var fileURL: URL?
     private var source: DispatchSourceFileSystemObject?
     private var fileDescriptor: Int32 = -1
@@ -87,6 +88,11 @@ class FileMonitor: ObservableObject {
         }
         fileURL = nil
         isMonitoring = false
+    }
+
+    func unloadScript() {
+        stopMonitoring()
+        unloadToken &+= 1
     }
     
     func setCallback(_ callback: @escaping(String) -> Void) {

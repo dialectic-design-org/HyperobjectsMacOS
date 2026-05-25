@@ -22,6 +22,14 @@ struct CodeFileSelector: View {
                     Button(action: { isFilePickerPresented = true }) {
                         Label("Select JS File", systemImage: "doc.text")
                     }
+
+                    Button(role: .destructive) {
+                        selectedFile = nil
+                        fileMonitor.unloadScript()
+                    } label: {
+                        Label("Unload Script", systemImage: "xmark.circle")
+                    }
+                    .disabled(selectedFile == nil && !fileMonitor.isMonitoring && jsEngine.outputState.isEmpty && jsEngine.errorMessage == nil)
                     
                     if jsEngine.outputState.isEmpty && jsEngine.errorMessage == nil {
                         Text("Select a file")
