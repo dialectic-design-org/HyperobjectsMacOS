@@ -96,6 +96,13 @@ struct RenderConfigurationsView: View {
                 
                 Text("Blend intensity")
                 Slider(value: $renderConfigurations.blendIntensity, in: 0...1.0)
+
+                Divider().padding(.vertical, 8)
+
+                Text("Band Field").font(.headline)
+                Toggle("Enable band displacement", isOn: $renderConfigurations.bandFieldDisplacementEnabled)
+                Text("Extra bin overlap: \(String(format: "%.1f", renderConfigurations.bandFieldExtraBinOverlapPx)) px")
+                Slider(value: $renderConfigurations.bandFieldExtraBinOverlapPx, in: 0...256)
                 
                 Text("Bin depth rendering")
                 Slider(value: $binDepth,
@@ -246,4 +253,3 @@ struct RenderConfigurationsView: View {
         renderConfigurations.chromaticAberrationUseRadialMode = true
     }
 }
-

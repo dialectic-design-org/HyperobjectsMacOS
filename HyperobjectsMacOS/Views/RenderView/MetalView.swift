@@ -14,6 +14,7 @@ struct MetalView: NSViewRepresentable {
     let currentScene: GeometriesSceneBase
     let renderConfigs: RenderConfigurations
     @ObservedObject var videoStreamManager: VideoStreamManager
+    @ObservedObject var bandFieldManager: BandFieldManager
     @Binding var resolutionMode: ResolutionMode
     @Binding var resolution: CGSize // Bind the resolution to a parent view
     
@@ -23,7 +24,8 @@ struct MetalView: NSViewRepresentable {
         guard let renderer = MetalRenderer(
             rendererState: rendererState,
             currentScene: currentScene,
-            renderConfigs: renderConfigs) else {
+            renderConfigs: renderConfigs,
+            bandFieldManager: bandFieldManager) else {
             fatalError("Failed to create Metal renderer")
         }
 

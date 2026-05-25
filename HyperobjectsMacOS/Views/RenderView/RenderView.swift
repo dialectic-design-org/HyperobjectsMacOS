@@ -11,6 +11,7 @@ struct RenderView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
     @EnvironmentObject var renderConfigs: RenderConfigurations
     @EnvironmentObject var videoStreamManager: VideoStreamManager
+    @EnvironmentObject var bandFieldManager: BandFieldManager
     @StateObject private var rendererState = RendererState()
     @StateObject private var geometryVM = SceneGeometryViewModel()
     @State private var resolutionMode: ResolutionMode = .fixed
@@ -24,6 +25,7 @@ struct RenderView: View {
                 currentScene: currentScene,
                 renderConfigs: renderConfigs,
                 videoStreamManager: videoStreamManager,
+                bandFieldManager: bandFieldManager,
                 resolutionMode: $resolutionMode,
                 resolution: $resolution
             ).frame(minWidth: 300, minHeight: 300)

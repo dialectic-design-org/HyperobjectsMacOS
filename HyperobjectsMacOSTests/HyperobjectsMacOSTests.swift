@@ -67,6 +67,46 @@ struct HyperobjectsMacOSTests {
         #expect(try float(try required(afterRelease["velocity"])) == 0)
     }
 
+    @Test func bandFieldParserAcceptsObjectSchema() throws {
+        let bands = StateValue(value: .object([
+            "enabled": .bool(true),
+            "xAmplitudePx": .float(24),
+            "yAmplitudePx": .float(12),
+            "layers": .array([
+                .object([
+                    "axis": .string("vertical"),
+                    "opacity": .float(0.5),
+                    "bands": .array([
+                        .object([
+                            "center": .float(0),
+                            "halfWidth": .float(0.25),
+                            "featherW": .float(0.02),
+                            "centerL": .float(0),
+                            "halfLength": .float(1),
+                            "featherL": .float(0.01),
+                            "alpha": .float(1),
+                            "gradMode": .string("width"),
+                            "gradient": .array([
+                                .array([.float(0), .floatArray([1, 0, 0, 1])]),
+                                .array([.float(1), .floatArray([0, 1, 0, 1])])
+                            ])
+                        ])
+                    ])
+                ])
+            ])
+        ]))
+
+        let state = try BandFieldManager.parse(bands, maxBands: 256)
+
+        #expect(state.enabled)
+        #expect(state.xAmplitudePx == 24)
+        #expect(state.yAmplitudePx == 12)
+        #expect(state.layers.count == 1)
+        #expect(state.layers[0].bands.count == 1)
+        #expect(state.layers[0].bands[0].colorStart.x == 1)
+        #expect(state.layers[0].bands[0].colorEnd.y == 1)
+    }
+
 }
 
 private enum TestError: Error {

@@ -35,6 +35,7 @@ struct HyperobjectsMacOSApp: App {
     @StateObject private var audioMonitor = AudioInputMonitor()
     @StateObject private var videoStreamManager = VideoStreamManager()
     @StateObject private var midiManager = MIDIManager()
+    @StateObject private var bandFieldManager = BandFieldManager()
     @State private var selectedFile: URL?
     @State private var isFilePickerPresented = false
     @State private var jsTimer: DispatchSourceTimer?
@@ -58,6 +59,7 @@ struct HyperobjectsMacOSApp: App {
                 .environmentObject(renderConfigurations)
                 .environmentObject(videoStreamManager)
                 .environmentObject(audioMonitor)
+                .environmentObject(bandFieldManager)
                 .onChange(of: audioMonitor.smoothedVolume) { _, _ in
                     let snap = AudioSnapshot(
                         raw: audioMonitor.volume,
@@ -90,6 +92,7 @@ struct HyperobjectsMacOSApp: App {
                 .onChange(of: fileMonitor.unloadToken) { _, _ in
                     latestScript = ""
                     jsEngine.reset()
+                    bandFieldManager.disable()
                     scriptInputCache.update(prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
                     sceneManager.currentScene.refreshSceneInputSnapshot()
                 }
@@ -104,7 +107,7 @@ struct HyperobjectsMacOSApp: App {
                         
                         _ = jsEngine.executeScript(script, inputState: inputState) { outputState in
                             latestScript = script
-                            applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene)
+                            applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene, bandFieldManager: bandFieldManager)
                             targetScene.refreshSceneInputSnapshot()
                         }
                     }
@@ -128,7 +131,7 @@ struct HyperobjectsMacOSApp: App {
                                     if outputState.keys.contains("RESET") {
                                         targetScene.resetAllInputsToInitialValues()
                                     }
-                                    applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene)
+                                    applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene, bandFieldManager: bandFieldManager)
                                     targetScene.refreshSceneInputSnapshot()
                                 }
                             }
@@ -159,6 +162,7 @@ struct HyperobjectsMacOSApp: App {
             secondaryRenderWindowConfig.content.environmentObject(sceneManager.currentScene)
                                                .environmentObject(renderConfigurations)
                                                .environmentObject(videoStreamManager)
+                                               .environmentObject(bandFieldManager)
         }
         
         Window("\(sceneInputsWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: sceneInputsWindowConfig.id) {
@@ -173,6 +177,7 @@ struct HyperobjectsMacOSApp: App {
             renderConfigurationsWindowConfig.content.environmentObject(sceneManager.currentScene)
                                                     .environmentObject(renderConfigurations)
                                                     .environmentObject(videoStreamManager)
+                                                    .environmentObject(bandFieldManager)
         }
         
         Window("\(sceneGeometriesListWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: sceneGeometriesListWindowConfig.id) {
@@ -197,6 +202,10 @@ struct HyperobjectsMacOSApp: App {
         
         Window("\(midiLogWindowConfig.title)", id: midiLogWindowConfig.id) {
             midiLogWindowConfig.content.environmentObject(midiManager)
+        }
+
+        Window("\(bandFieldPreviewWindowConfig.title)", id: bandFieldPreviewWindowConfig.id) {
+            bandFieldPreviewWindowConfig.content.environmentObject(bandFieldManager)
         }
     }
     
@@ -248,11 +257,19 @@ private func prepareScriptInput(scene: GeometriesSceneBase, timeBox: TimeBox, au
 }
 
 
-func applyScriptOutput(inputState: [String: StateValue], outputState: [String: StateValue], scene: GeometriesSceneBase) {
+func applyScriptOutput(inputState: [String: StateValue], outputState: [String: StateValue], scene: GeometriesSceneBase, bandFieldManager: BandFieldManager) {
     // Compare outputState to inputState and print changes only (no scene mutation yet)
     let epsilon: Double = 1e-6
+    if outputState["bands"] == nil {
+        bandFieldManager.disable()
+    }
     for (key, outVal) in outputState {
         // print("Evaluating \(key)")
+
+        if key == "bands" {
+            bandFieldManager.apply(outVal)
+            continue
+        }
         
         guard let inVal = inputState[key] else {
             // print("[State Change] New key in output not present in input: \(key) => \(outVal)")

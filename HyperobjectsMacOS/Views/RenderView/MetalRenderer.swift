@@ -131,13 +131,17 @@ class MetalRenderer {
     var renderPSO: MTLComputePipelineState?
     var renderPipelineState: MTLRenderPipelineState?
     var computeToRenderPipelineState: MTLRenderPipelineState?
+    var renderBandFieldPSO: MTLComputePipelineState?
     var currentScene: GeometriesSceneBase?
     var renderConfigs: RenderConfigurations?
+    var bandFieldManager: BandFieldManager?
     var vertexBuffer: MTLBuffer?
     var indexBuffer: MTLBuffer?
     var uniformBuffer: MTLBuffer?
     var lineRenderTextureA: MTLTexture!
     var lineRenderTextureB: MTLTexture!
+    var bandFieldTexture: MTLTexture!
+    var bandFieldBandBuffer: MTLBuffer!
     let maxViewSize = 4096 * 2
 
     // DYNAMIC BUFFER SIZING
@@ -163,10 +167,11 @@ class MetalRenderer {
     // Video streaming (Syphon / NDI)
     var videoStreamManager: VideoStreamManager?
     
-    init?(rendererState: RendererState, currentScene: GeometriesSceneBase, renderConfigs: RenderConfigurations) {
+    init?(rendererState: RendererState, currentScene: GeometriesSceneBase, renderConfigs: RenderConfigurations, bandFieldManager: BandFieldManager) {
         self.rendererState = rendererState
         self.currentScene = currentScene
         self.renderConfigs = renderConfigs
+        self.bandFieldManager = bandFieldManager
         guard let device = MTLCreateSystemDefaultDevice() else {
             print("Metal is not supported on this device")
             return nil
@@ -278,6 +283,10 @@ class MetalRenderer {
 
         // Create triple-buffered line resources
         createLineBuffers()
+        bandFieldBandBuffer = device.makeBuffer(
+            length: MemoryLayout<ShaderBandFieldBand>.stride * (bandFieldManager?.maxBands ?? 256),
+            options: .storageModeShared
+        )
         
     }
     
@@ -361,6 +370,7 @@ class MetalRenderer {
             self.transformQuad = try makePSO("transformAndBinQuadratic")
             self.transformCubic = try makePSO("transformAndBinCubic")
             self.renderPSO = try makePSO("drawLines")
+            self.renderBandFieldPSO = try makePSO("renderBandField")
         } catch {
             fatalError("Failed to create pipelines: \(error)")
         }
@@ -387,6 +397,16 @@ class MetalRenderer {
         textureDescriptorB.usage = [.shaderWrite, .shaderRead, .renderTarget]
         textureDescriptorB.storageMode = .private
         lineRenderTextureB = device.makeTexture(descriptor: textureDescriptorB)
+
+        let bandDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba16Float,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        bandDescriptor.usage = [.shaderWrite, .shaderRead]
+        bandDescriptor.storageMode = .private
+        bandFieldTexture = device.makeTexture(descriptor: bandDescriptor)
     }
     
     func render(drawable: CAMetalDrawable) {
@@ -633,6 +653,8 @@ class MetalRenderer {
         // Convert to vector_float3
         
         let binDepthSource = renderConfigs?.binDepth ?? 16
+        let bandFieldEnabled = (renderConfigs?.bandFieldDisplacementEnabled ?? false)
+        let bandMaxOffset = bandFieldEnabled ? ((bandFieldManager?.state.maxOffsetPx ?? 0) + (renderConfigs?.bandFieldExtraBinOverlapPx ?? 0)) : 0
         
         
         for i in 0..<1000 {
@@ -667,7 +689,8 @@ class MetalRenderer {
             lineDebugGradientEndColor: colorToVector(lineDebugGradientEnd.color),
             blendRadius: resolve(overrides.blendRadius, renderConfigs?.blendRadius ?? 0.0),
             blendIntensity: resolve(overrides.blendIntensity, renderConfigs?.blendIntensity ?? 0.0),
-            previousColorVisibility: resolve(overrides.previousColorVisibility, renderConfigs?.previousColorVisibility ?? 0.0)
+            previousColorVisibility: resolve(overrides.previousColorVisibility, renderConfigs?.previousColorVisibility ?? 0.0),
+            bandFieldMaxOffsetPx: bandMaxOffset
         )
         
         let renderPassDescriptor = MTLRenderPassDescriptor()
@@ -688,6 +711,31 @@ class MetalRenderer {
         var segAllocPtr = frame.segAllocBuffer.contents().bindMemory(to: SegAlloc.self, capacity: Int(1))
         // Reset to 0 for each frame
         segAllocPtr[0] = segAlloc
+
+        var bandUniforms = BandFieldUniforms()
+        if let bandFieldManager, renderConfigs?.bandFieldDisplacementEnabled ?? false {
+            let bands = bandFieldManager.shaderBands()
+            bandUniforms = bandFieldManager.uniforms(previewMode: .rawRGB)
+            bandUniforms.enabled = bandFieldManager.state.enabled ? 1 : 0
+            bandUniforms.bandCount = UInt32(bands.count)
+            if !bands.isEmpty, let bandFieldBandBuffer {
+                bands.withUnsafeBytes { raw in
+                    if let base = raw.baseAddress {
+                        memcpy(bandFieldBandBuffer.contents(), base, raw.count)
+                    }
+                }
+            }
+        }
+
+        if let bandFieldTexture, let renderBandFieldPSO, let bandEncoder = commandBuffer.makeComputeCommandEncoder() {
+            bandEncoder.setComputePipelineState(renderBandFieldPSO)
+            bandEncoder.setTexture(bandFieldTexture, index: 0)
+            bandEncoder.setBuffer(bandFieldBandBuffer, offset: 0, index: 0)
+            bandEncoder.setBytes(&bandUniforms, length: MemoryLayout<BandFieldUniforms>.stride, index: 1)
+            let tptg = safeThreadsPerThreadgroup(renderBandFieldPSO, preferred: MTLSize(width: 16, height: 16, depth: 1))
+            bandEncoder.dispatchThreads(MTLSize(width: viewW, height: viewH, depth: 1), threadsPerThreadgroup: tptg)
+            bandEncoder.endEncoding()
+        }
         
         if renderSDFLines {
             if linearLinesIndex > 0, let transformLinearEncoder = commandBuffer.makeComputeCommandEncoder() {
@@ -768,6 +816,8 @@ class MetalRenderer {
                 drawLinesEncoder.setBuffer(frame.binList,       offset:0, index:3)
                 drawLinesEncoder.setBytes(&uniforms,      length:MemoryLayout<Uniforms>.stride, index:4)
                 drawLinesEncoder.setBuffer(frame.randomValuesBuffer, offset: 0, index: 5)
+                drawLinesEncoder.setTexture(bandFieldTexture, index: 1)
+                drawLinesEncoder.setBytes(&bandUniforms, length: MemoryLayout<BandFieldUniforms>.stride, index: 6)
                 
                 let w  = renderPSO!.threadExecutionWidth
                 let h  = renderPSO!.maxTotalThreadsPerThreadgroup / w

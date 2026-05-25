@@ -378,6 +378,69 @@ uint hash3(uint x, uint y, uint p) {
     return h;
 }
 
+[[clang::always_inline]]
+inline float bandBoxCoverage(float p, float center, float halfExtent, float aa) {
+    float d = halfExtent - abs(p - center);
+    return saturate(d / max(aa, 1e-6f) + 0.5f);
+}
+
+[[clang::always_inline]]
+inline float4 evalBandFieldBand(const device BandFieldBand& b, float2 ndc) {
+    bool vertical = (b.axis == 0u);
+    float across = vertical ? ndc.x : ndc.y;
+    float along = vertical ? ndc.y : ndc.x;
+    float covA = bandBoxCoverage(across, b.center, b.halfWidth, b.featherW);
+    float covL = bandBoxCoverage(along, b.centerL, b.halfLength, b.featherL);
+    float cov = covA * covL;
+    if (cov <= 0.0f) return float4(0.0f);
+
+    float t = (b.gradMode == 0u)
+        ? saturate((across - (b.center - b.halfWidth)) / max(2.0f * b.halfWidth, 1e-6f))
+        : saturate((along - (b.centerL - b.halfLength)) / max(2.0f * b.halfLength, 1e-6f));
+    float4 color = mix(b.colorStart, b.colorEnd, t);
+    float a = color.a * b.alpha * cov;
+    return float4(color.rgb * a, a);
+}
+
+[[clang::always_inline]]
+inline float4 evalBandField(float2 ndc, const device BandFieldBand* bands, constant BandFieldUniforms& u) {
+    if (u.enabled == 0u || u.bandCount == 0u) return float4(0.0f);
+    float4 acc = float4(0.0f);
+    for (uint i = 0; i < u.bandCount; ++i) {
+        float4 s = evalBandFieldBand(bands[i], ndc);
+        acc = s + acc * (1.0f - s.a);
+    }
+    return acc;
+}
+
+kernel void renderBandField(
+    texture2d<half, access::write>          outTex          [[texture(0)]],
+    device const BandFieldBand*             bands           [[buffer(0)]],
+    constant BandFieldUniforms&             u               [[buffer(1)]],
+    uint2                                   gid             [[thread_position_in_grid]]
+) {
+    uint W = outTex.get_width();
+    uint H = outTex.get_height();
+    if (gid.x >= W || gid.y >= H) return;
+
+    float2 uv = (float2(gid) + 0.5f) / float2(W, H);
+    float2 ndc = uv * 2.0f - 1.0f;
+    ndc.y = -ndc.y;
+    float4 field = evalBandField(ndc, bands, u);
+
+    if (u.previewMode != 0u && u.enabled != 0u) {
+        float maxOffset = max(max(abs(u.xAmplitudePx), abs(u.yAmplitudePx)), 1.0f);
+        float dx = (field.r - 0.5f) * u.xAmplitudePx;
+        float dy = (field.g - 0.5f) * u.yAmplitudePx;
+        field = float4(0.5f + dx / (2.0f * maxOffset),
+                       0.5f + dy / (2.0f * maxOffset),
+                       field.b,
+                       1.0f);
+    }
+
+    outTex.write(half4(field), gid);
+}
+
 
 
 
@@ -426,7 +489,7 @@ kernel void transformAndBinLinear(
         p1c = mix(original_p1c, original_p0c, t);
     }
 
-    float radMax = max(S.halfWidthStartPx, S.halfWidthEndPx) + U.antiAliasPx;
+    float radMax = max(S.halfWidthStartPx, S.halfWidthEndPx) + U.antiAliasPx + max(U.bandFieldMaxOffsetPx, 0.0f);
     float2 view = float2(U.viewWidth, U.viewHeight);
     float2 rad_ndc = radMax * 2.0 / view;
     
@@ -590,7 +653,7 @@ kernel void transformAndBinQuadratic(
     const QuadraticSeg3D S = curves[gid];
     
     float2 view = float2(U.viewWidth, U.viewHeight);
-    float rad = max(S.halfWidthStartPx, S.halfWidthEndPx) + U.antiAliasPx;
+    float rad = max(S.halfWidthStartPx, S.halfWidthEndPx) + U.antiAliasPx + max(U.bandFieldMaxOffsetPx, 0.0f);
     
     // Control points to clips space
     float4 p0c = MVP * S.p0_world;
@@ -727,7 +790,7 @@ kernel void transformAndBinCubic(
     const CubicSeg3D S = curves[gid];
     
     const float2 view = float2(U.viewWidth, U.viewHeight);
-    const float rad = max(S.halfWidthStartPx, S.halfWidthEndPx) + U.antiAliasPx;
+    const float rad = max(S.halfWidthStartPx, S.halfWidthEndPx) + U.antiAliasPx + max(U.bandFieldMaxOffsetPx, 0.0f);
     
     float4 p0c = MVP * S.p0_world;
     float4 p1c = MVP * S.p1_world;
@@ -887,12 +950,14 @@ struct PathFragment {
 
 kernel void drawLines(
     texture2d<half, access::read_write>     outTex          [[texture(0)]],
+    texture2d<half, access::read>           bandFieldTex    [[texture(1)]],
     device const LinearSegScreenSpace*      segs            [[buffer(0)]],
     device const atomic_uint*               binCounts       [[buffer(1)]],
     device const uint*                      binOffsets      [[buffer(2)]],
     device const uint*                      binList         [[buffer(3)]],
     constant Uniforms&                      U               [[buffer(4)]],
     device float4*                          randomValues    [[buffer(5)]],
+    constant BandFieldUniforms&             bandU           [[buffer(6)]],
     ushort2                                 tid             [[thread_position_in_threadgroup]],
     uint2                                   gid             [[thread_position_in_grid]]
 ) {
@@ -909,6 +974,17 @@ kernel void drawLines(
                                       );
     
     float2 p = float2(gid) + 0.5f;
+    if (bandU.enabled != 0u && bandFieldTex.get_width() > 0 && bandFieldTex.get_height() > 0) {
+        uint2 bandCoord = uint2(
+            min(gid.x, bandFieldTex.get_width() - 1),
+            min(gid.y, bandFieldTex.get_height() - 1)
+        );
+        float4 bandSample = float4(bandFieldTex.read(bandCoord));
+        p += float2(
+            (bandSample.r - 0.5f) * bandU.xAmplitudePx,
+            (bandSample.g - 0.5f) * bandU.yAmplitudePx
+        );
+    }
     
 //    p -= randomVecXYMapped * 25.0;
 //    p.x = clamp(p.x, 0.0, float(gid.x) + 0.5f);

@@ -23,10 +23,12 @@ struct LineStateValue {
 struct StateValue {
     enum Value {
         case float(Double)
+        case bool(Bool)
         case floatArray([Double])
         case string(String)
         case vector3(SIMD3<Double>)
         case vector4(SIMD4<Double>)
+        case array([Value])
         case object([String: Value])
         case lineSegments([LineStateValue])
     }
@@ -39,6 +41,8 @@ extension StateValue {
         switch value {
         case .float(let f):
             return f
+        case .bool(let b):
+            return b
         case .floatArray(let a):
             return a as Any
         case .string(let s):
@@ -47,6 +51,8 @@ extension StateValue {
             return ["x": v.x, "y": v.y, "z": v.z]
         case .vector4(let v):
             return ["x": v.x, "y": v.y, "z": v.z, "w": v.w]
+        case .array(let values):
+            return values.map { StateValue(value: $0).toJSONValue() }
         case .object(let dict):
             return dict.mapValues { value -> Any in
                 return StateValue(value: value).toJSONValue()
@@ -66,6 +72,9 @@ extension StateValue {
     }
     
     static func fromJSONValue(_ jsonValue: Any) -> StateValue? {
+        if let bool = jsonValue as? Bool {
+            return StateValue(value: .bool(bool))
+        }
         if let str = jsonValue as? String {
             return StateValue(value: .string(str))
         }
@@ -139,6 +148,7 @@ extension StateValue {
                 )))
             } else if let lineDicts = array as? [[String: Any]] {
                 var segments: [LineStateValue] = []
+                var isLineSegments = true
                 for lineDict in lineDicts {
                     guard let startDict = lineDict["start"] as? [String: Any],
                           let endDict = lineDict["end"] as? [String: Any],
@@ -146,7 +156,8 @@ extension StateValue {
                           case let .vector3(startVec) = startValue.value,
                           let endValue = fromJSONValue(endDict),
                           case let .vector3(endVec) = endValue.value else {
-                        return nil
+                        isLineSegments = false
+                        break
                     }
                     let lineWidthStart: Double = lineDict["lineWidthStart"] as? Double ?? 1.0
                     let lineWidthEnd: Double = lineDict["lineWidthEnd"] as? Double ?? 1.0
@@ -161,9 +172,15 @@ extension StateValue {
                         colorEnd: SIMD4<Double>(colorEnd)
                     ))
                 }
-                return StateValue(value: .lineSegments(segments))
+                if isLineSegments {
+                    return StateValue(value: .lineSegments(segments))
+                }
             } else if let floatArray = array as? [Double] {
                 return StateValue(value: .floatArray(array as! [Double]))
+            }
+            let values = array.compactMap { fromJSONValue($0)?.value }
+            if values.count == array.count {
+                return StateValue(value: .array(values))
             }
         }
         return nil
@@ -462,6 +479,8 @@ extension StateValue {
         switch value {
         case .float(let f):
             return JSValue(double: f, in: context)
+        case .bool(let b):
+            return JSValue(bool: b, in: context)
         case .floatArray(let a):
             return JSValue(object: a, in: context)
         case .string(let s):
@@ -487,6 +506,14 @@ extension StateValue {
                 }
             }
             return obj
+        case .array(let values):
+            let arr = JSValue(newArrayIn: context)
+            for (i, value) in values.enumerated() {
+                if let jsVal = StateValue(value: value).toJSValue(in: context) {
+                    arr?.setValue(jsVal, at: i)
+                }
+            }
+            return arr
         case .lineSegments(let segments):
             let arr = JSValue(newArrayIn: context)
             for (i, seg) in segments.enumerated() {

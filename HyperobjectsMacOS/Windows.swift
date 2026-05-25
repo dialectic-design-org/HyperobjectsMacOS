@@ -77,6 +77,13 @@ let midiLogWindowConfig = WindowInfo(
     content: AnyView(MIDILogView())
 )
 
+let bandFieldPreviewWindowConfig = WindowInfo(
+    id: "band_field_preview",
+    title: "Band Field Preview",
+    showOnLoad: false,
+    content: AnyView(BandFieldPreviewView())
+)
+
 
 let allWindows: [WindowInfo] = [
     windowsManagerWindowConfig,
@@ -88,5 +95,66 @@ let allWindows: [WindowInfo] = [
     viewportSideViewWindowConfig,
     viewportTopViewWindowConfig,
     sceneSelectorViewWindowConfig,
-    midiLogWindowConfig
+    midiLogWindowConfig,
+    bandFieldPreviewWindowConfig
 ]
+
+struct BandFieldPreviewView: View {
+    @EnvironmentObject var bandFieldManager: BandFieldManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("Preview", selection: $bandFieldManager.previewMode) {
+                ForEach(BandFieldPreviewMode.allCases) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Canvas { context, size in
+                let cols = max(1, Int(size.width / 4))
+                let rows = max(1, Int(size.height / 4))
+                let cellW = size.width / CGFloat(cols)
+                let cellH = size.height / CGFloat(rows)
+                for y in 0..<rows {
+                    for x in 0..<cols {
+                        let color = bandFieldManager.samplePreviewColor(
+                            x: (Double(x) + 0.5) / Double(cols),
+                            y: (Double(y) + 0.5) / Double(rows),
+                            mode: bandFieldManager.previewMode
+                        )
+                        let rect = CGRect(
+                            x: CGFloat(x) * cellW,
+                            y: CGFloat(y) * cellH,
+                            width: cellW + 0.5,
+                            height: cellH + 0.5
+                        )
+                        context.fill(Path(rect), with: .color(color))
+                    }
+                }
+            }
+            .frame(minWidth: 420, minHeight: 260)
+            .background(Color.black)
+
+            Text(statusText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let warning = bandFieldManager.warningMessage {
+                Text(warning)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding()
+    }
+
+    private var statusText: String {
+        let state = bandFieldManager.state
+        let bandCount = state.layers.reduce(0) { $0 + $1.bands.count }
+        if !state.enabled {
+            return "Band field disabled or no valid outputState.bands received."
+        }
+        return "Layers: \(state.layers.count), bands: \(bandCount), x: \(state.xAmplitudePx)px, y: \(state.yAmplitudePx)px"
+    }
+}

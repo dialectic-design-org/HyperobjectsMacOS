@@ -46,6 +46,35 @@ struct Uniforms {
     float blendRadius;
     float blendIntensity;
     float previousColorVisibility;
+
+    float bandFieldMaxOffsetPx;
+};
+
+struct BandFieldBand {
+    float center;
+    float halfWidth;
+    float featherW;
+    float centerL;
+    float halfLength;
+    float featherL;
+    float alpha;
+    vector_float4 colorStart;
+    vector_float4 colorEnd;
+    uint32_t axis;
+    uint32_t gradMode;
+    uint32_t _padding0;
+    uint32_t _padding1;
+};
+
+struct BandFieldUniforms {
+    uint32_t bandCount;
+    uint32_t enabled;
+    float xAmplitudePx;
+    float yAmplitudePx;
+    uint32_t previewMode;
+    uint32_t _padding0;
+    uint32_t _padding1;
+    uint32_t _padding2;
 };
 
 struct ChromaticAberrationParams {
