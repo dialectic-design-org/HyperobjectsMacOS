@@ -13,9 +13,10 @@ protocol GeometriesScene: Identifiable, ObservableObject {
     var inputs: [SceneInput] { get set }
     var geometryGenerators: [any GeometryGenerator] { get set }
     var changedInputs: Set<String> { get set }
-    var cachedGeometries: [GeometryWrapped] { get set }
-    
+
     func updateInput(name: String, value: Any)
     func updatePythonCode(for generatorId: UUID, newCode: String)
-    func generateAllGeometries() -> [any Geometry]
+    /// Generates geometry from the supplied input snapshot, returning the geometries
+    /// plus any value-history records the caller should replay on the main thread.
+    func generateAllGeometries(from snap: SceneInputSnapshot) -> (geometries: [any Geometry], records: [(String, Float)])
 }

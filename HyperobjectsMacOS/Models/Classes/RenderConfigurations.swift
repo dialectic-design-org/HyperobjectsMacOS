@@ -8,8 +8,16 @@
 import Foundation
 import SwiftUI
 
+enum GeometryTriggerMode: Equatable {
+    case onRenderRequest        // existing: render thread drives the queue
+    case fixedClock(hz: Double) // independent DispatchSourceTimer on the geometry queue
+    case onInputChange          // only when refreshSceneInputSnapshot is called
+}
+
 class RenderConfigurations: ObservableObject {
     @Published var pipeline: String = "default"
+
+    @Published var geometryTriggerMode: GeometryTriggerMode = .onRenderRequest
     
     @Published var renderBoundingBoxes: Bool = false
     

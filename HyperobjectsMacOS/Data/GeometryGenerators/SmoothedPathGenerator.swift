@@ -60,13 +60,7 @@ class SmoothedPathGenerator: CachedGeometryGenerator {
     
     init() {
         super.init(name: "Smoothed Path Generator",
-                   inputDependencies: [
-                    "Length",
-                    "Tolerance",
-                    "Stateful Rotation X",
-                    "Stateful Rotation Y",
-                    "Stateful Rotation Z"
-                   ])
+                   inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {

@@ -11,13 +11,7 @@ import simd
 class CrossGenerator: CachedGeometryGenerator {
     init() {
         super.init(name: "Cross Generator",
-                   inputDependencies: [
-                    "Size",
-                    "Rotation",
-                    "Line spacing",
-                    "Line width",
-                    "Rotation Y"
-                   ])
+                   inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase?) -> [any Geometry] {

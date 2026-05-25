@@ -24,6 +24,12 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
     
     private var history: [HistoryEntry] = []
     private let historyWindow: CFTimeInterval = 30.0
+
+    // Geometry generation runs on a background queue and calls getHistoryValue (binary
+    // search through `history`). Main thread concurrently mutates `history` via
+    // value.didSet → recordValueChange and via addValueChange replay. This lock
+    // serializes those.
+    private let historyLock = NSLock()
     
     
     var value: Any {
@@ -214,37 +220,73 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
     
     func getHistoryValue(millisecondsAgo ms: Double) -> Any {
         let target = CACurrentMediaTime() - (ms / 1000.0)
-        guard let idx = indexOfClosestTimestamp(to: target) else {
+        historyLock.lock()
+        defer { historyLock.unlock() }
+        guard let idx = indexOfClosestTimestampLocked(to: target) else {
+            // history is empty — fall back to current value (read outside the lock
+            // would race, but `value: Any` is set on main and read here on the
+            // geometry queue; that race exists today regardless of this lock and
+            // would need a separate fix if it manifests).
             return value
         }
         return history[idx].value
     }
-    
+
     private func recordValueChange(force: Bool = false) {
         let t = CACurrentMediaTime()
+        historyLock.lock()
+        defer { historyLock.unlock() }
         if !force, let last = history.last, SceneInput.valueKey(last.value) == SceneInput.valueKey(value) {
             return
         }
-        history.append(HistoryEntry(t: t, value: value))
-        trimHistory(olderThan: t - historyWindow)
+        history.append(HistoryEntry(t: t, value: normalizeForHistory(value)))
+        trimHistoryLocked(olderThan: t - historyWindow)
     }
-    
+
     func addValueChange(value: Any) {
         let t = CACurrentMediaTime()
-        history.append(HistoryEntry(t: t, value: value))
+        historyLock.lock()
+        history.append(HistoryEntry(t: t, value: normalizeForHistory(value)))
+        historyLock.unlock()
     }
-    
-    private func trimHistory(olderThan cutoff: TimeInterval) {
+
+    /// Coerce a value to the input's canonical type before storing in history.
+    /// Generators force-cast `getHistoryValue(...)` results (e.g. `as! Float` in
+    /// CubeGenerator). Without normalization, writes from different paths leave
+    /// mixed Int/Double/Float entries in history and the cast traps.
+    /// Canonical types: .float → Float, .integer → Int. Others pass through.
+    private func normalizeForHistory(_ raw: Any) -> Any {
+        switch type {
+        case .float:
+            if let v = raw as? Float  { return v }
+            if let v = raw as? Double { return Float(v) }
+            if let v = raw as? Int    { return Float(v) }
+            return raw
+        case .integer:
+            if let v = raw as? Int    { return v }
+            if let v = raw as? Double { return Int(v) }
+            if let v = raw as? Float  { return Int(v) }
+            return raw
+        default:
+            // .statefulFloat keeps Double (canonical for that type)
+            // .colorInput / .lines / .string pass through
+            return raw
+        }
+    }
+
+    // Caller must hold historyLock.
+    private func trimHistoryLocked(olderThan cutoff: TimeInterval) {
         if let firstKeep = history.firstIndex(where: { $0.t >= cutoff }) {
             if firstKeep > 0 { history.removeFirst(firstKeep) }
         } else {
             history.removeAll(keepingCapacity: true)
         }
     }
-    
-    private func indexOfClosestTimestamp(to target: CFTimeInterval) -> Int? {
+
+    // Caller must hold historyLock.
+    private func indexOfClosestTimestampLocked(to target: CFTimeInterval) -> Int? {
         guard !history.isEmpty else { return nil }
-        
+
         var lo = 0
         var hi = history.count
         while lo < hi {
@@ -255,10 +297,10 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
                 hi = mid
             }
         }
-        
+
         if lo == 0 { return 0 }
         if lo == history.count { return history.count - 1 }
-        
+
         let prev = history[lo - 1].t
         let next = history[lo].t
         return (target - prev) <= (next - target) ? (lo - 1) : lo

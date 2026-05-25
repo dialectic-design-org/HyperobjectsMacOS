@@ -76,6 +76,13 @@ struct HyperobjectsMacOSApp: App {
                     envelope.steepness = 0.0 + pow(k7 * 3, 5)
                     envelope.threshold = k8
                 }
+                .onChange(of: renderConfigurations.geometryTriggerMode) { _, newMode in
+                    sceneManager.currentScene.setGeometryTriggerMode(newMode)
+                }
+                .onChange(of: ObjectIdentifier(sceneManager.currentScene)) { _, _ in
+                    // New scene defaults to .onRenderRequest — push the user's current choice.
+                    sceneManager.currentScene.setGeometryTriggerMode(renderConfigurations.geometryTriggerMode)
+                }
                 .onAppear {
                     print("Main content view onappear")
                     audioMonitor.startMonitoring()
@@ -89,10 +96,9 @@ struct HyperobjectsMacOSApp: App {
                         DispatchQueue.main.async {
                             latestScript = script
                             let outputState = jsEngine.outputState
-                            
-                            applyScriptOutput(inputState: inputState, outputState: outputState, sceneManager: sceneManager)
 
-                            
+                            applyScriptOutput(inputState: inputState, outputState: outputState, sceneManager: sceneManager)
+                            sceneManager.currentScene.refreshSceneInputSnapshot()
                         }
                         
                     }
@@ -117,6 +123,7 @@ struct HyperobjectsMacOSApp: App {
                                         sceneManager.currentScene.resetAllInputsToInitialValues()
                                     }
                                     applyScriptOutput(inputState: inputState, outputState: outputState, sceneManager: sceneManager)
+                                    sceneManager.currentScene.refreshSceneInputSnapshot()
                                 }
                             }
                         }
@@ -124,7 +131,10 @@ struct HyperobjectsMacOSApp: App {
                         jsTimer = timer
                     }
                     
-                    sceneManager.currentScene.setWrappedGeometries()
+                    // Producer is now off-main; build the initial snapshot here on main,
+                    // then ask the geometry queue to run once so renderBuffer has content.
+                    sceneManager.currentScene.refreshSceneInputSnapshot()
+                    sceneManager.currentScene.requestGeometryGeneration()
                 }
                 .onDisappear {
                     jsTimer?.cancel()

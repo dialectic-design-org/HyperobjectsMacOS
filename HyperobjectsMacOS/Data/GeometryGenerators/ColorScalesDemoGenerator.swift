@@ -14,18 +14,7 @@ class ColorScalesDemoGenerator: CachedGeometryGenerator {
     init() {
         super.init(
             name: "Color Scales Demo Generator",
-            inputDependencies: [
-                "Color start",
-                "Color end",
-                "Brightness",
-                "Saturation",
-                "Rotation X",
-                "Rotation Y",
-                "Rotation Z",
-                "Stateful Rotation X",
-                "Stateful Rotation Y",
-                "Stateful Rotation Z"
-            ]
+            inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel]
         )
         historyValues.addAbs(1.0, at: CACurrentMediaTime(), monotonic: true);
     }

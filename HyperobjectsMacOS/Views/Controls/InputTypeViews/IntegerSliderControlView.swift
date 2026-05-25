@@ -8,13 +8,14 @@
 import SwiftUI
 
 struct IntegerSliderControlView: View {
+    @EnvironmentObject var currentScene: GeometriesSceneBase
     @ObservedObject var input: SceneInput
-    
+
     @State private var userValue: Double = 0.0
     @State private var add: Float = 0.0
     @State private var mul: Float = 1.0
     @State private var offset: Float = 0.0
-    
+
     var body: some View {
         VStack {
             HStack {
@@ -24,6 +25,7 @@ struct IntegerSliderControlView: View {
                        step: 1.0
                 ).onChange(of: userValue) { oldValue, newValue in
                     input.value = Int(newValue)
+                    currentScene.refreshSceneInputSnapshot()
                 }
             }
         }

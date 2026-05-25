@@ -12,7 +12,8 @@ import simd
 
 struct ViewportView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
-    
+    @StateObject private var geometryVM = SceneGeometryViewModel()
+
     @State private var scale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
     @State private var lastScale: CGFloat = 1.0
@@ -33,7 +34,7 @@ struct ViewportView: View {
         ZStack {
             // Top information overlays
             VStack(alignment: .leading) {
-                Text("Viewport view (direction: \(direction), scene name: \(currentScene.name), scene lines count: \(currentScene.cachedGeometries.count))")
+                Text("Viewport view (direction: \(direction), scene name: \(currentScene.name), scene lines count: \(geometryVM.geometries.count))")
                 Text("cursorPosition(\(String(format: "%.0f", cursorPosition.x)), \(String(format: "%.0f", cursorPosition.y)))")
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text("mappedCursorPosition(\(String(format: "%.0f", mappedCursorPosition.x)), \(String(format: "%.0f", mappedCursorPosition.y)))")
@@ -56,7 +57,7 @@ struct ViewportView: View {
 //                            .frame(width: geometry.size.width - 50, height: geometry.size.height - 50)
 //                            .position(x: (geometry.size.width - 50) / 2, y: (geometry.size.height - 50) / 2)
 //                        
-                        ForEach(currentScene.cachedGeometries) { wrapped in
+                        ForEach(geometryVM.geometries) { wrapped in
                             GeometryElement(gWrapped: wrapped, direction: direction, scale: scale)
                         }
                         
@@ -88,6 +89,10 @@ struct ViewportView: View {
                 }
                 .onAppear() {
                     centerOnMiddle(geometry: geometry)
+                    geometryVM.bind(to: currentScene)
+                }
+                .onChange(of: ObjectIdentifier(currentScene)) { _, _ in
+                    geometryVM.bind(to: currentScene)
                 }
                 
                 VStack(alignment: .trailing) {

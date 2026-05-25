@@ -11,7 +11,7 @@ import SwiftUI
 
 class CircleGenerator: CachedGeometryGenerator {
     init() {
-        super.init(name: "Circle Generator", inputDependencies: ["Radius", "Segments"])
+        super.init(name: "Circle Generator", inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase?) -> [any Geometry] {

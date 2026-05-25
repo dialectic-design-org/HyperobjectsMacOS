@@ -10,7 +10,7 @@ import SwiftUI
 
 class SwarmGenerator: CachedGeometryGenerator {
     init() {
-        super.init(name: "Swarm Generator", inputDependencies: ["Brightness"])
+        super.init(name: "Swarm Generator", inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase) -> [any Geometry] {

@@ -41,4 +41,12 @@ final class DoubleBuffer<T> {
         lock.unlock()
         return result
     }
+
+    /// Non-mutating read of the front buffer. SwiftUI views poll this so they see
+    /// the latest published value without competing with the render thread's consume().
+    func peek() -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return front
+    }
 }

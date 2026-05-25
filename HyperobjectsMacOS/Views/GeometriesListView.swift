@@ -9,9 +9,11 @@ import SwiftUI
 
 struct GeometriesListView: View {
     @EnvironmentObject var currentScene: GeometriesSceneBase
+    @StateObject private var geometryVM = SceneGeometryViewModel()
+
     var body: some View {
         VStack {
-            List(currentScene.cachedGeometries) { geometry in
+            List(geometryVM.geometries) { geometry in
                 HStack {
                     Text(geometry.id.uuidString)
                     Text("Type")
@@ -23,6 +25,10 @@ struct GeometriesListView: View {
                     }
                 }.font(myFont)
             }
+        }
+        .onAppear { geometryVM.bind(to: currentScene) }
+        .onChange(of: ObjectIdentifier(currentScene)) { _, _ in
+            geometryVM.bind(to: currentScene)
         }
     }
 }

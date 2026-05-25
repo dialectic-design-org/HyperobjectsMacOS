@@ -10,14 +10,7 @@ import simd
 
 class LorenzGenerator: CachedGeometryGenerator {
     init() {
-        super.init(name: "Lorenz Generator", inputDependencies: [
-            "Sigma",
-            "Rho",
-            "Beta",
-            "Steps",
-            "DT",
-            "Scale"
-        ])
+        super.init(name: "Lorenz Generator", inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
     }
     
     

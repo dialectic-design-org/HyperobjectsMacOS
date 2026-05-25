@@ -8,8 +8,9 @@
 import SwiftUI
 
 struct StringInputControlView: View {
+    @EnvironmentObject var currentScene: GeometriesSceneBase
     @ObservedObject var input: SceneInput
-    
+
     // Local state mirrors
     @State private var userValue: String = ""
     @State private var isEditing: Bool = false
@@ -33,6 +34,7 @@ struct StringInputControlView: View {
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .onChange(of: userValue) { oldValue, newValue in
                     input.value = newValue
+                    currentScene.refreshSceneInputSnapshot()
                 }
             }
             
@@ -48,6 +50,7 @@ struct StringInputControlView: View {
                             if let presetValue = input.presetValues[key] as? String {
                                 userValue = presetValue
                                 input.value = presetValue
+                                currentScene.refreshSceneInputSnapshot()
                             }
                         }) {
                             Text(key)

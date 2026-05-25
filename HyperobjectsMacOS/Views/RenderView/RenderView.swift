@@ -12,6 +12,7 @@ struct RenderView: View {
     @EnvironmentObject var renderConfigs: RenderConfigurations
     @EnvironmentObject var videoStreamManager: VideoStreamManager
     @StateObject private var rendererState = RendererState()
+    @StateObject private var geometryVM = SceneGeometryViewModel()
     @State private var resolutionMode: ResolutionMode = .fixed
     @State private var resolution: CGSize = CGSize(width: 1000, height: 1000) // Default resolution
     @State private var renderPoints: Bool = false
@@ -45,16 +46,21 @@ struct RenderView: View {
                         Text("Current scene:")
                         Text("\(currentScene.name)").fontWeight(.bold)
                     }
-                    Text("geometries count: \(currentScene.cachedGeometries.count)")
-                    
-                    
+                    Text("geometries count: \(geometryVM.geometries.count)")
+
+
                     FrameMetricsView(
                         timingManager: rendererState.frameTimingManager
                     )
-                    
+
                 }.padding(8)
             }
-        }.font(myFont)
+        }
+        .font(myFont)
+        .onAppear { geometryVM.bind(to: currentScene) }
+        .onChange(of: ObjectIdentifier(currentScene)) { _, _ in
+            geometryVM.bind(to: currentScene)
+        }
     }
 }
 //

@@ -12,20 +12,7 @@ import simd
 class CurvesGenerator: CachedGeometryGenerator {
     init() {
         super.init(name: "Curves Generator",
-                   inputDependencies: [
-                    "Length",
-                    "Rotation",
-                    "Start line width",
-                    "End line width",
-                    
-                    "Start color inner",
-                    "Start color outer left",
-                    "Start color outer right",
-                    
-                    "End color inner",
-                    "End color outer left",
-                    "End color outer right",
-                   ])
+                   inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase) -> [any Geometry] {

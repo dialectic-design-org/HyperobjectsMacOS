@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct StatefulFloatControlView: View {
+    @EnvironmentObject var currentScene: GeometriesSceneBase
     @ObservedObject var input: SceneInput
     
     @State private var tickValueAdjustment: Double = 0.0
@@ -57,6 +58,9 @@ struct StatefulFloatControlView: View {
                 Button("Reset") {
                     input.tickValueAudioAdjustmentOffset = 0
                     tickValueAudioAdjustmentOffset = 0
+                    // tickValueAudioAdjustmentOffset is not in the snapshot today,
+                    // but a refresh keeps state consistent in case that changes.
+                    currentScene.refreshSceneInputSnapshot()
                 }.buttonStyle(PlainButtonStyle())
             }
             HStack {
@@ -64,6 +68,7 @@ struct StatefulFloatControlView: View {
                 Text("Value resets:")
                 Button("0") {
                     input.value = Double(0)
+                    currentScene.refreshSceneInputSnapshot()
                 }
                 Spacer()
             }

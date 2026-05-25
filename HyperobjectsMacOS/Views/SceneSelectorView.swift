@@ -23,7 +23,9 @@ struct SceneSelectorView: View {
                         print("select scene: \(scene.name)")
                         DispatchQueue.main.async {
                             sceneManager.replaceScene(with: scene)
-                            scene.setWrappedGeometries() // Ensure geometries are initialized
+                            // Producer is off-main; build a snapshot then kick the queue.
+                            scene.refreshSceneInputSnapshot()
+                            scene.requestGeometryGeneration()
                         }
                     }.font(myFont)
                 }

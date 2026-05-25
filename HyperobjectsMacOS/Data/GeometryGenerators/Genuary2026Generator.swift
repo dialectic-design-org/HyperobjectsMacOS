@@ -291,12 +291,7 @@ class Genuary2026Generator: CachedGeometryGenerator {
     ]
     
     init() {
-        super.init(name: "Genuary 2026 Generator", inputDependencies: [
-            "Main title",
-            "Year",
-            "Prompt",
-            "Line width base"
-        ])
+        super.init(name: "Genuary 2026 Generator", inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
         
         
         // Seed the center

@@ -7,6 +7,7 @@
 
 import Foundation
 import os
+import SwiftUI
 
 let geometryGenerationLog = OSLog(subsystem: "com.yourapp.geometry", category: .pointsOfInterest)
 
@@ -30,13 +31,13 @@ struct AudioState {
 }
 
 class GeometriesSceneBase: ObservableObject, GeometriesScene {
+    
     let id = UUID()
     let name: String
     @Published var inputs: [SceneInput]
     @Published var inputGroups: [SceneInputGroup] = []
     @Published var geometryGenerators: [any GeometryGenerator]
     var changedInputs: Set<String> = []
-    var cachedGeometries: [GeometryWrapped] = []
     @Published var audioState = AudioState()
 
     let sigmoidEnvelope = SigmoidEnvelope()
@@ -72,19 +73,50 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     var cachedRenderOverrides: RenderConfigurationOverrides = .none
 
     let renderBuffer = DoubleBuffer<RenderSnapshot>(RenderSnapshot())
+    
+    private let geometryQueue = DispatchQueue(label: "io.hyperobjects.geometry", qos: .userInteractive)
+    private let sceneInputSnapshot = Atomic<SceneInputSnapshot>(value: SceneInputSnapshot())
 
     private let _geometryGenerationRequested = Atomic<Bool>(value: false)
+    private var geometryClockTimer: DispatchSourceTimer?
+    private var geometryTriggerMode: GeometryTriggerMode = .onRenderRequest
 
-    /// Called from the render thread. Dispatches geometry generation to main thread
-    /// if no generation is already pending. Uses fire-and-forget with backpressure.
     func requestGeometryGeneration() {
+        // In fixedClock mode the timer drives generation; ignore render-thread hints.
+        // In onInputChange mode, refreshSceneInputSnapshot kicks the queue directly.
+        if case .fixedClock = geometryTriggerMode { return }
+        if case .onInputChange = geometryTriggerMode { return }
+
         guard !_geometryGenerationRequested.get() else { return }
         _geometryGenerationRequested.set(true)
-        DispatchQueue.main.async { [weak self] in
+        geometryQueue.async { [weak self] in
             guard let self else { return }
             self.setWrappedGeometries()
             self._geometryGenerationRequested.set(false)
         }
+    }
+
+    func setGeometryTriggerMode(_ mode: GeometryTriggerMode) {
+        geometryClockTimer?.cancel()
+        geometryClockTimer = nil
+        geometryTriggerMode = mode
+
+        switch mode {
+        case .onRenderRequest, .onInputChange:
+            break
+        case .fixedClock(let hz):
+            let timer = DispatchSource.makeTimerSource(queue: geometryQueue)
+            timer.schedule(deadline: .now(), repeating: 1.0 / hz)
+            timer.setEventHandler { [weak self] in
+                self?.setWrappedGeometries()
+            }
+            timer.resume()
+            geometryClockTimer = timer
+        }
+    }
+
+    deinit {
+        geometryClockTimer?.cancel()
     }
 
     let audioHistory = AudioHistory(capacity: 3600)
@@ -135,8 +167,9 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
             inputs[index].value = value
             changedInputs.insert(name)
         }
+        refreshSceneInputSnapshot()
     }
-    
+
     func updatePythonCode(for generatorId: UUID, newCode: String) {
         if let index = geometryGenerators.firstIndex(where: { $0.id == generatorId }) {
             geometryGenerators[index].pythonCode = newCode
@@ -144,88 +177,100 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
                 cachedGenerator.invalidateCache()
             }
         }
+        refreshSceneInputSnapshot()
     }
-    
-    func extractHistoricAudioValue(for input: SceneInput) -> Double {
-        // Only copy the last 120 samples (avoids full snapshot)
-        let clampedHistory = audioHistory.suffix(120)
-        
-        let historyLength = clampedHistory.count
-        guard historyLength > 0 else {
-            // Fallback to current signal if no history available
-            return audioSignalProcessed
-        }
-        
-        let maxHistoryIndex = historyLength - 1
-        
-        // Map audioDelay (0-1) to history array index (0 to current length - 1)
-        // audioDelay of 0 = most recent (last element), audioDelay of 1 = oldest available
-        let delayIndex = Int(input.audioDelay * Float(maxHistoryIndex))
-        let clampedIndex = min(max(0, delayIndex), maxHistoryIndex)
-        
-        // Get the historical audio signal value (index from end of array)
-        let arrayIndex = max(0, historyLength - 1 - clampedIndex)
-        if input.audioSmoothedSource == -1 {
-            return clampedHistory[arrayIndex].processedVolume
-        } else {
-            if let val = clampedHistory[arrayIndex].smoothedProcessedVolumes[input.audioSmoothedSource] {
-                return val
-            }
-        }
-        return Double(0.0)
-    }
-    
-    func generateAllGeometries() -> [any Geometry] {
-        let startTime = DispatchTime.now()
-        os_signpost(.begin, log: geometryGenerationLog, name: "generateAllGeometries")
 
-        let inputDict: [String: Any] = Dictionary(uniqueKeysWithValues: inputs.map { input in
-            // Extract historic audio value based on input.audioDelay from historyData
-            
-            if input.type == .float {
-                // Get historic audio value from historyData based on audioDelay
-                let historicAudioSignal = extractHistoricAudioValue(for: input)
-                let combinedValueAsFloat = input.combinedValueAsFloat(audioSignal: Float(historicAudioSignal))
-                input.addValueChange(value: combinedValueAsFloat)
-                return (input.name, combinedValueAsFloat)
-            } else if input.type == .colorInput {
-                return (input.name, input.value)
-            } else if input.type == .lines {
-                return (input.name, input.value)
-            } else {
-                return (input.name, input.value)
+    func generateAllGeometries(from snap: SceneInputSnapshot) -> (geometries: [any Geometry], records: [(String, Float)]) {
+        os_signpost(.begin, log: geometryGenerationLog, name: "generateAllGeometries")
+        defer { os_signpost(.end, log: geometryGenerationLog, name: "generateAllGeometries") }
+
+        // Snapshot the live input map once on this queue so we can write back the
+        // per-input combinedValueAsFloat eagerly. SceneInput.history is guarded by
+        // its own NSLock so cross-queue mutation is safe. Eager recording matches
+        // the original main-thread pipeline: generators that read
+        // getHistoryValue(millisecondsAgo: 0) see a Float (not the init-time Double),
+        // which keeps `as! Float` force-casts in user code working.
+        let liveInputs = inputMap
+
+        let inputDict: [String: Any] = Dictionary(uniqueKeysWithValues: snap.entries.map { view -> (String, Any) in
+            switch view.type {
+            case .float:
+                let historicAudio = Self.extractHistoricAudioValue(for: view, in: snap)
+                let combined = Self.combinedValueAsFloat(view, audioSignal: Float(historicAudio))
+                liveInputs[view.name]?.addValueChange(value: combined)
+                return (view.name, combined)
+            default:
+                return (view.name, view.value.asAny())
             }
         })
 
-        let geometries = geometryGenerators.flatMap { generator in
-            if generator.needsRecalculation(changedInputs: changedInputs) {
+        let geometries = snap.generators.flatMap { generator -> [any Geometry] in
+            if generator.needsRecalculation(changedInputs: snap.changedInputs) {
                 return generator.generateGeometries(inputs: inputDict, overrideCache: true, withScene: self)
-            } else if let cachedGenerator = generator as? CachedGeometryGenerator {
-                return cachedGenerator.generateGeometries(inputs: inputDict, overrideCache: false, withScene: self)
+            } else if let cached = generator as? CachedGeometryGenerator {
+                return cached.generateGeometries(inputs: inputDict, overrideCache: false, withScene: self)
             }
             return []
         }
 
-        os_signpost(.end, log: geometryGenerationLog, name: "generateAllGeometries")
-        let endTime = DispatchTime.now()
+        // Records are now empty — kept in the return tuple for source compatibility
+        // with the GeometriesScene protocol; the eager replay above superseded them.
+        return (geometries, [])
+    }
 
-        let durationNano = endTime.uptimeNanoseconds - startTime.uptimeNanoseconds
-        let durationMillis = Double(durationNano) / 1_000_000
-        // print("Geometry generation took \(durationMillis) ms")
+    private static func combinedValueAsFloat(_ v: SceneInputView, audioSignal: Float) -> Float {
+        let base: Float
+        if case .float(let d) = v.value { base = Float(d) } else { base = 0 }
+        return base
+            * (v.audioAmplificationMultiplicationOffset + v.audioAmplificationMultiplication * audioSignal)
+            + v.audioAmplificationAddition * audioSignal
+    }
 
-        return geometries
+    private static func extractHistoricAudioValue(for v: SceneInputView, in snap: SceneInputSnapshot) -> Double {
+        let history = snap.audioHistorySuffix120
+        let historyLength = history.count
+        guard historyLength > 0 else {
+            return snap.audioSignalProcessed
+        }
+
+        let maxHistoryIndex = historyLength - 1
+
+        // audioDelay of 0 = most recent, 1 = oldest available
+        let delayIndex = Int(v.audioDelay * Float(maxHistoryIndex))
+        let clampedIndex = min(max(0, delayIndex), maxHistoryIndex)
+
+        let arrayIndex = max(0, historyLength - 1 - clampedIndex)
+        if v.audioSmoothedSource == -1 {
+            return history[arrayIndex].processedVolume
+        } else if let val = history[arrayIndex].smoothedProcessedVolumes[v.audioSmoothedSource] {
+            return val
+        }
+        return 0.0
+    }
+
+    /// Thread-safe context builder for the render-thread renderTimeOverride path.
+    /// Reads the atomic input snapshot, so callers don't need to be on main.
+    func makeOverrideContext() -> RenderOverrideContext {
+        return Self.makeOverrideContext(from: sceneInputSnapshot.get())
+    }
+
+    private static func makeOverrideContext(from snap: SceneInputSnapshot) -> RenderOverrideContext {
+        let inputDict: [String: Any] = Dictionary(uniqueKeysWithValues: snap.entries.map {
+            ($0.name, $0.value.asAny())
+        })
+        return RenderOverrideContext(
+            frameStamp: snap.frameStamp,
+            audioSignal: snap.audioSignal,
+            audioSignalProcessed: snap.audioSignalProcessed,
+            inputs: inputDict
+        )
     }
     
     func updateFloatInputsWithAudio(smoothedVolumes: [Int: Float]) {
-        var changedInputNames: [String] = []
-
-
-        for (_, input) in inputs.enumerated() where input.type == .float {
-            changedInputNames.append(input.name)
-        }
-
-        for (_, input) in inputs.enumerated() where input.type == .lines {
-            changedInputNames.append(input.name)
+        let changedInputNames = inputs.compactMap { input -> String? in
+            guard input.type == .float || input.type == .lines else { return nil }
+            guard input.audioAmplificationMultiplication != 0 || input.audioAmplificationAddition != 0 else { return nil }
+            return input.name
         }
 
         // Batch notify all changes at once
@@ -285,39 +330,99 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         return 0.0
     }
 
-    func makeOverrideContext() -> RenderOverrideContext {
-        let inputDict: [String: Any] = Dictionary(uniqueKeysWithValues: inputs.map { ($0.name, $0.value) })
-        return RenderOverrideContext(
-            frameStamp: frameStamp,
-            audioSignal: audioSignal,
-            audioSignalProcessed: audioSignalProcessed,
-            inputs: inputDict
-        )
-    }
-
+    /// Runs on `geometryQueue`. Reads only `snap` and lock-protected scene state
+    /// (`audioHistory`, `renderBuffer`). Main-thread side effects are dispatched async.
     func setWrappedGeometries() {
-        self.cachedGeometries = self.generateAllGeometries().map { GeometryWrapped(geometry: $0) }
+        let snap = sceneInputSnapshot.get()
+        let (geometries, records) = generateAllGeometries(from: snap)
+        let wrapped = geometries.map { GeometryWrapped(geometry: $0) }
 
-        // Compute and cache geometry-time overrides
+        let overrides: RenderConfigurationOverrides
         if let overrideClosure = geometryTimeOverride {
-            cachedRenderOverrides = overrideClosure(makeOverrideContext())
+            overrides = overrideClosure(Self.makeOverrideContext(from: snap))
         } else {
-            cachedRenderOverrides = .none
+            overrides = .none
         }
 
-        // Publish consistent snapshot for the render thread
         renderBuffer.publish(RenderSnapshot(
-            geometries: cachedGeometries,
-            renderOverrides: cachedRenderOverrides
+            geometries: wrapped,
+            renderOverrides: overrides
         ))
+
+        // History recording now happens eagerly inside generateAllGeometries (under
+        // SceneInput.historyLock). No deferred main-thread replay is needed.
+        _ = records
     }
-    
+
     func resetAllInputsToInitialValues() {
         for i in 0..<inputs.count {
             inputs[i].resetToInitialValues()
         }
+        refreshSceneInputSnapshot()
     }
 
+    /// Main-thread only. Captures the current `inputs`, `changedInputs`, audio history,
+    /// and override-context state into an atomic snapshot for the geometry queue to read.
+    func refreshSceneInputSnapshot() {
+        let views = inputs.map { input in
+            SceneInputView(
+                id: input.id,
+                name: input.name,
+                type: input.type,
+                value: Self.captureValue(input.value, type: input.type),
+                audioDelay: input.audioDelay,
+                audioSmoothedSource: input.audioSmoothedSource,
+                audioAmplificationMultiplication: input.audioAmplificationMultiplication,
+                audioAmplificationAddition: input.audioAmplificationAddition,
+                audioAmplificationMultiplicationOffset: input.audioAmplificationMultiplicationOffset
+            )
+        }
+        sceneInputSnapshot.set(SceneInputSnapshot(
+            entries: views,
+            changedInputs: changedInputs,
+            generators: geometryGenerators,
+            audioHistorySuffix120: audioHistory.suffix(120),
+            audioSignalProcessed: audioSignalProcessed,
+            audioSignal: audioSignal,
+            frameStamp: frameStamp,
+            pendingValueHistoryRecords: []
+        ))
+        changedInputs.removeAll(keepingCapacity: true)
+
+        // In onInputChange mode there is no render-thread driver — every input change
+        // should produce one generation pass. Coalesce via the backpressure flag so
+        // a slider drag doesn't queue dozens of pending generations.
+        if case .onInputChange = geometryTriggerMode {
+            guard !_geometryGenerationRequested.get() else { return }
+            _geometryGenerationRequested.set(true)
+            geometryQueue.async { [weak self] in
+                guard let self else { return }
+                self.setWrappedGeometries()
+                self._geometryGenerationRequested.set(false)
+            }
+        }
+    }
+    
+    private static func captureValue(_ any: Any, type: InputType) -> SceneInputValue {
+        // For .integer-typed inputs we must preserve Int identity — `intFromInputs`
+        // does `as? Int` and would fail against a Double.
+        // For .float / .statefulFloat we collapse Int/Float/Double to .float(Double).
+        if type == .integer {
+            if let v = any as? Int    { return .integer(v) }
+            if let v = any as? Double { return .integer(Int(v)) }
+            if let v = any as? Float  { return .integer(Int(v)) }
+        }
+        switch any {
+        case let v as Float:  return .float(Double(v))
+        case let v as Double: return .float(v)
+        case let v as Int:    return .float(Double(v))
+        case let v as Bool:   return .bool(v)
+        case let v as String: return .string(v)
+        case let v as Color:  return .color(v)
+        case let v as [Line]: return .lines(v)
+        default:              return .unsupported
+        }
+    }
 }
 
 
@@ -343,10 +448,17 @@ extension GeometriesSceneBase {
             lowpassProcessed: lowpassProcessed
         )
 
-        // Update statefulFloat inputs with audio-driven accumulation
+        // Update statefulFloat inputs with audio-driven accumulation.
+        // We read audio history directly here — this runs on main, so we can.
+        let historySuffix = audioHistory.suffix(120)
         for i in 0..<inputs.count {
             if inputs[i].type == .statefulFloat {
-                let historicalAudioSignal = extractHistoricAudioValue(for: inputs[i])
+                let historicalAudioSignal = Self.historicAudioValue(
+                    audioDelay: inputs[i].audioDelay,
+                    audioSmoothedSource: inputs[i].audioSmoothedSource,
+                    history: historySuffix,
+                    fallback: audioSignalProcessed
+                )
                 if let floatValue = inputs[i].value as? Double {
                     inputs[i].value = floatValue +
                         inputs[i].tickValueAdjustment +
@@ -360,5 +472,25 @@ extension GeometriesSceneBase {
         updateFloatInputsWithAudio(smoothedVolumes: m.smoothedPerStep)
 
         frameStamp &+= 1
+
+        // Rebuild the snapshot so the geometry queue sees fresh inputs/audio state.
+        refreshSceneInputSnapshot()
+    }
+
+    /// Shared lookup logic between the static (snapshot-based) and instance (live)
+    /// callers of historic audio lookup. Called on main thread by applyAudioTick.
+    static func historicAudioValue(audioDelay: Float, audioSmoothedSource: Int, history: [AudioDataPoint], fallback: Double) -> Double {
+        let historyLength = history.count
+        guard historyLength > 0 else { return fallback }
+        let maxHistoryIndex = historyLength - 1
+        let delayIndex = Int(audioDelay * Float(maxHistoryIndex))
+        let clampedIndex = min(max(0, delayIndex), maxHistoryIndex)
+        let arrayIndex = max(0, historyLength - 1 - clampedIndex)
+        if audioSmoothedSource == -1 {
+            return history[arrayIndex].processedVolume
+        } else if let val = history[arrayIndex].smoothedProcessedVolumes[audioSmoothedSource] {
+            return val
+        }
+        return 0.0
     }
 }

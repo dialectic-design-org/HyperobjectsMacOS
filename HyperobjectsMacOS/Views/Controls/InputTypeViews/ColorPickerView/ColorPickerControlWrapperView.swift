@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct ColorPickerControlWrapperView: View {
+    @EnvironmentObject var currentScene: GeometriesSceneBase
     @ObservedObject var input: SceneInput
 
     // FIX #1: persistent observable owned here
@@ -19,6 +20,7 @@ struct ColorPickerControlWrapperView: View {
                 // commit outward only on meaningful change
                 if input.value as! Color != newColor {
                     input.value = newColor
+                    currentScene.refreshSceneInputSnapshot()
                 }
             }
         }

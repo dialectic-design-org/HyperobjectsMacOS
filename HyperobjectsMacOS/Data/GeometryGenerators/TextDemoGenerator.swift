@@ -83,11 +83,7 @@ private func randomCharacter(excluding excluded: Character, sampleSet: String = 
 class TextDemoGenerator: CachedGeometryGenerator {
     init() {
         super.init(name: "Text Demo Generator",
-                   inputDependencies: [
-                    "Start color",
-                    "End color",
-                    "Spacing"
-                   ])
+                   inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {

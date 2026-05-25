@@ -26,7 +26,7 @@ class ThreeBodyGenerator: CachedGeometryGenerator {
     
     init() {
         super.init(name: "Three Body Generator",
-        inputDependencies: ["Trail length", "Fading"])
+        inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {

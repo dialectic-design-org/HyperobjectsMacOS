@@ -8,8 +8,9 @@
 import SwiftUI
 
 struct FloatSliderControlView: View {
+    @EnvironmentObject var currentScene: GeometriesSceneBase
     @ObservedObject var input: SceneInput
-    
+
     // Local state mirrors
     @State private var userValue: Float = 0.0
     @State private var add: Float = 0.0
@@ -28,9 +29,10 @@ struct FloatSliderControlView: View {
                     .controlSize(.mini)
                     .onChange(of: userValue) { oldValue, newValue in
                         input.value = newValue
+                        currentScene.refreshSceneInputSnapshot()
                     }
             }
-            
+
             HStack {
                 HStack {
                     Text("+")
@@ -39,9 +41,10 @@ struct FloatSliderControlView: View {
                         .controlSize(.mini)
                         .onChange(of: add) { oldValue, newValue in
                             input.audioAmplificationAddition = newValue
+                            currentScene.refreshSceneInputSnapshot()
                         }
                 }
-                
+
                 HStack {
                     Text("x")
                         .frame(width: labelWidth)
@@ -49,15 +52,17 @@ struct FloatSliderControlView: View {
                         .controlSize(.mini)
                         .onChange(of: mul) { oldValue, newValue in
                             input.audioAmplificationMultiplication = newValue
+                            currentScene.refreshSceneInputSnapshot()
                         }
                 }
-                
+
                 HStack {
                     Text("offset")
                     Slider(value: $offset, in: input.audioAmplificationMultiplicationOffsetRange)
                         .controlSize(.mini)
                         .onChange(of: offset) { oldValue, newValue in
                             input.audioAmplificationMultiplicationOffset = newValue
+                            currentScene.refreshSceneInputSnapshot()
                         }
                 }
             }
@@ -70,6 +75,7 @@ struct FloatSliderControlView: View {
                     .tint(.gray)
                     .onChange(of: audioDelay) { oldValue, newValue in
                         input.audioDelay = newValue
+                        currentScene.refreshSceneInputSnapshot()
                     }
                 Text("Audio delay")
             }

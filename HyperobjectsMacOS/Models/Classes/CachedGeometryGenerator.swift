@@ -8,6 +8,7 @@
 import Foundation
 
 class CachedGeometryGenerator: GeometryGenerator {
+    static let allSceneInputsSentinel = "__allSceneInputs__"
     var id = UUID()
     var name: String
     var inputDependencies: [String]
@@ -41,6 +42,9 @@ class CachedGeometryGenerator: GeometryGenerator {
     
     func needsRecalculation(changedInputs: Set<String>) -> Bool {
         // Check if there are matching elements in changedInputs and in inputDependencies
+        if inputDependencies.contains(CachedGeometryGenerator.allSceneInputsSentinel) {
+            return true
+        }
         return !Set(changedInputs).intersection(Set(inputDependencies)).isEmpty
     }
     

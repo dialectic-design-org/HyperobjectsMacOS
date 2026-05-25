@@ -12,9 +12,7 @@ class RandomVecsGenerator: CachedGeometryGenerator {
     init() {
         super.init(
             name: "Random Vecs Generator",
-            inputDependencies: [
-                "Radius",
-            ]
+            inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel]
         )
     }
     

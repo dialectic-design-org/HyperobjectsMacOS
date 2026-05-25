@@ -12,14 +12,7 @@ class TubeGenerator: CachedGeometryGenerator {
     init() {
         super.init(
             name: "Tube Generator",
-            inputDependencies: [
-                "Radius",
-                "Height",
-                "Slices",
-                "Stacks",
-                "TopRadiusFactor",
-                "BottomRadiusFactor"
-            ]
+            inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel]
         )
     }
     

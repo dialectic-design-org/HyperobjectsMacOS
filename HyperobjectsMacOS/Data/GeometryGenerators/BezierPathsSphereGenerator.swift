@@ -13,10 +13,7 @@ class BezierPathsSphereGenerator: CachedGeometryGenerator {
     init() {
         super.init(
             name: "Bezier Paths Sphere Generator",
-            inputDependencies: [
-                "Segments",
-                "Circles"
-            ]
+            inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel]
         )
     }
     

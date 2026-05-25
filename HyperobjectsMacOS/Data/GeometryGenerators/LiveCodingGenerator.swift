@@ -5,9 +5,7 @@ import SwiftUI
 class LiveCodingGenerator: CachedGeometryGenerator {
     init() {
         super.init(name: "Live Coding Generator",
-                   inputDependencies: [
-                    "Lines",
-                   ])
+                   inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {

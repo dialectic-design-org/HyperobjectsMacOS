@@ -12,21 +12,7 @@ import SwiftUI
 class LineGenerator: CachedGeometryGenerator {
     init() {
         super.init(name: "Line Generator",
-                   inputDependencies: [
-                    "Length",
-                    "Rotation",
-                    "NoiseFloor",
-                    "Start line width",
-                    "End line width",
-                    
-                    "Start color inner",
-                    "Start color outer left",
-                    "Start color outer right",
-                    
-                    "End color inner",
-                    "End color outer left",
-                    "End color outer right",
-                   ])
+                   inputDependencies: [CachedGeometryGenerator.allSceneInputsSentinel])
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene: GeometriesSceneBase) -> [any Geometry] {
