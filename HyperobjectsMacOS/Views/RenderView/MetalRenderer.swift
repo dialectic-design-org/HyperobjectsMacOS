@@ -663,7 +663,8 @@ class MetalRenderer {
         
         let binDepthSource = renderConfigs?.binDepth ?? 16
         let bandFieldEnabled = (renderConfigs?.bandFieldDisplacementEnabled ?? false)
-        let bandMaxOffset = bandFieldEnabled ? ((bandFieldManager?.state.maxOffsetPx ?? 0) + (renderConfigs?.bandFieldExtraBinOverlapPx ?? 0)) : 0
+        let bandSnapshot = bandFieldEnabled ? bandFieldManager?.snapshot() : nil
+        let bandMaxOffset = bandFieldEnabled ? ((bandSnapshot?.state.maxOffsetPx ?? 0) + (renderConfigs?.bandFieldExtraBinOverlapPx ?? 0)) : 0
         
         
         for i in 0..<1000 {
@@ -725,8 +726,7 @@ class MetalRenderer {
         var bandUniforms = BandFieldUniforms()
         var bandBands: [ShaderBandFieldBand] = []
         var bandVersion: UInt64 = 0
-        if let bandFieldManager, renderConfigs?.bandFieldDisplacementEnabled ?? false {
-            let snapshot = bandFieldManager.snapshot()
+        if let snapshot = bandSnapshot, renderConfigs?.bandFieldDisplacementEnabled ?? false {
             bandVersion = snapshot.version
             bandBands = snapshot.bands
             bandUniforms = snapshot.uniforms

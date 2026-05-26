@@ -385,7 +385,9 @@ inline float bandBoxCoverage(float p, float center, float halfExtent, float aa) 
 }
 
 [[clang::always_inline]]
-inline float4 evalBandFieldBand(const device BandFieldBand& b, float2 ndc) {
+inline float4 evalBandFieldBand(const device BandFieldBand& b, float2 ndc, thread float& dispersionPx, thread float& rainbowBrightness) {
+    dispersionPx = 0.0f;
+    rainbowBrightness = 0.0f;
     bool vertical = (b.axis == 0u);
     float across = vertical ? ndc.x : ndc.y;
     float along = vertical ? ndc.y : ndc.x;
@@ -399,6 +401,8 @@ inline float4 evalBandFieldBand(const device BandFieldBand& b, float2 ndc) {
         : saturate((along - (b.centerL - b.halfLength)) / max(2.0f * b.halfLength, 1e-6f));
     float4 color = mix(b.colorStart, b.colorEnd, t);
     float a = color.a * b.alpha * cov;
+    dispersionPx = b.dispersionPx * a;
+    rainbowBrightness = b.rainbowBrightness * a;
     return float4(color.rgb * a, a);
 }
 
@@ -406,11 +410,17 @@ inline float4 evalBandFieldBand(const device BandFieldBand& b, float2 ndc) {
 inline float4 evalBandField(float2 ndc, const device BandFieldBand* bands, constant BandFieldUniforms& u) {
     if (u.enabled == 0u || u.bandCount == 0u) return float4(0.0f);
     float4 acc = float4(0.0f);
+    float dispersionAcc = 0.0f;
+    float brightnessAcc = 0.0f;
     for (uint i = 0; i < u.bandCount; ++i) {
-        float4 s = evalBandFieldBand(bands[i], ndc);
+        float dispersionPx = 0.0f;
+        float rainbowBrightness = 0.0f;
+        float4 s = evalBandFieldBand(bands[i], ndc, dispersionPx, rainbowBrightness);
+        dispersionAcc = dispersionPx + dispersionAcc * (1.0f - s.a);
+        brightnessAcc = rainbowBrightness + brightnessAcc * (1.0f - s.a);
         acc = s + acc * (1.0f - s.a);
     }
-    return acc;
+    return float4(acc.rg, brightnessAcc, dispersionAcc);
 }
 
 kernel void renderBandField(
@@ -947,6 +957,42 @@ struct PathFragment {
     float noiseFloor;
 };
 
+[[clang::always_inline]]
+inline float3 spectralGradient(float t) {
+    float3 c0 = float3(0.48f, 0.00f, 1.00f);
+    float3 c1 = float3(0.05f, 0.15f, 1.00f);
+    float3 c2 = float3(0.00f, 0.85f, 1.00f);
+    float3 c3 = float3(0.10f, 1.00f, 0.10f);
+    float3 c4 = float3(1.00f, 0.95f, 0.00f);
+    float3 c5 = float3(1.00f, 0.42f, 0.00f);
+    float3 c6 = float3(1.00f, 0.02f, 0.00f);
+    float x = saturate(t) * 6.0f;
+    uint i = min(uint(floor(x)), 5u);
+    float f = fract(x);
+    switch (i) {
+        case 0: return mix(c0, c1, f);
+        case 1: return mix(c1, c2, f);
+        case 2: return mix(c2, c3, f);
+        case 3: return mix(c3, c4, f);
+        case 4: return mix(c4, c5, f);
+        default: return mix(c5, c6, f);
+    }
+}
+
+[[clang::always_inline]]
+inline float lineAlphaAtPoint(float2 sampleP, PathFragment pf, thread float& tLineOut, thread float& rOut) {
+    float2 b = pf.p1 - pf.p0;
+    float invL2 = 1.0f / max(dot(b, b), 1e-9f);
+    float tLine = clamp(dot(sampleP - pf.p0, b) * invL2, 0.0f, 1.0f);
+    float2 pClosest = pf.p0 + tLine * b;
+    float dist = length(sampleP - pClosest);
+    float hwAtT = mix(pf.hwStart, pf.hwEnd, tLine);
+    float r = clamp(dist / (hwAtT + pf.aa + 1e-6f), 0.0f, 1.0f);
+    tLineOut = tLine;
+    rOut = r;
+    return smoothstep(hwAtT + pf.aa, hwAtT - pf.aa, dist);
+}
+
 
 kernel void drawLines(
     texture2d<half, access::read_write>     outTex          [[texture(0)]],
@@ -974,17 +1020,27 @@ kernel void drawLines(
                                       );
     
     float2 p = float2(gid) + 0.5f;
+    float2 bandDisplacement = float2(0.0f);
+    float bandDispersionPx = 0.0f;
+    float rainbowBrightness = 1.0f;
     if (bandU.enabled != 0u && bandFieldTex.get_width() > 0 && bandFieldTex.get_height() > 0) {
         uint2 bandCoord = uint2(
             min(gid.x, bandFieldTex.get_width() - 1),
             min(gid.y, bandFieldTex.get_height() - 1)
         );
         float4 bandSample = float4(bandFieldTex.read(bandCoord));
-        p += float2(
+        bandDisplacement = float2(
             (bandSample.r - 0.5f) * bandU.xAmplitudePx,
             (bandSample.g - 0.5f) * bandU.yAmplitudePx
         );
+        bandDispersionPx = bandSample.a;
+        rainbowBrightness = max(bandSample.b, 0.0f);
+        p += bandDisplacement;
     }
+    float absBandDispersionPx = abs(bandDispersionPx);
+    float2 dispersionDir = (length(bandDisplacement) > 1e-4f)
+        ? normalize(bandDisplacement)
+        : float2(1.0f, 0.0f);
     
 //    p -= randomVecXYMapped * 25.0;
 //    p.x = clamp(p.x, 0.0, float(gid.x) + 0.5f);
@@ -1053,7 +1109,7 @@ kernel void drawLines(
             float hwMax = max(hwStart,hwEnd);
             float aa = S->aaPx;
             
-            float pad = hwMax + aa;
+            float pad = hwMax + aa + absBandDispersionPx;
             float2 mn = S->bboxMinSS;
             float2 mx = S->bboxMaxSS;
             mn -= float2(pad, pad);
@@ -1077,7 +1133,7 @@ kernel void drawLines(
             tgB[i] = b;
             tgInvL2[i] = 1.0f / l2;
             tgP0dotB[i] = dot(S->p0_ss, b);
-            tgR2[i] = (hwMax + S->aaPx) * (hwMax + S->aaPx);
+            tgR2[i] = (hwMax + S->aaPx + absBandDispersionPx) * (hwMax + S->aaPx + absBandDispersionPx);
             tgColorStartCenter[i] = S->colorStartCenter;
             tgColorEndCenter[i] = S->colorEndCenter;
             tgNoiseFloor[i] = S->noiseFloor;
@@ -1203,26 +1259,53 @@ kernel void drawLines(
         
         PathFragment pf = pathFragments[i];
         
-        // Calculate this fragment's color and alpha
-        float tLine = pf.t_param;
-        float4 fragmentColor = mix(pf.colorStart, pf.colorEnd, tLine);
-        
-        float dist = sqrt(pf.min_dist_sq);
-        
-        float hwAtT = mix(pf.hwStart, pf.hwEnd, tLine);
-        
-        float r = dist / (hwAtT + pf.aa + 1e-6f);
-        r = clamp(r, 0.0, 1.0);
-        
-        // float alpha = smoothstep(pf.hw + pf.aa, pf.hw - pf.aa, dist);
-        float alpha = smoothstep(hwAtT + pf.aa, hwAtT - pf.aa, dist);
-        fragmentColor.a *= alpha;
-        
-        // Apply debug gradient if enabled
+        float baseTLine = 0.0f;
+        float r = 0.0f;
+        float baseAlpha = lineAlphaAtPoint(p, pf, baseTLine, r);
+        float4 fragmentColor = mix(pf.colorStart, pf.colorEnd, baseTLine);
+        fragmentColor.a *= baseAlpha;
+
+        // Apply debug gradient if enabled.
         float4 debug_gradient = mix(float4(U.lineDebugGradientStartColor, 1.0),
                                    float4(U.lineDebugGradientEndColor, 1.0),
-                                   tLine) * U.lineDebugGradientStrength;
+                                   baseTLine) * U.lineDebugGradientStrength;
         fragmentColor.rgb = fragmentColor.rgb * U.lineColorStrength + debug_gradient.rgb;
+
+        if (absBandDispersionPx > 0.01f) {
+            float3 spectralPremul = float3(0.0f);
+            float spectralAlpha = 0.0f;
+            constexpr uint SPECTRAL_TAPS = 31u;
+            constexpr float spectralWeight = 1.0f / 15.5f;
+
+            for (uint tap = 0; tap < SPECTRAL_TAPS; ++tap) {
+                float spectralT = (float(tap) + 0.5f) / float(SPECTRAL_TAPS);
+                float spectralOffset = spectralT * 2.0f - 1.0f;
+                float2 tapP = p + dispersionDir * (spectralOffset * bandDispersionPx);
+                float tapTLine = 0.0f;
+                float tapR = 0.0f;
+                float tapAlpha = lineAlphaAtPoint(tapP, pf, tapTLine, tapR);
+                if (tapAlpha <= 0.0f) continue;
+
+                float4 tapSource = mix(pf.colorStart, pf.colorEnd, tapTLine);
+                float4 tapDebug = mix(float4(U.lineDebugGradientStartColor, 1.0),
+                                      float4(U.lineDebugGradientEndColor, 1.0),
+                                      tapTLine) * U.lineDebugGradientStrength;
+                float3 sourceRGB = tapSource.rgb * U.lineColorStrength + tapDebug.rgb;
+                float tapA = tapSource.a * tapAlpha * spectralWeight;
+
+                // White source colour behaves like full-spectrum light; saturated
+                // source colours filter the spectrum into tinted rainbows.
+                spectralPremul += spectralGradient(spectralT) * sourceRGB * tapA * rainbowBrightness;
+                spectralAlpha += tapA;
+            }
+
+            spectralAlpha = saturate(spectralAlpha);
+            if (spectralAlpha > 1e-6f) {
+                fragmentColor = float4(spectralPremul / spectralAlpha, spectralAlpha);
+            } else {
+                fragmentColor = float4(0.0f);
+            }
+        }
         
         // Find or create path entry
         int pathIndex = -1;

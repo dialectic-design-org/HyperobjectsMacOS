@@ -106,6 +106,8 @@ struct BandFieldBand: Equatable {
     var colorStart: SIMD4<Float>
     var colorEnd: SIMD4<Float>
     var gradMode: UInt32
+    var dispersionPx: Float
+    var rainbowBrightness: Float
 }
 
 struct BandFieldLayer: Equatable {
@@ -122,7 +124,13 @@ struct BandFieldState: Equatable {
     var layers: [BandFieldLayer] = []
 
     var maxOffsetPx: Float {
-        enabled ? max(abs(xAmplitudePx), abs(yAmplitudePx)) : 0
+        guard enabled else { return 0 }
+        let maxDispersion = layers.reduce(Float(0)) { layerMax, layer in
+            max(layerMax, layer.bands.reduce(Float(0)) { bandMax, band in
+                max(bandMax, abs(band.dispersionPx))
+            })
+        }
+        return max(abs(xAmplitudePx), abs(yAmplitudePx)) + maxDispersion
     }
 }
 
@@ -138,8 +146,8 @@ struct ShaderBandFieldBand {
     var colorEnd: SIMD4<Float>
     var axis: UInt32
     var gradMode: UInt32
-    var _padding0: UInt32 = 0
-    var _padding1: UInt32 = 0
+    var dispersionPx: Float = 0
+    var rainbowBrightness: Float = 1
 }
 
 struct BandFieldUniforms {
@@ -234,7 +242,9 @@ final class BandFieldManager: ObservableObject {
                     colorStart: band.colorStart,
                     colorEnd: band.colorEnd,
                     axis: layer.axis,
-                    gradMode: band.gradMode
+                    gradMode: band.gradMode,
+                    dispersionPx: band.dispersionPx,
+                    rainbowBrightness: band.rainbowBrightness
                 ))
             }
         }
@@ -372,7 +382,9 @@ extension BandFieldManager {
             alpha: clamped(float(object["alpha"], default: 1), 0, 1),
             colorStart: colors.0,
             colorEnd: colors.1,
-            gradMode: gradModeValue(object["gradMode"])
+            gradMode: gradModeValue(object["gradMode"]),
+            dispersionPx: clamped(float(object["dispersionPx"], default: 0), -256, 256),
+            rainbowBrightness: clamped(float(object["rainbowBrightness"], default: 1), 0, 8)
         )
     }
 

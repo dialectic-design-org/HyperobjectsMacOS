@@ -85,6 +85,8 @@ struct HyperobjectsMacOSTests {
                             "halfLength": .float(1),
                             "featherL": .float(0.01),
                             "alpha": .float(1),
+                            "dispersionPx": .float(32),
+                            "rainbowBrightness": .float(2.5),
                             "gradMode": .string("width"),
                             "gradient": .array([
                                 .array([.float(0), .floatArray([1, 0, 0, 1])]),
@@ -105,6 +107,39 @@ struct HyperobjectsMacOSTests {
         #expect(state.layers[0].bands.count == 1)
         #expect(state.layers[0].bands[0].colorStart.x == 1)
         #expect(state.layers[0].bands[0].colorEnd.y == 1)
+        #expect(state.layers[0].bands[0].dispersionPx == 32)
+        #expect(state.layers[0].bands[0].rainbowBrightness == 2.5)
+        #expect(state.maxOffsetPx == 56)
+    }
+
+    @Test func bandFieldParserDefaultsAndClampsDispersion() throws {
+        let bands = StateValue(value: .object([
+            "enabled": .bool(true),
+            "xAmplitudePx": .float(10),
+            "yAmplitudePx": .float(20),
+            "layers": .array([
+                .object([
+                    "bands": .array([
+                        .object([
+                            "dispersionPx": .float(-400),
+                            "rainbowBrightness": .float(20),
+                            "gradient": .array([
+                                .array([.float(0), .floatArray([1, 1, 1, 1])])
+                            ])
+                        ]),
+                        .object([:])
+                    ])
+                ])
+            ])
+        ]))
+
+        let state = try BandFieldManager.parse(bands, maxBands: 256)
+
+        #expect(state.layers[0].bands[0].dispersionPx == -256)
+        #expect(state.layers[0].bands[0].rainbowBrightness == 8)
+        #expect(state.layers[0].bands[1].dispersionPx == 0)
+        #expect(state.layers[0].bands[1].rainbowBrightness == 1)
+        #expect(state.maxOffsetPx == 276)
     }
 
 }

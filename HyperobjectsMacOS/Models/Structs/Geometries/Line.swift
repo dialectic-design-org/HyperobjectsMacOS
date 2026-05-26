@@ -15,7 +15,6 @@ enum LineColorMode: String, CaseIterable, Identifiable {
     var id: String { self.rawValue }
 }
 
-// Start with very high value for generic lines so that lower values can be used for specific paths
 private var idIncrement: Int = 100000
 
 struct Line: Geometry {
@@ -232,7 +231,6 @@ struct Line: Geometry {
     }
 
     private func evaluateBezierDeCasteljau(t: Float) -> SIMD3<Float> {
-        // Create array of all control points (start, control points, end)
         var points: [SIMD3<Float>] = [startPoint] + controlPoints + [endPoint]
         
         // De Casteljau's algorithm

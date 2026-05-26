@@ -62,8 +62,8 @@ struct BandFieldBand {
     vector_float4 colorEnd;
     uint32_t axis;
     uint32_t gradMode;
-    uint32_t _padding0;
-    uint32_t _padding1;
+    float dispersionPx;
+    float rainbowBrightness;
 };
 
 struct BandFieldUniforms {
