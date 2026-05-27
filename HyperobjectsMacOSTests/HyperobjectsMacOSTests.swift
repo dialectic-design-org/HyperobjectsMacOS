@@ -6,9 +6,23 @@
 //
 
 import Testing
+import Foundation
+import AppKit
 @testable import HyperobjectsMacOS
 
 struct HyperobjectsMacOSTests {
+
+    @Test func stateValueParsesNumericNSNumbersAsFloats() throws {
+        let one = try #require(StateValue.fromJSONValue(NSNumber(value: 1.0)))
+        let zero = try #require(StateValue.fromJSONValue(NSNumber(value: 0.0)))
+        let bool = try #require(StateValue.fromJSONValue(NSNumber(value: true)))
+
+        #expect(try float(one.value) == 1.0)
+        #expect(try float(zero.value) == 0.0)
+        guard case .bool(true) = bool.value else {
+            throw TestError.wrongType
+        }
+    }
 
     @Test func midiSnapshotDefaultsExposeKnobsAndPads() throws {
         let state = MIDIControlState()
@@ -140,6 +154,65 @@ struct HyperobjectsMacOSTests {
         #expect(state.layers[0].bands[1].dispersionPx == 0)
         #expect(state.layers[0].bands[1].rainbowBrightness == 1)
         #expect(state.maxOffsetPx == 276)
+    }
+
+    @Test func bandFieldParserAcceptsVectorGradientStopsFromJavaScriptArrays() throws {
+        let bands = StateValue(value: .object([
+            "enabled": .bool(true),
+            "layers": .array([
+                .object([
+                    "bands": .array([
+                        .object([
+                            "gradient": .array([
+                                .array([.float(0), .vector4(SIMD4<Double>(0.5, 0.25, 1.0, 1.0))]),
+                                .array([.float(1), .vector4(SIMD4<Double>(0.5, 0.75, 1.0, 1.0))])
+                            ])
+                        ])
+                    ])
+                ])
+            ])
+        ]))
+
+        let state = try BandFieldManager.parse(bands, maxBands: 256)
+
+        #expect(state.layers[0].bands[0].colorStart.x == 0.5)
+        #expect(state.layers[0].bands[0].colorStart.y == 0.25)
+        #expect(state.layers[0].bands[0].colorStart.z == 1)
+        #expect(state.layers[0].bands[0].colorEnd.x == 0.5)
+        #expect(state.layers[0].bands[0].colorEnd.y == 0.75)
+        #expect(state.layers[0].bands[0].colorEnd.z == 1)
+    }
+
+    @Test func bandFieldPreviewUsesNeutralDisplacementOutsideBands() throws {
+        let state = BandFieldState(
+            enabled: true,
+            xAmplitudePx: 40,
+            yAmplitudePx: 240,
+            layers: [
+                BandFieldLayer(axis: 0, blendMode: 0, opacity: 1, bands: [
+                    BandFieldBand(
+                        center: 0,
+                        halfWidth: 0.01,
+                        featherW: 0.001,
+                        centerL: 0,
+                        halfLength: 0.01,
+                        featherL: 0.001,
+                        alpha: 1,
+                        colorStart: SIMD4<Float>(1, 1, 1, 1),
+                        colorEnd: SIMD4<Float>(1, 1, 1, 1),
+                        gradMode: 0,
+                        dispersionPx: 0,
+                        rainbowBrightness: 1
+                    )
+                ])
+            ]
+        )
+
+        let color = BandFieldManager.samplePreviewColor(state: state, x: 0.0, y: 0.0, mode: .displacement)
+        let nsColor = NSColor(color).usingColorSpace(.deviceRGB) ?? NSColor.black
+
+        #expect(abs(Double(nsColor.redComponent) - 0.5) < 0.01)
+        #expect(abs(Double(nsColor.greenComponent) - 0.5) < 0.01)
     }
 
 }

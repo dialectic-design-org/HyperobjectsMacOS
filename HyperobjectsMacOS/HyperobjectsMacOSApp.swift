@@ -124,6 +124,7 @@ struct HyperobjectsMacOSApp: App {
                             latestScript = script
                             applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene, bandFieldManager: bandFieldManager, warningCache: scriptOutputWarningCache)
                             targetScene.refreshSceneInputSnapshot()
+                            scriptInputCache.update(prepareScriptInput(scene: targetScene, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
                         }
                     }
                     
@@ -143,11 +144,9 @@ struct HyperobjectsMacOSApp: App {
 
                                 let targetScene = sceneManager.currentScene
                                 _ = jsEngine.executeScript(latestScript, inputState: inputState) { outputState in
-                                    if outputState.keys.contains("RESET") {
-                                        targetScene.resetAllInputsToInitialValues()
-                                    }
                                     applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene, bandFieldManager: bandFieldManager, warningCache: scriptOutputWarningCache)
                                     targetScene.refreshSceneInputSnapshot()
+                                    scriptInputCache.update(prepareScriptInput(scene: targetScene, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
                                 }
                             }
                         }
@@ -275,6 +274,9 @@ private func prepareScriptInput(scene: GeometriesSceneBase, timeBox: TimeBox, au
 private func applyScriptOutput(inputState: [String: StateValue], outputState: [String: StateValue], scene: GeometriesSceneBase, bandFieldManager: BandFieldManager, warningCache: ScriptOutputWarningCache) {
     // Compare outputState to inputState and print changes only (no scene mutation yet)
     let epsilon: Double = 1e-6
+    if outputState.keys.contains("RESET") {
+        scene.resetAllInputsToInitialValues(refresh: false)
+    }
     if outputState["bands"] == nil {
         bandFieldManager.disable()
     }
@@ -285,12 +287,14 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState: [S
             bandFieldManager.apply(outVal)
             continue
         }
+
+        if key == "RESET" {
+            continue
+        }
         
         guard let inVal = inputState[key] else {
             // print("[State Change] New key in output not present in input: \(key) => \(outVal)")
-            if key != "RESET" {
-                print("inVal not available for key \(key)")
-            }
+            print("inVal not available for key \(key)")
             continue
         }
         

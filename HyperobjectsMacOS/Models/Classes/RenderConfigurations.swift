@@ -274,7 +274,7 @@ final class BandFieldManager: ObservableObject {
     static func samplePreviewColor(state: BandFieldState, x: Double, y: Double, mode: BandFieldPreviewMode) -> Color {
         guard state.enabled else { return Color.black.opacity(0.2) }
         let ndc = SIMD2<Float>(Float(x) * 2 - 1, 1 - Float(y) * 2)
-        var premul = SIMD4<Float>(0, 0, 0, 0)
+        var premul = SIMD4<Float>(0.5, 0.5, 0, 0)
         for layer in state.layers {
             var layerColor = SIMD4<Float>(0, 0, 0, 0)
             for band in layer.bands {
@@ -398,7 +398,23 @@ extension BandFieldManager {
     }
 
     private static func colorFromStop(_ value: StateValue.Value?) -> SIMD4<Float>? {
+        if case .vector4(let color)? = value {
+            return SIMD4<Float>(
+                clamped(Float(color.x), 0, 1),
+                clamped(Float(color.y), 0, 1),
+                clamped(Float(color.z), 0, 1),
+                clamped(Float(color.w), 0, 1)
+            )
+        }
         guard case .array(let parts)? = value else { return nil }
+        if parts.count >= 2, case .vector4(let color) = parts[1] {
+            return SIMD4<Float>(
+                clamped(Float(color.x), 0, 1),
+                clamped(Float(color.y), 0, 1),
+                clamped(Float(color.z), 0, 1),
+                clamped(Float(color.w), 0, 1)
+            )
+        }
         if parts.count >= 2, case .floatArray(let color) = parts[1], color.count >= 4 {
             return SIMD4<Float>(
                 clamped(Float(color[0]), 0, 1),

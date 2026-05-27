@@ -354,11 +354,13 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         _ = records
     }
 
-    func resetAllInputsToInitialValues() {
+    func resetAllInputsToInitialValues(refresh: Bool = true) {
         for i in 0..<inputs.count {
             inputs[i].resetToInitialValues()
         }
-        refreshSceneInputSnapshot()
+        if refresh {
+            refreshSceneInputSnapshot()
+        }
     }
 
     /// Main-thread only. Captures the current `inputs`, `changedInputs`, audio history,

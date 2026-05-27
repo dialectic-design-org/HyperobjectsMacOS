@@ -74,7 +74,7 @@ func computeOutSegsCapacity(linearCount: Int, quadCount: Int, cubicCount: Int) -
     return Int(Double(reserveLinear + reserveQuads + reserveCubics) * 1.2)
 }
 
-private let BIN_POW: UInt32 = 5
+private let BIN_POW: UInt32 = 7
 private let BIN_SIZE: UInt32 = 1 << BIN_POW
 // private let lineCount: UInt32 = 10000 // REMOVED: Now an instance variable
 
@@ -700,7 +700,8 @@ class MetalRenderer {
             blendRadius: resolve(overrides.blendRadius, renderConfigs?.blendRadius ?? 0.0),
             blendIntensity: resolve(overrides.blendIntensity, renderConfigs?.blendIntensity ?? 0.0),
             previousColorVisibility: resolve(overrides.previousColorVisibility, renderConfigs?.previousColorVisibility ?? 0.0),
-            bandFieldMaxOffsetPx: bandMaxOffset
+            bandFieldMaxOffsetPx: bandMaxOffset,
+            lineCapacity: UInt32(lineCount)
         )
         
         let renderPassDescriptor = MTLRenderPassDescriptor()

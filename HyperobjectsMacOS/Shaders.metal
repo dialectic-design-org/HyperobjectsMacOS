@@ -64,6 +64,19 @@ inline void binRange(float2 mn, float2 mx, float2 viewPx,
     by1 = (uint)(py1) >> BIN_POW;
 }
 
+[[clang::always_inline]]
+inline void pushSegmentToBin(uint bin,
+                             uint outIdx,
+                             uint perBinCapacity,
+                             device atomic_uint* binCounts,
+                             device uint* binOffsets,
+                             device uint* binList) {
+    const uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
+    if (pos < perBinCapacity) {
+        binList[binOffsets[bin] + pos] = outIdx;
+    }
+}
+
 // ---------------------------------------------------------------------------------
 // Liang-Barsky helper function for clipping one boundary (e.g., x > -w)
 // This is a core component of the line clipping algorithm.
@@ -260,8 +273,7 @@ inline void emitJoinDisk(float2 centerSS, float rad, float2 view,
         float2 binMax = binMin + binSizeVec;
         if (!lineIntersectsBox(centerSS, centerSS, binMin, binMax, rad)) continue;
         uint bin = by * BIN_COLS + bx;
-        uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
-        binList[binOffsets[bin] + pos] = outIdx;
+        pushSegmentToBin(bin, outIdx, alloc->capacity, binCounts, binOffsets, binList);
     }
 }
 
@@ -409,7 +421,7 @@ inline float4 evalBandFieldBand(const device BandFieldBand& b, float2 ndc, threa
 [[clang::always_inline]]
 inline float4 evalBandField(float2 ndc, const device BandFieldBand* bands, constant BandFieldUniforms& u) {
     if (u.enabled == 0u || u.bandCount == 0u) return float4(0.0f);
-    float4 acc = float4(0.0f);
+    float4 acc = float4(0.5f, 0.5f, 0.0f, 0.0f);
     float dispersionAcc = 0.0f;
     float brightnessAcc = 0.0f;
     for (uint i = 0; i < u.bandCount; ++i) {
@@ -564,8 +576,7 @@ kernel void transformAndBinLinear(
 
     auto pushToBin = [&](uint bx, uint by){
         const uint bin = by * BIN_COLS + bx;
-        const uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
-        binList[binOffsets[bin] + pos] = outIdx;
+        pushSegmentToBin(bin, outIdx, alloc->capacity, binCounts, binOffsets, binList);
     };
 
     // -------------------------------
@@ -761,8 +772,7 @@ kernel void transformAndBinQuadratic(
                     for (uint by = by0; by <= by1; ++by)
                     for (uint bx = bx0; bx <= bx1; ++bx) {
                         uint bin = by * BIN_COLS + bx;
-                        uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
-                        binList[binOffsets[bin] + pos] = outIdx;
+                        pushSegmentToBin(bin, outIdx, alloc->capacity, binCounts, binOffsets, binList);
                     }
                 }
                 
@@ -908,8 +918,7 @@ kernel void transformAndBinCubic(
                         // if (!lineIntersectsBox(s0, s1, binMin, binMax, rad)) continue;
 
                         const uint bin = by * BIN_COLS + bx;
-                        const uint pos = atomic_fetch_add_explicit(&binCounts[bin], 1u, memory_order_relaxed);
-                        binList[binOffsets[bin] + pos] = outIdx;
+                        pushSegmentToBin(bin, outIdx, alloc->capacity, binCounts, binOffsets, binList);
                     }
                     
                     if ((i > 0 && i < N) && EMIT_JOIN_DISK) { // FIX: one micro‑disk per interior joint
@@ -1007,7 +1016,7 @@ kernel void drawLines(
     ushort2                                 tid             [[thread_position_in_threadgroup]],
     uint2                                   gid             [[thread_position_in_grid]]
 ) {
-    const uint K_BUFFER_SIZE = 4;
+    const uint K_BUFFER_SIZE = 8;
     constexpr float Z_FIGHTING_EPSILON = 1e-5f;
     
     const int pxIndex = int(gid.x) + int(gid.y);
@@ -1053,7 +1062,7 @@ kernel void drawLines(
     uint bin = (gid.y >> BIN_POW) * BIN_COLS + (gid.x >> BIN_POW);
     
     // Single load of bin count (optimization: removed duplicate load)
-    const uint total = atomic_load_explicit(&binCounts[bin], memory_order_relaxed);
+    const uint total = min(atomic_load_explicit(&binCounts[bin], memory_order_relaxed), U.lineCapacity);
     uint base = binOffsets[bin];
     
     // Threadgroup staging buffers - keeping separate arrays for better access patterns
@@ -1301,9 +1310,8 @@ kernel void drawLines(
 
             spectralAlpha = saturate(spectralAlpha);
             if (spectralAlpha > 1e-6f) {
-                fragmentColor = float4(spectralPremul / spectralAlpha, spectralAlpha);
-            } else {
-                fragmentColor = float4(0.0f);
+                float4 spectralColor = float4(spectralPremul / spectralAlpha, spectralAlpha);
+                fragmentColor = spectralColor + fragmentColor * (1.0f - spectralColor.a);
             }
         }
         

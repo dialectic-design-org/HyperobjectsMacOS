@@ -48,6 +48,7 @@ struct Uniforms {
     float previousColorVisibility;
 
     float bandFieldMaxOffsetPx;
+    uint32_t lineCapacity;
 };
 
 struct BandFieldBand {

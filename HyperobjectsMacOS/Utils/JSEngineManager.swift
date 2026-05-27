@@ -72,6 +72,12 @@ extension StateValue {
     }
     
     static func fromJSONValue(_ jsonValue: Any) -> StateValue? {
+        if let number = jsonValue as? NSNumber {
+            if CFGetTypeID(number as CFTypeRef) == CFBooleanGetTypeID() {
+                return StateValue(value: .bool(number.boolValue))
+            }
+            return StateValue(value: .float(number.doubleValue))
+        }
         if let bool = jsonValue as? Bool {
             return StateValue(value: .bool(bool))
         }
