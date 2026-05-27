@@ -65,6 +65,8 @@ struct BandFieldBand {
     uint32_t gradMode;
     float dispersionPx;
     float rainbowBrightness;
+    uint32_t featherWMode;
+    uint32_t featherLMode;
 };
 
 struct BandFieldUniforms {

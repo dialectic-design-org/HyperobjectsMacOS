@@ -397,14 +397,25 @@ inline float bandBoxCoverage(float p, float center, float halfExtent, float aa) 
 }
 
 [[clang::always_inline]]
+inline float shapeBandCoverage(float coverage, uint mode) {
+    if (mode == 1u) {
+        return coverage * coverage * (3.0f - 2.0f * coverage);
+    }
+    if (mode == 2u) {
+        return coverage * coverage * coverage * (coverage * (coverage * 6.0f - 15.0f) + 10.0f);
+    }
+    return coverage;
+}
+
+[[clang::always_inline]]
 inline float4 evalBandFieldBand(const device BandFieldBand& b, float2 ndc, thread float& dispersionPx, thread float& rainbowBrightness) {
     dispersionPx = 0.0f;
     rainbowBrightness = 0.0f;
     bool vertical = (b.axis == 0u);
     float across = vertical ? ndc.x : ndc.y;
     float along = vertical ? ndc.y : ndc.x;
-    float covA = bandBoxCoverage(across, b.center, b.halfWidth, b.featherW);
-    float covL = bandBoxCoverage(along, b.centerL, b.halfLength, b.featherL);
+    float covA = shapeBandCoverage(bandBoxCoverage(across, b.center, b.halfWidth, b.featherW), b.featherWMode);
+    float covL = shapeBandCoverage(bandBoxCoverage(along, b.centerL, b.halfLength, b.featherL), b.featherLMode);
     float cov = covA * covL;
     if (cov <= 0.0f) return float4(0.0f);
 

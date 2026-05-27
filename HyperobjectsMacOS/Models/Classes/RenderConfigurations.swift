@@ -99,9 +99,11 @@ struct BandFieldBand: Equatable {
     var center: Float
     var halfWidth: Float
     var featherW: Float
+    var featherWMode: UInt32
     var centerL: Float
     var halfLength: Float
     var featherL: Float
+    var featherLMode: UInt32
     var alpha: Float
     var colorStart: SIMD4<Float>
     var colorEnd: SIMD4<Float>
@@ -148,6 +150,8 @@ struct ShaderBandFieldBand {
     var gradMode: UInt32
     var dispersionPx: Float = 0
     var rainbowBrightness: Float = 1
+    var featherWMode: UInt32 = 0
+    var featherLMode: UInt32 = 0
 }
 
 struct BandFieldUniforms {
@@ -244,7 +248,9 @@ final class BandFieldManager: ObservableObject {
                     axis: layer.axis,
                     gradMode: band.gradMode,
                     dispersionPx: band.dispersionPx,
-                    rainbowBrightness: band.rainbowBrightness
+                    rainbowBrightness: band.rainbowBrightness,
+                    featherWMode: band.featherWMode,
+                    featherLMode: band.featherLMode
                 ))
             }
         }
@@ -297,8 +303,8 @@ final class BandFieldManager: ObservableObject {
         let vertical = layerAxis == 0
         let across = vertical ? ndc.x : ndc.y
         let along = vertical ? ndc.y : ndc.x
-        let covA = boxCoverage(across, center: band.center, half: band.halfWidth, aa: band.featherW)
-        let covL = boxCoverage(along, center: band.centerL, half: band.halfLength, aa: band.featherL)
+        let covA = boxCoverage(across, center: band.center, half: band.halfWidth, aa: band.featherW, mode: band.featherWMode)
+        let covL = boxCoverage(along, center: band.centerL, half: band.halfLength, aa: band.featherL, mode: band.featherLMode)
         let cov = covA * covL
         guard cov > 0 else { return SIMD4<Float>(0, 0, 0, 0) }
         let t: Float
@@ -312,9 +318,17 @@ final class BandFieldManager: ObservableObject {
         return SIMD4<Float>(color.x * alpha, color.y * alpha, color.z * alpha, alpha)
     }
 
-    private static func boxCoverage(_ p: Float, center: Float, half: Float, aa: Float) -> Float {
+    private static func boxCoverage(_ p: Float, center: Float, half: Float, aa: Float, mode: UInt32) -> Float {
         let d = half - abs(p - center)
-        return min(max(d / max(aa, 0.000001) + 0.5, 0), 1)
+        let linear = min(max(d / max(aa, 0.000001) + 0.5, 0), 1)
+        switch mode {
+        case 1:
+            return linear * linear * (3 - 2 * linear)
+        case 2:
+            return linear * linear * linear * (linear * (linear * 6 - 15) + 10)
+        default:
+            return linear
+        }
     }
 }
 
@@ -376,9 +390,11 @@ extension BandFieldManager {
             center: clamped(float(object["center"], default: 0), -2, 2),
             halfWidth: max(0.0001, clamped(float(object["halfWidth"], default: 0.1), 0, 4)),
             featherW: max(0, clamped(float(object["featherW"], default: 0.001), 0, 2)),
+            featherWMode: featherModeValue(object["featherWMode"]),
             centerL: clamped(float(object["centerL"], default: 0), -2, 2),
             halfLength: max(0.0001, clamped(float(object["halfLength"], default: 1.2), 0, 4)),
             featherL: max(0, clamped(float(object["featherL"], default: 0.001), 0, 2)),
+            featherLMode: featherModeValue(object["featherLMode"]),
             alpha: clamped(float(object["alpha"], default: 1), 0, 1),
             colorStart: colors.0,
             colorEnd: colors.1,
@@ -456,6 +472,17 @@ extension BandFieldManager {
     private static func gradModeValue(_ value: StateValue.Value?) -> UInt32 {
         if case .string(let raw)? = value, raw.lowercased() == "length" { return 1 }
         return UInt32(clamped(float(value, default: 0), 0, 1))
+    }
+
+    private static func featherModeValue(_ value: StateValue.Value?) -> UInt32 {
+        if case .string(let raw)? = value {
+            switch raw.lowercased() {
+            case "smooth": return 1
+            case "smoother": return 2
+            default: return 0
+            }
+        }
+        return UInt32(clamped(float(value, default: 0), 0, 2))
     }
 
     private static func bool(_ value: StateValue.Value?, default fallback: Bool) -> Bool {

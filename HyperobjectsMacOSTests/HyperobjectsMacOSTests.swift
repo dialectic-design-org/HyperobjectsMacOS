@@ -95,9 +95,11 @@ struct HyperobjectsMacOSTests {
                             "center": .float(0),
                             "halfWidth": .float(0.25),
                             "featherW": .float(0.02),
+                            "featherWMode": .string("smooth"),
                             "centerL": .float(0),
                             "halfLength": .float(1),
                             "featherL": .float(0.01),
+                            "featherLMode": .string("smoother"),
                             "alpha": .float(1),
                             "dispersionPx": .float(32),
                             "rainbowBrightness": .float(2.5),
@@ -123,6 +125,8 @@ struct HyperobjectsMacOSTests {
         #expect(state.layers[0].bands[0].colorEnd.y == 1)
         #expect(state.layers[0].bands[0].dispersionPx == 32)
         #expect(state.layers[0].bands[0].rainbowBrightness == 2.5)
+        #expect(state.layers[0].bands[0].featherWMode == 1)
+        #expect(state.layers[0].bands[0].featherLMode == 2)
         #expect(state.maxOffsetPx == 56)
     }
 
@@ -194,9 +198,11 @@ struct HyperobjectsMacOSTests {
                         center: 0,
                         halfWidth: 0.01,
                         featherW: 0.001,
+                        featherWMode: 0,
                         centerL: 0,
                         halfLength: 0.01,
                         featherL: 0.001,
+                        featherLMode: 0,
                         alpha: 1,
                         colorStart: SIMD4<Float>(1, 1, 1, 1),
                         colorEnd: SIMD4<Float>(1, 1, 1, 1),
