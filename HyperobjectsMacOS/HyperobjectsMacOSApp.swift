@@ -40,6 +40,13 @@ private final class ScriptOutputWarningCache {
     }
 }
 
+private func safeInt(_ value: Double) -> Int? {
+    guard value.isFinite else { return nil }
+    if value >= Double(Int.max) { return Int.max }
+    if value <= Double(Int.min) { return Int.min }
+    return Int(value)
+}
+
 @main
 struct HyperobjectsMacOSApp: App {
     @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneSwarm())
@@ -340,7 +347,11 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState: [S
                 } else if key.isEmpty == false, key.hasPrefix("audio_smoothed_source_") {
                     let audioKey = String(key.dropFirst("audio_smoothed_source_".count))
                     if let input = scene.inputs.first(where: { $0.name == audioKey }) {
-                        input.audioSmoothedSource = Int(b)
+                        if let intVal = safeInt(b) {
+                            input.audioSmoothedSource = intVal
+                        } else {
+                            print("[Script Output] Ignoring non-finite value for \(key): \(b)")
+                        }
                     }
                 } else {
                     // Update the matching input safely by name, avoiding optional-call and enum ambiguity
@@ -351,7 +362,11 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState: [S
                         } else if input.type == .statefulFloat {
                             input.value = Double(b)
                         } else if input.type == .integer {
-                            input.value = Int(b)
+                            if let intVal = safeInt(b) {
+                                input.value = intVal
+                            } else {
+                                print("[Script Output] Ignoring non-finite integer value for \(key): \(b)")
+                            }
                         }
                     }
                 }

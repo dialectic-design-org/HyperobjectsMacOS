@@ -223,379 +223,380 @@ class CubeGenerator: CachedGeometryGenerator {
         let cubeCounts: Int = outerLoopCubesCount
         let innerCubeCounts: Int = innerLoopCubesCount
         let totalCubesCount: Int = cubeCounts * innerCubeCounts
-        
-        for cubeCounter in 1...cubeCounts {
-            let cubeOuterTime = Float(cubeCounter - 1) / Float(cubeCounts - 1)
-            for innerCubeCounter in 1...innerCubeCounts {
-                let cubeInnerTime = Float(innerCubeCounter - 1) / Float(innerCubeCounts - 1)
-                
-                let cubeTime = Float((cubeCounter + innerCubeCounter) - 1) / Float(totalCubesCount)
-                
-                let facesOffsetDelayed = facesOffsetInput.getHistoryValue(millisecondsAgo:
-                                                                            Double(floatFromInputs(inputs, name: "Face offset delay")) * Double(cubeTime) * 1000)
-                
-                let innerCubesScalingValue = innerCubesScalingInput.getHistoryValue(millisecondsAgo:
-                                                                                        Double(ensureValueIsFloat(innerCubesScalingDelay.getHistoryValue(millisecondsAgo: 0)) * cubeTime * 1000)
-                )
-                
-                var cube = makeCube(size:  1.0 + cubeTime * ensureValueIsFloat(innerCubesScalingValue), offset: ensureValueIsFloat(facesOffsetDelayed))
-                
-                let delayedRotationX = rotationXInput.getHistoryValue(millisecondsAgo: Double(rotationXInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)
-                let delayedRotationY = rotationYInput.getHistoryValue(millisecondsAgo: Double(rotationYInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)
-                let delayedRotationZ = rotationZInput.getHistoryValue(millisecondsAgo: Double(rotationZInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)
-                
-                let rotationXOffset = ensureValueIsFloat(rotationXOffsetInput.getHistoryValue(millisecondsAgo: Double(rotationXOffsetInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)) * cubeTime
-                let rotationYOffset = ensureValueIsFloat(rotationYOffsetInput.getHistoryValue(millisecondsAgo: Double(rotationYOffsetInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)) * cubeTime
-                let rotationZOffset = ensureValueIsFloat(rotationZOffsetInput.getHistoryValue(millisecondsAgo: Double(rotationZOffsetInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)) * cubeTime
-                
-                
-                let lineWidthDelayFloat: Float = ensureValueIsFloat(lineWidthInputDelay.getHistoryValue(millisecondsAgo: 0))
-                let delayedLineWidth = lineWidthInput.getHistoryValue(millisecondsAgo: Double(lineWidthDelayFloat) * Double(cubeTime) * 1000)
-                
-                let delayedWidthDelay = widthInputDelay.getHistoryValue(millisecondsAgo: 0)
-                let widthDelayFloat: Float = ensureValueIsFloat(delayedWidthDelay)
-                let delayedWidth = widthInput.getHistoryValue(millisecondsAgo: Double(widthDelayFloat) * Double(cubeTime) * 1000)
-                
-                let heightDelay = heightInputDelay.getHistoryValue(millisecondsAgo: 0)
-                let heightDelayFloat: Float = ensureValueIsFloat(heightDelay)
-                let delayedHeight = heightInput.getHistoryValue(millisecondsAgo: Double(heightDelayFloat) * Double(cubeTime) * 1000)
-                
-                let depthDelay = depthInputDelay.getHistoryValue(millisecondsAgo: 0)
-                let depthDelayFloat: Float = ensureValueIsFloat(depthDelay)
-                let delayedDepth = depthInput.getHistoryValue(millisecondsAgo: Double(depthDelayFloat) * Double(cubeTime) * 1000)
-                
-                // Enforce delayed rotation to be a float
-                let delayedRotationXFloat: Float = ensureValueIsFloat(delayedRotationX)
-                let delayedRotationYFloat: Float = ensureValueIsFloat(delayedRotationY)
-                let delayedRotationZFloat: Float = ensureValueIsFloat(delayedRotationZ)
-                
-                
-                
-                
-                let delayedLineWidthFloat: Float = ensureValueIsFloat(delayedLineWidth)
-                
-                
-                
-                for i in 0..<cube.count {
-                    cube[i].lineWidthStart = delayedLineWidthFloat
-                    cube[i].lineWidthEnd = delayedLineWidthFloat
-                }
-                
-                // Apply width, height, depth transforms
-                let baseWidthScale = ensureValueIsFloat(delayedWidth)
-                let baseHeightScale = ensureValueIsFloat(delayedHeight)
-                let baseDepthScale = ensureValueIsFloat(delayedDepth)
-                
-                let widthOuterWave = dimensionWaveContribution(amplitudeInput: waveAmlitudeOuterLoopWidth,
-                                                               frequencyInput: waveFrequencyOuterLoopWidth,
-                                                               offsetInput: waveOffsetOuterLoopWidth,
-                                                               time: cubeOuterTime)
-                let widthInnerWave = dimensionWaveContribution(amplitudeInput: waveAmlitudeInnerLoopWidth,
-                                                               frequencyInput: waveFrequencyInnerLoopWidth,
-                                                               offsetInput: waveOffsetInnerLoopWidth,
-                                                               time: cubeInnerTime)
-                let finalWidthScale = baseWidthScale + widthOuterWave + widthInnerWave
-                
-                let heightOuterWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeOuterLoopHeight,
-                                                                frequencyInput: waveFrequencyOuterLoopHeight,
-                                                                offsetInput: waveOffsetOuterLoopHeight,
-                                                                time: cubeOuterTime)
-                let heightInnerWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeInnerLoopHeight,
-                                                                frequencyInput: waveFrequencyInnerLoopHeight,
-                                                                offsetInput: waveOffsetInnerLoopHeight,
-                                                                time: cubeInnerTime)
-                let finalHeightScale = baseHeightScale + heightOuterWave + heightInnerWave
-                
-                let depthOuterWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeOuterLoopDepth,
-                                                               frequencyInput: waveFrequencyOuterLoopDepth,
-                                                               offsetInput: waveOffsetOuterLoopDepth,
-                                                               time: cubeOuterTime)
-                let depthInnerWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeInnerLoopDepth,
-                                                               frequencyInput: waveFrequencyInnerLoopDepth,
-                                                               offsetInput: waveOffsetInnerLoopDepth,
-                                                               time: cubeInnerTime)
-                let finalDepthScale = baseDepthScale + depthOuterWave + depthInnerWave
-                
-                for i in 0..<cube.count {
-                    cube[i].startPoint.y *= finalHeightScale
-                    cube[i].endPoint.y *= finalHeightScale
+        if cubeCounts > 0 {
+            for cubeCounter in 1...cubeCounts {
+                let cubeOuterTime = Float(cubeCounter - 1) / Float(cubeCounts - 1)
+                for innerCubeCounter in 1...innerCubeCounts {
+                    let cubeInnerTime = Float(innerCubeCounter - 1) / Float(innerCubeCounts - 1)
                     
-                    cube[i].startPoint.x *= finalWidthScale
-                    cube[i].endPoint.x *= finalWidthScale
+                    let cubeTime = Float((cubeCounter + innerCubeCounter) - 1) / Float(totalCubesCount)
                     
-                    cube[i].startPoint.z *= finalDepthScale
-                    cube[i].endPoint.z *= finalDepthScale
-                }
-                
-                // Apply size and rotation
-                for i in 0..<cube.count {
-                    cube[i].startPoint *= size
-                    cube[i].endPoint *= size
-                }
-                let rotationMatrixX = matrix_rotation(angle: delayedRotationXFloat + statefulRotationX + rotationXOffset, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
-                let rotationMatrixY = matrix_rotation(angle: delayedRotationYFloat + statefulRotationY + rotationYOffset, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
-                let rotationMatrixZ = matrix_rotation(angle: delayedRotationZFloat + statefulRotationZ + rotationZOffset, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
-
-                let combinedRotationMatrix = rotationMatrixZ * rotationMatrixY * rotationMatrixX
-                
-//                for i in 0..<cube.count {
-//                    cube[i] = cube[i].applyMatrix(rotationMatrixX)
-//                }
-//                
-//                for i in 0..<cube.count {
-//                    cube[i] = cube[i].applyMatrix(rotationMatrixY)
-//                }
-//                
-//                for i in 0..<cube.count {
-//                    cube[i] = cube[i].applyMatrix(rotationMatrixZ)
-//                }
-                  for i in 0..<cube.count {
-                        cube[i] = cube[i].applyMatrix(combinedRotationMatrix)
-                  }
-                
-                
-                let scalingMatrix = matrix_scale(scale: SIMD3<Float>(repeating: 1.0))
-                
-                var xTranslateOuterLoop: Float = 0.0
-                if cubeCounts > 1 {
-                    xTranslateOuterLoop = (cubeOuterTime - 0.5)
-                }
-                var xTranslateInnerLoop: Float = 0.0
-                if innerCubeCounts > 1 {
-                    xTranslateInnerLoop = (cubeInnerTime - 0.5)
-                }
-                
-                var yTranslateOuterLoop: Float = 0.0
-                if cubeCounts > 1 {
-                    yTranslateOuterLoop = (cubeOuterTime - 0.5)
-                }
-                var yTranslateInnerLoop: Float = 0.0
-                if innerCubeCounts > 1 {
-                    yTranslateInnerLoop = (cubeInnerTime - 0.5)
-                }
-                
-                var zTranslateOuterLoop: Float = 0.0
-                if cubeCounts > 1 {
-                    zTranslateOuterLoop = (cubeOuterTime - 0.5)
-                }
-                var zTranslateInnerLoop: Float = 0.0
-                if innerCubeCounts > 1 {
-                    zTranslateInnerLoop = (cubeInnerTime - 0.5)
-                }
-                
-                
-                let outerLoopXTranslate = outerLoopCubesSpreadXInput.getHistoryValue(
-                    millisecondsAgo: Double(ensureValueIsFloat(
-                        outerLoopCubesSpreadXInputDelay.getHistoryValue(millisecondsAgo: 0))
-                                            * cubeOuterTime * 1000
-                                           )
-                )
-                let innerLoopXTranslate = innerLoopCubesSpreadXInput.getHistoryValue(
-                    millisecondsAgo: Double(ensureValueIsFloat(
-                        innerLoopCubesSpreadXInputDelay.getHistoryValue(millisecondsAgo: 0))
-                                            * cubeInnerTime * 1000
-                                           )
-                )
-                
-                let outerLoopYTranslate = outerLoopCubesSpreadYInput.getHistoryValue(
-                    millisecondsAgo: Double(ensureValueIsFloat(
-                        outerLoopCubesSpreadYInputDelay.getHistoryValue(millisecondsAgo: 0))
-                                            * cubeOuterTime * 1000
-                                           )
-                )
-                let innerLoopYTranslate = innerLoopCubesSpreadYInput.getHistoryValue(
-                    millisecondsAgo: Double(ensureValueIsFloat(
-                        innerLoopCubesSpreadYInputDelay.getHistoryValue(millisecondsAgo: 0))
-                                            * cubeInnerTime * 1000
-                                           )
-                )
-                
-                let outerLoopZTranslate = outerLoopCubesSpreadZInput.getHistoryValue(
-                    millisecondsAgo: Double(ensureValueIsFloat(
-                        outerLoopCubesSpreadZInputDelay.getHistoryValue(millisecondsAgo: 0))
-                                            * cubeOuterTime * 1000
-                                           )
-                )
-                let innerLoopZTranslate = innerLoopCubesSpreadZInput.getHistoryValue(
-                    millisecondsAgo: Double(ensureValueIsFloat(
-                        innerLoopCubesSpreadZInputDelay.getHistoryValue(millisecondsAgo: 0))
-                                            * cubeInnerTime * 1000
-                                           )
-                )
-                
-                let translateXOuterWave = dimensionWaveContribution(
-                    amplitudeInput: waveAmplituteOuterLoopTranslateXInput,
-                    frequencyInput: waveFrequencyOuterLoopTranslateXInput,
-                    offsetInput: waveOffsetOuterLoopTranslateXInput,
-                    time: cubeOuterTime
-                )
-                let translateXInnerWave = dimensionWaveContribution(
-                    amplitudeInput: waveAmplituteInnerLoopTranslateXInput,
-                    frequencyInput: waveFrequencyInnerLoopTranslateXInput,
-                    offsetInput: waveOffsetInnerLoopTranslateXInput,
-                    time: cubeInnerTime
-                )
-                
-                let translateYOuterWave = dimensionWaveContribution(
-                    amplitudeInput: waveAmplituteOuterLoopTranslateYInput,
-                    frequencyInput: waveFrequencyOuterLoopTranslateYInput,
-                    offsetInput: waveOffsetOuterLoopTranslateYInput,
-                    time: cubeOuterTime
-                )
-                let translateYInnerWave = dimensionWaveContribution(
-                    amplitudeInput: waveAmplituteInnerLoopTranslateYInput,
-                    frequencyInput: waveFrequencyInnerLoopTranslateYInput,
-                    offsetInput: waveOffsetInnerLoopTranslateYInput,
-                    time: cubeInnerTime
-                )
-                
-                let translateZOuterWave = dimensionWaveContribution(
-                    amplitudeInput: waveAmplituteOuterLoopTranslateZInput,
-                    frequencyInput: waveFrequencyOuterLoopTranslateZInput,
-                    offsetInput: waveOffsetOuterLoopTranslateZInput,
-                    time: cubeOuterTime
-                )
-                let translateZInnerWave = dimensionWaveContribution(
-                    amplitudeInput: waveAmplituteInnerLoopTranslateZInput,
-                    frequencyInput: waveFrequencyInnerLoopTranslateZInput,
-                    offsetInput: waveOffsetInnerLoopTranslateZInput,
-                    time: cubeInnerTime
-                )
-                
-                let translateX = (xTranslateOuterLoop * ensureValueIsFloat(outerLoopXTranslate)) +
-                (xTranslateInnerLoop * ensureValueIsFloat(innerLoopXTranslate)) +
-                translateXOuterWave + translateXInnerWave
-                
-                let translateY = (yTranslateOuterLoop * ensureValueIsFloat(outerLoopYTranslate)) +
-                (yTranslateInnerLoop * ensureValueIsFloat(innerLoopYTranslate)) +
-                translateYOuterWave + translateYInnerWave
-                
-                let translateZ = (zTranslateOuterLoop * ensureValueIsFloat(outerLoopZTranslate)) +
-                (zTranslateInnerLoop * ensureValueIsFloat(innerLoopZTranslate)) +
-                translateZOuterWave + translateZInnerWave
-                
-                var matrixTranslate = matrix_translation(translation: SIMD3<Float>(translateX,
-                                                                                   translateY,
-                                                                                   translateZ))
-                
-                
-                let combinedMatrix = matrixTranslate * scalingMatrix
-                
-                
-                
-                let colorTime = (Double(cubeOuterTime) + Double(statefulColorShift)).truncatingRemainder(dividingBy: 1.00001)
-
-                
-                for i in 0..<cube.count {
-                    cube[i] = cube[i].applyMatrix(combinedMatrix)
-                    cube[i].lineWidthStart = delayedLineWidthFloat
-                    cube[i].lineWidthEnd = delayedLineWidthFloat
+                    let facesOffsetDelayed = facesOffsetInput.getHistoryValue(millisecondsAgo:
+                                                                                Double(floatFromInputs(inputs, name: "Face offset delay")) * Double(cubeTime) * 1000)
                     
-                    //                secondCube[i] = secondCube[i].setBasicEndPointColors(
-                    //                    startColor: colorScale.color(at: Double(cubeTime)).toSIMD4(),
-                    //                    endColor: colorScale.color(at: Double(cubeTime)).toSIMD4()
-                    //                )
-                    
-                    let brightnessDelayValue = ensureValueIsFloat(
-                        brightnessInputDelay.getHistoryValue(millisecondsAgo: 0)
-                    )
-                    let brightnessValue = brightnessInput.getHistoryValue(
-                        millisecondsAgo: Double(brightnessDelayValue * cubeTime * 1000)
+                    let innerCubesScalingValue = innerCubesScalingInput.getHistoryValue(millisecondsAgo:
+                                                                                            Double(ensureValueIsFloat(innerCubesScalingDelay.getHistoryValue(millisecondsAgo: 0)) * cubeTime * 1000)
                     )
                     
-                    let saturationDelayValue = ensureValueIsFloat(
-                        saturationInputDelay.getHistoryValue(millisecondsAgo: 0)
-                    )
-                    let saturationValue = saturationInput.getHistoryValue(
-                        millisecondsAgo: Double(saturationDelayValue * cubeTime * 1000)
-                    )
+                    var cube = makeCube(size:  1.0 + cubeTime * ensureValueIsFloat(innerCubesScalingValue), offset: ensureValueIsFloat(facesOffsetDelayed))
                     
-                    let brightnessFloat = ensureValueIsFloat(brightnessValue)
-                    let saturationFloat = ensureValueIsFloat(saturationValue)
+                    let delayedRotationX = rotationXInput.getHistoryValue(millisecondsAgo: Double(rotationXInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)
+                    let delayedRotationY = rotationYInput.getHistoryValue(millisecondsAgo: Double(rotationYInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)
+                    let delayedRotationZ = rotationZInput.getHistoryValue(millisecondsAgo: Double(rotationZInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)
                     
-                    let finalColor: SIMD4<Float>
-                    if isRGBColorMode {
-                        let redStartDelayValue = ensureValueIsFloat(
-                            redStartDelayInput.getHistoryValue(millisecondsAgo: 0)
-                        )
-                        let redStartValue = redStartInput.getHistoryValue(
-                            millisecondsAgo: Double(redStartDelayValue * cubeTime * 1000)
-                        )
-                        let redStartFloat = min(max(ensureValueIsFloat(redStartValue), 0.0), 1.0)
-                        
-                        let greenStartDelayValue = ensureValueIsFloat(
-                            greenStartDelayInput.getHistoryValue(millisecondsAgo: 0)
-                        )
-                        let greenStartValue = greenStartInput.getHistoryValue(
-                            millisecondsAgo: Double(greenStartDelayValue * cubeTime * 1000)
-                        )
-                        let greenStartFloat = min(max(ensureValueIsFloat(greenStartValue), 0.0), 1.0)
-                        
-                        let blueStartDelayValue = ensureValueIsFloat(
-                            blueStartDelayInput.getHistoryValue(millisecondsAgo: 0)
-                        )
-                        let blueStartValue = blueStartInput.getHistoryValue(
-                            millisecondsAgo: Double(blueStartDelayValue * cubeTime * 1000)
-                        )
-                        let blueStartFloat = min(max(ensureValueIsFloat(blueStartValue), 0.0), 1.0)
-                        
-                        let redEndDelayValue = ensureValueIsFloat(
-                            redEndDelayInput.getHistoryValue(millisecondsAgo: 0)
-                        )
-                        let redEndValue = redEndInput.getHistoryValue(
-                            millisecondsAgo: Double(redEndDelayValue * cubeTime * 1000)
-                        )
-                        let redEndFloat = min(max(ensureValueIsFloat(redEndValue), 0.0), 1.0)
-                        
-                        let greenEndDelayValue = ensureValueIsFloat(
-                            greenEndDelayInput.getHistoryValue(millisecondsAgo: 0)
-                        )
-                        let greenEndValue = greenEndInput.getHistoryValue(
-                            millisecondsAgo: Double(greenEndDelayValue * cubeTime * 1000)
-                        )
-                        let greenEndFloat = min(max(ensureValueIsFloat(greenEndValue), 0.0), 1.0)
-                        
-                        let blueEndDelayValue = ensureValueIsFloat(
-                            blueEndDelayInput.getHistoryValue(millisecondsAgo: 0)
-                        )
-                        let blueEndValue = blueEndInput.getHistoryValue(
-                            millisecondsAgo: Double(blueEndDelayValue * cubeTime * 1000)
-                        )
-                        let blueEndFloat = min(max(ensureValueIsFloat(blueEndValue), 0.0), 1.0)
-                        
-                        let rgbStartColor = Color(
-                            red: Double(redStartFloat),
-                            green: Double(greenStartFloat),
-                            blue: Double(blueStartFloat)
-                        )
-                        
-                        let rgbEndColor = Color(
-                            red: Double(redEndFloat),
-                            green: Double(greenEndFloat),
-                            blue: Double(blueEndFloat)
-                        )
-                        
-                        let rgbScale = ColorScale(colors: [rgbStartColor, rgbEndColor], mode: .rgb)
-                        finalColor = rgbScale.color(
-                            at: Double(colorTime),
-                            saturation: Double(saturationFloat),
-                            brightness: Double(brightnessFloat)
-                        ).toSIMD4()
-                    } else {
-                        finalColor = colorScale.color(
-                            at: Double(colorTime),
-                            saturation: Double(saturationFloat),
-                            brightness: Double(brightnessFloat)
-                        ).toSIMD4()
+                    let rotationXOffset = ensureValueIsFloat(rotationXOffsetInput.getHistoryValue(millisecondsAgo: Double(rotationXOffsetInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)) * cubeTime
+                    let rotationYOffset = ensureValueIsFloat(rotationYOffsetInput.getHistoryValue(millisecondsAgo: Double(rotationYOffsetInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)) * cubeTime
+                    let rotationZOffset = ensureValueIsFloat(rotationZOffsetInput.getHistoryValue(millisecondsAgo: Double(rotationZOffsetInputDelay.getHistoryValue(millisecondsAgo: 0) as! Float * cubeTime) * 1000)) * cubeTime
+                    
+                    
+                    let lineWidthDelayFloat: Float = ensureValueIsFloat(lineWidthInputDelay.getHistoryValue(millisecondsAgo: 0))
+                    let delayedLineWidth = lineWidthInput.getHistoryValue(millisecondsAgo: Double(lineWidthDelayFloat) * Double(cubeTime) * 1000)
+                    
+                    let delayedWidthDelay = widthInputDelay.getHistoryValue(millisecondsAgo: 0)
+                    let widthDelayFloat: Float = ensureValueIsFloat(delayedWidthDelay)
+                    let delayedWidth = widthInput.getHistoryValue(millisecondsAgo: Double(widthDelayFloat) * Double(cubeTime) * 1000)
+                    
+                    let heightDelay = heightInputDelay.getHistoryValue(millisecondsAgo: 0)
+                    let heightDelayFloat: Float = ensureValueIsFloat(heightDelay)
+                    let delayedHeight = heightInput.getHistoryValue(millisecondsAgo: Double(heightDelayFloat) * Double(cubeTime) * 1000)
+                    
+                    let depthDelay = depthInputDelay.getHistoryValue(millisecondsAgo: 0)
+                    let depthDelayFloat: Float = ensureValueIsFloat(depthDelay)
+                    let delayedDepth = depthInput.getHistoryValue(millisecondsAgo: Double(depthDelayFloat) * Double(cubeTime) * 1000)
+                    
+                    // Enforce delayed rotation to be a float
+                    let delayedRotationXFloat: Float = ensureValueIsFloat(delayedRotationX)
+                    let delayedRotationYFloat: Float = ensureValueIsFloat(delayedRotationY)
+                    let delayedRotationZFloat: Float = ensureValueIsFloat(delayedRotationZ)
+                    
+                    
+                    
+                    
+                    let delayedLineWidthFloat: Float = ensureValueIsFloat(delayedLineWidth)
+                    
+                    
+                    
+                    for i in 0..<cube.count {
+                        cube[i].lineWidthStart = delayedLineWidthFloat
+                        cube[i].lineWidthEnd = delayedLineWidthFloat
                     }
                     
-                    cube[i] = cube[i].setBasicEndPointColors(
-                        startColor: finalColor,
-                        endColor: finalColor
+                    // Apply width, height, depth transforms
+                    let baseWidthScale = ensureValueIsFloat(delayedWidth)
+                    let baseHeightScale = ensureValueIsFloat(delayedHeight)
+                    let baseDepthScale = ensureValueIsFloat(delayedDepth)
+                    
+                    let widthOuterWave = dimensionWaveContribution(amplitudeInput: waveAmlitudeOuterLoopWidth,
+                                                                   frequencyInput: waveFrequencyOuterLoopWidth,
+                                                                   offsetInput: waveOffsetOuterLoopWidth,
+                                                                   time: cubeOuterTime)
+                    let widthInnerWave = dimensionWaveContribution(amplitudeInput: waveAmlitudeInnerLoopWidth,
+                                                                   frequencyInput: waveFrequencyInnerLoopWidth,
+                                                                   offsetInput: waveOffsetInnerLoopWidth,
+                                                                   time: cubeInnerTime)
+                    let finalWidthScale = baseWidthScale + widthOuterWave + widthInnerWave
+                    
+                    let heightOuterWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeOuterLoopHeight,
+                                                                    frequencyInput: waveFrequencyOuterLoopHeight,
+                                                                    offsetInput: waveOffsetOuterLoopHeight,
+                                                                    time: cubeOuterTime)
+                    let heightInnerWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeInnerLoopHeight,
+                                                                    frequencyInput: waveFrequencyInnerLoopHeight,
+                                                                    offsetInput: waveOffsetInnerLoopHeight,
+                                                                    time: cubeInnerTime)
+                    let finalHeightScale = baseHeightScale + heightOuterWave + heightInnerWave
+                    
+                    let depthOuterWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeOuterLoopDepth,
+                                                                   frequencyInput: waveFrequencyOuterLoopDepth,
+                                                                   offsetInput: waveOffsetOuterLoopDepth,
+                                                                   time: cubeOuterTime)
+                    let depthInnerWave = dimensionWaveContribution(amplitudeInput: waveAmplitudeInnerLoopDepth,
+                                                                   frequencyInput: waveFrequencyInnerLoopDepth,
+                                                                   offsetInput: waveOffsetInnerLoopDepth,
+                                                                   time: cubeInnerTime)
+                    let finalDepthScale = baseDepthScale + depthOuterWave + depthInnerWave
+                    
+                    for i in 0..<cube.count {
+                        cube[i].startPoint.y *= finalHeightScale
+                        cube[i].endPoint.y *= finalHeightScale
+                        
+                        cube[i].startPoint.x *= finalWidthScale
+                        cube[i].endPoint.x *= finalWidthScale
+                        
+                        cube[i].startPoint.z *= finalDepthScale
+                        cube[i].endPoint.z *= finalDepthScale
+                    }
+                    
+                    // Apply size and rotation
+                    for i in 0..<cube.count {
+                        cube[i].startPoint *= size
+                        cube[i].endPoint *= size
+                    }
+                    let rotationMatrixX = matrix_rotation(angle: delayedRotationXFloat + statefulRotationX + rotationXOffset, axis: SIMD3<Float>(x: 1, y: 0, z: 0))
+                    let rotationMatrixY = matrix_rotation(angle: delayedRotationYFloat + statefulRotationY + rotationYOffset, axis: SIMD3<Float>(x: 0, y: 1, z: 0))
+                    let rotationMatrixZ = matrix_rotation(angle: delayedRotationZFloat + statefulRotationZ + rotationZOffset, axis: SIMD3<Float>(x: 0, y: 0, z: 1))
+                    
+                    let combinedRotationMatrix = rotationMatrixZ * rotationMatrixY * rotationMatrixX
+                    
+                    //                for i in 0..<cube.count {
+                    //                    cube[i] = cube[i].applyMatrix(rotationMatrixX)
+                    //                }
+                    //
+                    //                for i in 0..<cube.count {
+                    //                    cube[i] = cube[i].applyMatrix(rotationMatrixY)
+                    //                }
+                    //
+                    //                for i in 0..<cube.count {
+                    //                    cube[i] = cube[i].applyMatrix(rotationMatrixZ)
+                    //                }
+                    for i in 0..<cube.count {
+                        cube[i] = cube[i].applyMatrix(combinedRotationMatrix)
+                    }
+                    
+                    
+                    let scalingMatrix = matrix_scale(scale: SIMD3<Float>(repeating: 1.0))
+                    
+                    var xTranslateOuterLoop: Float = 0.0
+                    if cubeCounts > 1 {
+                        xTranslateOuterLoop = (cubeOuterTime - 0.5)
+                    }
+                    var xTranslateInnerLoop: Float = 0.0
+                    if innerCubeCounts > 1 {
+                        xTranslateInnerLoop = (cubeInnerTime - 0.5)
+                    }
+                    
+                    var yTranslateOuterLoop: Float = 0.0
+                    if cubeCounts > 1 {
+                        yTranslateOuterLoop = (cubeOuterTime - 0.5)
+                    }
+                    var yTranslateInnerLoop: Float = 0.0
+                    if innerCubeCounts > 1 {
+                        yTranslateInnerLoop = (cubeInnerTime - 0.5)
+                    }
+                    
+                    var zTranslateOuterLoop: Float = 0.0
+                    if cubeCounts > 1 {
+                        zTranslateOuterLoop = (cubeOuterTime - 0.5)
+                    }
+                    var zTranslateInnerLoop: Float = 0.0
+                    if innerCubeCounts > 1 {
+                        zTranslateInnerLoop = (cubeInnerTime - 0.5)
+                    }
+                    
+                    
+                    let outerLoopXTranslate = outerLoopCubesSpreadXInput.getHistoryValue(
+                        millisecondsAgo: Double(ensureValueIsFloat(
+                            outerLoopCubesSpreadXInputDelay.getHistoryValue(millisecondsAgo: 0))
+                                                * cubeOuterTime * 1000
+                        )
                     )
+                    let innerLoopXTranslate = innerLoopCubesSpreadXInput.getHistoryValue(
+                        millisecondsAgo: Double(ensureValueIsFloat(
+                            innerLoopCubesSpreadXInputDelay.getHistoryValue(millisecondsAgo: 0))
+                                                * cubeInnerTime * 1000
+                        )
+                    )
+                    
+                    let outerLoopYTranslate = outerLoopCubesSpreadYInput.getHistoryValue(
+                        millisecondsAgo: Double(ensureValueIsFloat(
+                            outerLoopCubesSpreadYInputDelay.getHistoryValue(millisecondsAgo: 0))
+                                                * cubeOuterTime * 1000
+                        )
+                    )
+                    let innerLoopYTranslate = innerLoopCubesSpreadYInput.getHistoryValue(
+                        millisecondsAgo: Double(ensureValueIsFloat(
+                            innerLoopCubesSpreadYInputDelay.getHistoryValue(millisecondsAgo: 0))
+                                                * cubeInnerTime * 1000
+                        )
+                    )
+                    
+                    let outerLoopZTranslate = outerLoopCubesSpreadZInput.getHistoryValue(
+                        millisecondsAgo: Double(ensureValueIsFloat(
+                            outerLoopCubesSpreadZInputDelay.getHistoryValue(millisecondsAgo: 0))
+                                                * cubeOuterTime * 1000
+                        )
+                    )
+                    let innerLoopZTranslate = innerLoopCubesSpreadZInput.getHistoryValue(
+                        millisecondsAgo: Double(ensureValueIsFloat(
+                            innerLoopCubesSpreadZInputDelay.getHistoryValue(millisecondsAgo: 0))
+                                                * cubeInnerTime * 1000
+                        )
+                    )
+                    
+                    let translateXOuterWave = dimensionWaveContribution(
+                        amplitudeInput: waveAmplituteOuterLoopTranslateXInput,
+                        frequencyInput: waveFrequencyOuterLoopTranslateXInput,
+                        offsetInput: waveOffsetOuterLoopTranslateXInput,
+                        time: cubeOuterTime
+                    )
+                    let translateXInnerWave = dimensionWaveContribution(
+                        amplitudeInput: waveAmplituteInnerLoopTranslateXInput,
+                        frequencyInput: waveFrequencyInnerLoopTranslateXInput,
+                        offsetInput: waveOffsetInnerLoopTranslateXInput,
+                        time: cubeInnerTime
+                    )
+                    
+                    let translateYOuterWave = dimensionWaveContribution(
+                        amplitudeInput: waveAmplituteOuterLoopTranslateYInput,
+                        frequencyInput: waveFrequencyOuterLoopTranslateYInput,
+                        offsetInput: waveOffsetOuterLoopTranslateYInput,
+                        time: cubeOuterTime
+                    )
+                    let translateYInnerWave = dimensionWaveContribution(
+                        amplitudeInput: waveAmplituteInnerLoopTranslateYInput,
+                        frequencyInput: waveFrequencyInnerLoopTranslateYInput,
+                        offsetInput: waveOffsetInnerLoopTranslateYInput,
+                        time: cubeInnerTime
+                    )
+                    
+                    let translateZOuterWave = dimensionWaveContribution(
+                        amplitudeInput: waveAmplituteOuterLoopTranslateZInput,
+                        frequencyInput: waveFrequencyOuterLoopTranslateZInput,
+                        offsetInput: waveOffsetOuterLoopTranslateZInput,
+                        time: cubeOuterTime
+                    )
+                    let translateZInnerWave = dimensionWaveContribution(
+                        amplitudeInput: waveAmplituteInnerLoopTranslateZInput,
+                        frequencyInput: waveFrequencyInnerLoopTranslateZInput,
+                        offsetInput: waveOffsetInnerLoopTranslateZInput,
+                        time: cubeInnerTime
+                    )
+                    
+                    let translateX = (xTranslateOuterLoop * ensureValueIsFloat(outerLoopXTranslate)) +
+                    (xTranslateInnerLoop * ensureValueIsFloat(innerLoopXTranslate)) +
+                    translateXOuterWave + translateXInnerWave
+                    
+                    let translateY = (yTranslateOuterLoop * ensureValueIsFloat(outerLoopYTranslate)) +
+                    (yTranslateInnerLoop * ensureValueIsFloat(innerLoopYTranslate)) +
+                    translateYOuterWave + translateYInnerWave
+                    
+                    let translateZ = (zTranslateOuterLoop * ensureValueIsFloat(outerLoopZTranslate)) +
+                    (zTranslateInnerLoop * ensureValueIsFloat(innerLoopZTranslate)) +
+                    translateZOuterWave + translateZInnerWave
+                    
+                    var matrixTranslate = matrix_translation(translation: SIMD3<Float>(translateX,
+                                                                                       translateY,
+                                                                                       translateZ))
+                    
+                    
+                    let combinedMatrix = matrixTranslate * scalingMatrix
+                    
+                    
+                    
+                    let colorTime = (Double(cubeTime) + Double(statefulColorShift)).truncatingRemainder(dividingBy: 1.00001)
+                    
+                    
+                    for i in 0..<cube.count {
+                        cube[i] = cube[i].applyMatrix(combinedMatrix)
+                        cube[i].lineWidthStart = delayedLineWidthFloat
+                        cube[i].lineWidthEnd = delayedLineWidthFloat
+                        
+                        //                secondCube[i] = secondCube[i].setBasicEndPointColors(
+                        //                    startColor: colorScale.color(at: Double(cubeTime)).toSIMD4(),
+                        //                    endColor: colorScale.color(at: Double(cubeTime)).toSIMD4()
+                        //                )
+                        
+                        let brightnessDelayValue = ensureValueIsFloat(
+                            brightnessInputDelay.getHistoryValue(millisecondsAgo: 0)
+                        )
+                        let brightnessValue = brightnessInput.getHistoryValue(
+                            millisecondsAgo: Double(brightnessDelayValue * cubeTime * 1000)
+                        )
+                        
+                        let saturationDelayValue = ensureValueIsFloat(
+                            saturationInputDelay.getHistoryValue(millisecondsAgo: 0)
+                        )
+                        let saturationValue = saturationInput.getHistoryValue(
+                            millisecondsAgo: Double(saturationDelayValue * cubeTime * 1000)
+                        )
+                        
+                        let brightnessFloat = ensureValueIsFloat(brightnessValue)
+                        let saturationFloat = ensureValueIsFloat(saturationValue)
+                        
+                        let finalColor: SIMD4<Float>
+                        if isRGBColorMode {
+                            let redStartDelayValue = ensureValueIsFloat(
+                                redStartDelayInput.getHistoryValue(millisecondsAgo: 0)
+                            )
+                            let redStartValue = redStartInput.getHistoryValue(
+                                millisecondsAgo: Double(redStartDelayValue * cubeTime * 1000)
+                            )
+                            let redStartFloat = min(max(ensureValueIsFloat(redStartValue), 0.0), 1.0)
+                            
+                            let greenStartDelayValue = ensureValueIsFloat(
+                                greenStartDelayInput.getHistoryValue(millisecondsAgo: 0)
+                            )
+                            let greenStartValue = greenStartInput.getHistoryValue(
+                                millisecondsAgo: Double(greenStartDelayValue * cubeTime * 1000)
+                            )
+                            let greenStartFloat = min(max(ensureValueIsFloat(greenStartValue), 0.0), 1.0)
+                            
+                            let blueStartDelayValue = ensureValueIsFloat(
+                                blueStartDelayInput.getHistoryValue(millisecondsAgo: 0)
+                            )
+                            let blueStartValue = blueStartInput.getHistoryValue(
+                                millisecondsAgo: Double(blueStartDelayValue * cubeTime * 1000)
+                            )
+                            let blueStartFloat = min(max(ensureValueIsFloat(blueStartValue), 0.0), 1.0)
+                            
+                            let redEndDelayValue = ensureValueIsFloat(
+                                redEndDelayInput.getHistoryValue(millisecondsAgo: 0)
+                            )
+                            let redEndValue = redEndInput.getHistoryValue(
+                                millisecondsAgo: Double(redEndDelayValue * cubeTime * 1000)
+                            )
+                            let redEndFloat = min(max(ensureValueIsFloat(redEndValue), 0.0), 1.0)
+                            
+                            let greenEndDelayValue = ensureValueIsFloat(
+                                greenEndDelayInput.getHistoryValue(millisecondsAgo: 0)
+                            )
+                            let greenEndValue = greenEndInput.getHistoryValue(
+                                millisecondsAgo: Double(greenEndDelayValue * cubeTime * 1000)
+                            )
+                            let greenEndFloat = min(max(ensureValueIsFloat(greenEndValue), 0.0), 1.0)
+                            
+                            let blueEndDelayValue = ensureValueIsFloat(
+                                blueEndDelayInput.getHistoryValue(millisecondsAgo: 0)
+                            )
+                            let blueEndValue = blueEndInput.getHistoryValue(
+                                millisecondsAgo: Double(blueEndDelayValue * cubeTime * 1000)
+                            )
+                            let blueEndFloat = min(max(ensureValueIsFloat(blueEndValue), 0.0), 1.0)
+                            
+                            let rgbStartColor = Color(
+                                red: Double(redStartFloat),
+                                green: Double(greenStartFloat),
+                                blue: Double(blueStartFloat)
+                            )
+                            
+                            let rgbEndColor = Color(
+                                red: Double(redEndFloat),
+                                green: Double(greenEndFloat),
+                                blue: Double(blueEndFloat)
+                            )
+                            
+                            let rgbScale = ColorScale(colors: [rgbStartColor, rgbEndColor], mode: .rgb)
+                            finalColor = rgbScale.color(
+                                at: Double(colorTime),
+                                saturation: Double(saturationFloat),
+                                brightness: Double(brightnessFloat)
+                            ).toSIMD4()
+                        } else {
+                            finalColor = colorScale.color(
+                                at: Double(colorTime),
+                                saturation: Double(saturationFloat),
+                                brightness: Double(brightnessFloat)
+                            ).toSIMD4()
+                        }
+                        
+                        cube[i] = cube[i].setBasicEndPointColors(
+                            startColor: finalColor,
+                            endColor: finalColor
+                        )
+                    }
+                    
+                    lines += cube
                 }
-                
-                lines += cube
             }
         }
         
