@@ -199,10 +199,16 @@ class JSEngineManager: ObservableObject {
     @Published var warningMessage: String?
     @Published var lastExecutionTime: Date?
     @Published var executionDuration: Double = 0
+    @Published var internalStateDescription: String?
     
     private var context: JSContext?
     private var currentScript: String = ""
     private var consecutiveErrors: Int = 0
+    
+    private var totalRuns: Int = 0
+    private var runsSinceScriptLoad: Int = 0
+    private var hasLoadedScript: Bool = false
+    private var lastRunUptime: TimeInterval?
     
     private let jsQueue = DispatchQueue(label: "JSEngineManager.JSQueue")
     
@@ -223,13 +229,41 @@ class JSEngineManager: ObservableObject {
                 self.warningMessage = nil
                 self.lastExecutionTime = nil
                 self.executionDuration = 0
+                self.internalStateDescription = nil
             }
         }
     }
     
+    func resetInternalState() {
+        jsQueue.async { [weak self] in
+            guard let self, let context = self.context else { return }
+            context.evaluateScript("resetInternalState();")
+            self.totalRuns = 0
+            self.lastRunUptime = nil
+            DispatchQueue.main.async {
+                self.internalStateDescription = nil
+            }
+        }
+    }
+
+    func inspectInternalState() {
+        jsQueue.async { [weak self] in
+            guard let self, let context = self.context else { return }
+            let description = context.evaluateScript("__describeInternalState();")?.toString()
+            DispatchQueue.main.async {
+                self.internalStateDescription = description
+            }
+        }
+    }
+    
+    
     func setupContext() {
         context = JSContext()
         currentScript = "" // Reset script cache
+        totalRuns = 0
+        runsSinceScriptLoad = 0
+        hasLoadedScript = false
+        lastRunUptime = nil
         
         // Setup console.log for debugging
         let consoleLog: @convention(block) (String) -> Void = { message in
@@ -238,7 +272,7 @@ class JSEngineManager: ObservableObject {
         context?.setObject(consoleLog, forKeyedSubscript: "consoleLog" as NSString)
         
         
-        var scriptToEvaluate = JSHelperClasses + """
+        var scriptToEvaluate = JSHelperClasses + JSInternalStateRuntime + """
         var console = {
             log: function() {
                 var args = Array.prototype.slice.call(arguments);
@@ -275,8 +309,8 @@ class JSEngineManager: ObservableObject {
                 return
             }
             
-            // OPTIMIZATION: Only evaluate the script if it has changed
-            if script != self.currentScript {
+            let scriptChanged = script != self.currentScript
+            if scriptChanged {
                 // Wrap user script in a function to avoid re-parsing overhead
                 // and to allow repeated execution.
                 // We also try to return outputState if it exists, to support 'var outputState = ...'
@@ -380,6 +414,25 @@ class JSEngineManager: ObservableObject {
             }
             context.setObject(jsInputState, forKeyedSubscript: "inputState" as NSString)
             context.setObject(JSValue(undefinedIn: context), forKeyedSubscript: "outputState" as NSString)
+            
+            let now = ProcessInfo.processInfo.systemUptime
+            let scriptReloaded = scriptChanged && self.hasLoadedScript
+            if scriptChanged {
+                self.runsSinceScriptLoad = 0
+                self.hasLoadedScript = true
+            }
+            
+            if let runtime = context.objectForKeyedSubscript("runtime"), runtime.isObject {
+                runtime.setValue(now, forProperty: "now")
+                runtime.setValue(self.lastRunUptime.map { now - $0 } ?? 0, forProperty: "dt")
+                runtime.setValue(self.totalRuns, forProperty: "frame")
+                runtime.setValue(self.runsSinceScriptLoad, forProperty: "runsSinceLoad")
+                runtime.setValue(self.totalRuns == 0, forProperty: "isFirstRun")
+                runtime.setValue(scriptReloaded, forProperty: "scriptReloaded")
+            }
+            self.totalRuns += 1
+            self.runsSinceScriptLoad += 1
+            self.lastRunUptime = now
             
             // Execute the user function
             let userMain = context.objectForKeyedSubscript("userMain")

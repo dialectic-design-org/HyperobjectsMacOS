@@ -31,6 +31,20 @@ struct CodeFileSelector: View {
                     }
                     .disabled(selectedFile == nil && !fileMonitor.isMonitoring && jsEngine.outputState.isEmpty && jsEngine.errorMessage == nil)
                     
+                    Button {
+                        jsEngine.resetInternalState()
+                    } label: {
+                        Label("Reset State", systemImage: "arrow.counterclockwise")
+                    }
+                    .disabled(!fileMonitor.isMonitoring)
+
+                    Button {
+                        jsEngine.inspectInternalState()
+                    } label: {
+                        Label("Inspect State", systemImage: "eye")
+                    }
+                    .disabled(!fileMonitor.isMonitoring)
+                    
                     if jsEngine.outputState.isEmpty && jsEngine.errorMessage == nil {
                         Text("Select a file")
                     }
@@ -79,6 +93,17 @@ struct CodeFileSelector: View {
                     .padding(.vertical, 4)
                     .background(Color.red.opacity(0.1))
                 }
+                
+                if let description = jsEngine.internalStateDescription {
+                    ScrollView {
+                        Text(description)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 160)
+                    .padding(.horizontal)
+                }
             }
             .padding(.vertical, 4)
             .background(Color(nsColor: .windowBackgroundColor))
@@ -94,6 +119,11 @@ struct CodeFileSelector: View {
                 print("fileImporter reports success, opening first url")
                 if let url = urls.first {
                     print("first url is: \(url)")
+                    
+                    if url != selectedFile {
+                        jsEngine.resetInternalState()
+                    }
+                    
                     selectedFile = url
                     print("starting fileMonitor.startMonitoring")
                     fileMonitor.startMonitoring(url: url)

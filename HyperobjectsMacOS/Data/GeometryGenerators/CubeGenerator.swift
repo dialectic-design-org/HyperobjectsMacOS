@@ -223,7 +223,7 @@ class CubeGenerator: CachedGeometryGenerator {
         let cubeCounts: Int = outerLoopCubesCount
         let innerCubeCounts: Int = innerLoopCubesCount
         let totalCubesCount: Int = cubeCounts * innerCubeCounts
-        if cubeCounts > 0 {
+        if cubeCounts > 0 && innerCubeCounts > 0 {
             for cubeCounter in 1...cubeCounts {
                 let cubeOuterTime = Float(cubeCounter - 1) / Float(cubeCounts - 1)
                 for innerCubeCounter in 1...innerCubeCounts {
