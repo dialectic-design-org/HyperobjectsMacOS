@@ -222,15 +222,15 @@ class CubeGenerator: CachedGeometryGenerator {
         
         let cubeCounts: Int = outerLoopCubesCount
         let innerCubeCounts: Int = innerLoopCubesCount
-        let totalCubesCount: Int = cubeCounts * innerCubeCounts
+        let totalCubesCount = max(cubeCounts * innerCubeCounts, 1)
         if cubeCounts > 0 && innerCubeCounts > 0 {
             for cubeCounter in 1...cubeCounts {
-                let cubeOuterTime = Float(cubeCounter - 1) / Float(cubeCounts - 1)
+                let cubeOuterTime: Float = (cubeCounts > 1) ? Float(cubeCounter - 1) / Float(cubeCounts - 1) : 0.0
                 for innerCubeCounter in 1...innerCubeCounts {
-                    let cubeInnerTime = Float(innerCubeCounter - 1) / Float(innerCubeCounts - 1)
+                    let cubeInnerTime: Float = (innerCubeCounts > 1) ? Float(innerCubeCounter - 1) / Float(innerCubeCounts - 1) : 0.0
                     
                     let cubeTime = Float((cubeCounter + innerCubeCounter) - 1) / Float(totalCubesCount)
-                    
+
                     let facesOffsetDelayed = facesOffsetInput.getHistoryValue(millisecondsAgo:
                                                                                 Double(floatFromInputs(inputs, name: "Face offset delay")) * Double(cubeTime) * 1000)
                     
@@ -455,6 +455,7 @@ class CubeGenerator: CachedGeometryGenerator {
                         offsetInput: waveOffsetOuterLoopTranslateZInput,
                         time: cubeOuterTime
                     )
+                    
                     let translateZInnerWave = dimensionWaveContribution(
                         amplitudeInput: waveAmplituteInnerLoopTranslateZInput,
                         frequencyInput: waveFrequencyInnerLoopTranslateZInput,
