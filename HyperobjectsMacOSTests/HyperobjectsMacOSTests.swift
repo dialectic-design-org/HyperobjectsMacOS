@@ -24,6 +24,36 @@ struct HyperobjectsMacOSTests {
         }
     }
 
+    @Test func stateValueParsesXYZWObjectsAsVector4() throws {
+        let color = try #require(StateValue.fromJSONValue(["x": 0.1, "y": 0.2, "z": 0.3, "w": 0.4] as [String: Any]))
+        guard case .vector4(let v) = color.value else { throw TestError.wrongType }
+        #expect(v == SIMD4<Double>(0.1, 0.2, 0.3, 0.4))
+
+        let point = try #require(StateValue.fromJSONValue(["x": 1.0, "y": 2.0, "z": 3.0] as [String: Any]))
+        guard case .vector3 = point.value else { throw TestError.wrongType }
+    }
+
+    @Test func stateValueCoercesScriptOutputsToInt() {
+        #expect(StateValue(value: .float(3.0)).coercedToInt() == 3)
+        #expect(StateValue(value: .float(2.6)).coercedToInt() == 3)
+        #expect(StateValue(value: .float(-2.6)).coercedToInt() == -3)
+        #expect(StateValue(value: .bool(true)).coercedToInt() == 1)
+        #expect(StateValue(value: .bool(false)).coercedToInt() == 0)
+        #expect(StateValue(value: .string(" 42 ")).coercedToInt() == 42)
+        #expect(StateValue(value: .string("7.6")).coercedToInt() == 8)
+        #expect(StateValue(value: .string("abc")).coercedToInt() == nil)
+        #expect(StateValue(value: .float(.nan)).coercedToInt() == nil)
+        #expect(StateValue(value: .float(.infinity)).coercedToInt() == nil)
+        #expect(StateValue(value: .vector3(SIMD3<Double>(1, 2, 3))).coercedToInt() == nil)
+    }
+
+    @Test func integerSceneInputExposesCurrentAndInitialValuesAsNumbers() throws {
+        let input = SceneInput(name: "Count", type: .integer, value: 80)
+        input.value = 12
+        #expect(try float(input.toStateValue().value) == 12.0)
+        #expect(try float(input.initialStateValue().value) == 80.0)
+    }
+
     @Test func midiSnapshotDefaultsExposeKnobsAndPads() throws {
         let state = MIDIControlState()
         let midi = try object(from: state.javascriptStateValue(at: 10).value)

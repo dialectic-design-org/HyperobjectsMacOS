@@ -26,9 +26,38 @@ private final class ScriptInputCache {
     }
 }
 
+/// Caches each scene's `baseState` (its inputs' authored initial values). Initial values
+/// never change after a scene is built, so this is computed once per scene.
+private final class ScriptBaseStateCache {
+    private var sceneID: ObjectIdentifier?
+    private var current: [String: StateValue] = [:]
+    private let lock = NSLock()
+
+    func baseState(for scene: GeometriesSceneBase) -> [String: StateValue] {
+        let id = ObjectIdentifier(scene)
+        lock.lock(); defer { lock.unlock() }
+        if sceneID != id {
+            current = prepareScriptBaseState(scene: scene)
+            sceneID = id
+        }
+        return current
+    }
+}
+
 private final class ScriptOutputWarningCache {
     private var boolTypeMismatchKeys: Set<String> = []
     private let lock = NSLock()
+
+    private var intCoercionFailureKeys: Set<String> = []
+
+    func warnIntCoercionFailureOnce(key: String, output: StateValue) {
+        lock.lock()
+        let isNew = intCoercionFailureKeys.insert(key).inserted
+        lock.unlock()
+        if isNew {
+            print("[State Change] Could not convert output for integer input \(key) to an Int: \(output)")
+        }
+    }
 
     func warnBoolTypeMismatchOnce(key: String, input: StateValue, output: StateValue) {
         lock.lock()
@@ -64,6 +93,7 @@ struct HyperobjectsMacOSApp: App {
     @State private var latestScript: String = ""
     private let timeBox: TimeBox
     private let scriptInputCache = ScriptInputCache()
+    private let scriptBaseStateCache = ScriptBaseStateCache()
     private let scriptOutputWarningCache = ScriptOutputWarningCache()
     
     init() {
@@ -127,9 +157,11 @@ struct HyperobjectsMacOSApp: App {
                         let targetScene = sceneManager.currentScene
                         let inputState = prepareScriptInput(scene: targetScene, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls)
                         
-                        _ = jsEngine.executeScript(script, inputState: inputState) { outputState in
+                        let baseState = scriptBaseStateCache.baseState(for: targetScene)
+
+                        _ = jsEngine.executeScript(script, inputState: inputState, baseState: baseState) { outputState in
                             latestScript = script
-                            applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene, bandFieldManager: bandFieldManager, warningCache: scriptOutputWarningCache)
+                            applyScriptOutput(inputState: inputState, outputState: outputState, baseState: baseState, scene: targetScene, bandFieldManager: bandFieldManager, warningCache: scriptOutputWarningCache)
                             targetScene.refreshSceneInputSnapshot()
                             scriptInputCache.update(prepareScriptInput(scene: targetScene, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
                         }
@@ -150,8 +182,9 @@ struct HyperobjectsMacOSApp: App {
                                 inputState["midi"] = midiManager.controls.javascriptStateValue()
 
                                 let targetScene = sceneManager.currentScene
-                                _ = jsEngine.executeScript(latestScript, inputState: inputState) { outputState in
-                                    applyScriptOutput(inputState: inputState, outputState: outputState, scene: targetScene, bandFieldManager: bandFieldManager, warningCache: scriptOutputWarningCache)
+                                let baseState = scriptBaseStateCache.baseState(for: targetScene)
+                                _ = jsEngine.executeScript(latestScript, inputState: inputState, baseState: baseState, skipIfBusy: true) { outputState in
+                                    applyScriptOutput(inputState: inputState, outputState: outputState, baseState: baseState, scene: targetScene, bandFieldManager: bandFieldManager, warningCache: scriptOutputWarningCache)
                                     targetScene.refreshSceneInputSnapshot()
                                     scriptInputCache.update(prepareScriptInput(scene: targetScene, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
                                 }
@@ -278,12 +311,39 @@ private func prepareScriptInput(scene: GeometriesSceneBase, timeBox: TimeBox, au
 }
 
 
-private func applyScriptOutput(inputState: [String: StateValue], outputState: [String: StateValue], scene: GeometriesSceneBase, bandFieldManager: BandFieldManager, warningCache: ScriptOutputWarningCache) {
+/// Builds the scene's base state: the same settable keys as `prepareScriptInput` emits for
+/// each scene input, but holding the values the scene was authored with (what RESET restores).
+private func prepareScriptBaseState(scene: GeometriesSceneBase) -> [String: StateValue] {
+    var baseState: [String: StateValue] = [:]
+    for input in scene.inputs {
+        // A stateful float accumulates every frame; falling back to its initial value would
+        // freeze it, so only its settings (tick / audio keys below) are part of the base state.
+        if input.type != .statefulFloat {
+            baseState[input.name] = input.initialStateValue()
+        }
+        baseState["audio_add_\(input.name)"] = StateValue(value: .float(Double(input.init_audioAmplificationAddition)))
+        baseState["audio_multiply_\(input.name)"] = StateValue(value: .float(Double(input.init_audioAmplificationMultiplication)))
+        baseState["audio_multiply_offset_\(input.name)"] = StateValue(value: .float(Double(input.init_audioAmplificationMultiplicationOffset)))
+        baseState["audio_delay_\(input.name)"] = StateValue(value: .float(Double(input.init_audioDelay)))
+        baseState["audio_smoothed_source_\(input.name)"] = StateValue(value: .float(Double(input.init_audioSmoothedSource)))
+        baseState["frame_tick_\(input.name)"] = StateValue(value: .float(Double(input.init_tickValueAdjustment)))
+    }
+    return baseState
+}
+
+
+private func applyScriptOutput(inputState: [String: StateValue], outputState scriptOutput: [String: StateValue], baseState: [String: StateValue], scene: GeometriesSceneBase, bandFieldManager: BandFieldManager, warningCache: ScriptOutputWarningCache) {
     // Compare outputState to inputState and print changes only (no scene mutation yet)
     let epsilon: Double = 1e-6
-    if outputState.keys.contains("RESET") {
-        scene.resetAllInputsToInitialValues(refresh: false)
+    // RESET: start this frame from the scene's base state. Any key the script did not return
+    // falls back to its base value. This is merged here rather than resetting the inputs first,
+    // so each input is written once with its final value and never passes through its base value
+    // (which would land in the input history and briefly show up as a flash of the original scene).
+    var outputState = scriptOutput
+    if scriptOutput.keys.contains("RESET") {
+        outputState = baseState.merging(scriptOutput) { _, scriptValue in scriptValue }
     }
+    let inputsByName = Dictionary(scene.inputs.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
     if outputState["bands"] == nil {
         bandFieldManager.disable()
     }
@@ -304,7 +364,24 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState: [S
             print("inVal not available for key \(key)")
             continue
         }
+
+        // Nothing to do when the value already matches. With RESET most keys come from
+        // baseState and are unchanged frame to frame, so this keeps the per-frame main-thread
+        // work proportional to what actually changed.
+        if inVal.value == outVal.value {
+            continue
+        }
         
+        // Integer scene inputs accept any output that can reasonably be read as an Int.
+        if let input = inputsByName[key], input.type == .integer {
+            if let intVal = outVal.coercedToInt() {
+                input.value = intVal
+            } else {
+                warningCache.warnIntCoercionFailureOnce(key: key, output: outVal)
+            }
+            continue
+        }
+
         switch (inVal.value, outVal.value) {
         case (.float, .bool):
             warningCache.warnBoolTypeMismatchOnce(key: key, input: inVal, output: outVal)
@@ -318,35 +395,35 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState: [S
                     // print("Audio add prefix")
                     // get key without prefix
                     let audioKey = String(key.dropFirst("audio_add_".count))
-                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = inputsByName[audioKey] {
                         input.audioAmplificationAddition = Float(b)
                     }
                 } else if  key.isEmpty == false, key.hasPrefix("audio_multiply_offset_") {
                     // get key without prefix
                     let audioKey = String(key.dropFirst("audio_multiply_offset_".count))
-                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = inputsByName[audioKey] {
                         input.audioAmplificationMultiplicationOffset = Float(b)
                     }
                 } else if  key.isEmpty == false, key.hasPrefix("audio_multiply_") {
                     // get key without prefix
                     let audioKey = String(key.dropFirst("audio_multiply_".count))
-                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = inputsByName[audioKey] {
                         input.audioAmplificationMultiplication = Float(b)
                     }
                 }else if  key.isEmpty == false, key.hasPrefix("audio_delay_") {
                     // get key without prefix
                     let audioKey = String(key.dropFirst("audio_delay_".count))
-                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = inputsByName[audioKey] {
                         input.audioDelay = Float(b)
                     }
                 } else if key.isEmpty == false, key.hasPrefix("frame_tick_") {
                     let audioKey = String(key.dropFirst("frame_tick_".count))
-                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = inputsByName[audioKey] {
                         input.tickValueAdjustment = Double(b)
                     }
                 } else if key.isEmpty == false, key.hasPrefix("audio_smoothed_source_") {
                     let audioKey = String(key.dropFirst("audio_smoothed_source_".count))
-                    if let input = scene.inputs.first(where: { $0.name == audioKey }) {
+                    if let input = inputsByName[audioKey] {
                         if let intVal = safeInt(b) {
                             input.audioSmoothedSource = intVal
                         } else {
@@ -355,36 +432,30 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState: [S
                     }
                 } else {
                     // Update the matching input safely by name, avoiding optional-call and enum ambiguity
-                    if let input = scene.inputs.first(where: { $0.name == key }) {
+                    if let input = inputsByName[key] {
                         
                         if input.type == .float {
                             input.value = Double(b)
                         } else if input.type == .statefulFloat {
                             input.value = Double(b)
-                        } else if input.type == .integer {
-                            if let intVal = safeInt(b) {
-                                input.value = intVal
-                            } else {
-                                print("[Script Output] Ignoring non-finite integer value for \(key): \(b)")
-                            }
                         }
                     }
                 }
         case (.vector4(let a), .vector4(let b)):
-            if let input = scene.inputs.first(where: { $0.name == key }) {
+            if let input = inputsByName[key] {
                 if input.type == .colorInput {
                     let nsColor = NSColor(deviceRed: b[0], green: b[1], blue: b[2], alpha: b[3])
                     input.value = Color(nsColor: nsColor)
                 }
             }
         case (.string(_), .string(let b)):
-            if let input = scene.inputs.first(where: { $0.name == key }) {
+            if let input = inputsByName[key] {
                 if input.type == .string {
                     input.value = b
                 }
             }
         case (.lineSegments(let a), .lineSegments(let b)):
-            if let input = scene.inputs.first(where: { $0.name == key }) {
+            if let input = inputsByName[key] {
                 var newLines: [Line] = []
                 for scriptLine in b {
                     let start = SIMD3<Float>(Float(scriptLine.start.x), Float(scriptLine.start.y), Float(scriptLine.start.z))

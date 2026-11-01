@@ -335,19 +335,39 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
     
     
     func toStateValue() -> StateValue {
-        if self.type == .float {
-            if let floatValue = self.value as? Double {
+        return stateValue(for: self.value)
+    }
+
+    /// The scene's authored starting value for this input, in the same shape as `toStateValue()`.
+    func initialStateValue() -> StateValue {
+        return stateValue(for: self.init_value)
+    }
+
+    private func stateValue(for value: Any) -> StateValue {
+        if self.type == .integer {
+            // JS has no separate int type, so integers cross the bridge as plain numbers.
+            if let intValue = value as? Int {
+                return StateValue(value: .float(Double(intValue)))
+            }
+            if let doubleValue = value as? Double {
+                return StateValue(value: .float(doubleValue.rounded()))
+            }
+            if let floatValue = value as? Float {
+                return StateValue(value: .float(Double(floatValue).rounded()))
+            }
+        } else if self.type == .float {
+            if let floatValue = value as? Double {
                 return StateValue(value: .float(floatValue))
             }
-            if let floatValue = self.value as? Float {
+            if let floatValue = value as? Float {
                 return StateValue(value: .float(Double(floatValue)))
             }
         } else if self.type == .colorInput {
-            let color = self.value as! Color
+            let color = value as! Color
             let colorVec = color.asSIMD4()
             return StateValue(value: .vector4(colorVec))
         } else if self.type == .lines {
-            var lines: [Line] = self.valueAsLines()
+            let lines: [Line] = (value as? [Line]) ?? []
             return StateValue(value: .lineSegments(lines.map { line in
                 return LineStateValue(
                     start: SIMD3<Double>(
@@ -377,7 +397,7 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
                 )
             }))
         } else if self.type == .string {
-            if let stringValue = self.value as? String {
+            if let stringValue = value as? String {
                 return StateValue(value: .string(stringValue))
             }
         }

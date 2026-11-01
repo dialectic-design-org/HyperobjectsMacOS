@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 import Combine
 import simd
 
-struct LineStateValue {
+struct LineStateValue: Equatable {
     var start: SIMD3<Double>
     var end: SIMD3<Double>
     var lineWidthStart: Double
@@ -21,7 +21,7 @@ struct LineStateValue {
 }
 
 struct StateValue {
-    enum Value {
+    enum Value: Equatable {
         case float(Double)
         case bool(Bool)
         case floatArray([Double])
@@ -90,6 +90,10 @@ extension StateValue {
             if let x = dict["x"] as? Double,
                let y = dict["y"] as? Double,
                let z = dict["z"] as? Double {
+                // Colors are sent to JS as {x, y, z, w}; keep the w so they round-trip as vector4.
+                if let w = dict["w"] as? Double {
+                    return StateValue(value: .vector4(SIMD4<Double>(x, y, z, w)))
+                }
                 return StateValue(value: .vector3(SIMD3<Double>(
                     Double(x),
                     Double(y),
@@ -193,6 +197,35 @@ extension StateValue {
     }
 }
 
+extension StateValue {
+    /// Best-effort conversion of whatever a script produced into an Int, for integer scene inputs.
+    /// Numbers are rounded to the nearest integer, bools map to 0/1, numeric strings are parsed.
+    /// Returns nil for non-finite numbers and for values with no sensible integer meaning.
+    func coercedToInt() -> Int? {
+        switch value {
+        case .float(let f):
+            return StateValue.clampedInt(f)
+        case .bool(let b):
+            return b ? 1 : 0
+        case .string(let s):
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let i = Int(trimmed) { return i }
+            if let d = Double(trimmed) { return StateValue.clampedInt(d) }
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    private static func clampedInt(_ value: Double) -> Int? {
+        guard value.isFinite else { return nil }
+        let rounded = value.rounded()
+        if rounded >= Double(Int.max) { return Int.max }
+        if rounded <= Double(Int.min) { return Int.min }
+        return Int(rounded)
+    }
+}
+
 class JSEngineManager: ObservableObject {
     @Published var outputState: [String: StateValue] = [:]
     @Published var errorMessage: String?
@@ -211,6 +244,23 @@ class JSEngineManager: ObservableObject {
     private var lastRunUptime: TimeInterval?
     
     private let jsQueue = DispatchQueue(label: "JSEngineManager.JSQueue")
+
+    // True from the moment a run is queued until its results have been handled on the main
+    // thread. Lets the per-frame timer skip a tick instead of piling up runs (and main-thread
+    // completions) faster than they can be processed.
+    private let runStateLock = NSLock()
+    private var runInFlight = false
+
+    private func beginRun(skipIfBusy: Bool) -> Bool {
+        runStateLock.lock(); defer { runStateLock.unlock() }
+        if skipIfBusy && runInFlight { return false }
+        runInFlight = true
+        return true
+    }
+
+    private func endRun() {
+        runStateLock.lock(); runInFlight = false; runStateLock.unlock()
+    }
     
     init() {
         jsQueue.async { [weak self] in
@@ -283,11 +333,24 @@ class JSEngineManager: ObservableObject {
         context?.evaluateScript(scriptToEvaluate)
     }
     
-    func executeScript(_ script: String, inputState: [String: StateValue], completion: (([String: StateValue]) -> Void)? = nil) -> Bool {
+    /// Returns false (and does nothing) when `skipIfBusy` is set and the previous run has not
+    /// finished yet, including its main-thread completion.
+    func executeScript(_ script: String, inputState: [String: StateValue], baseState: [String: StateValue] = [:], skipIfBusy: Bool = false, completion: (([String: StateValue]) -> Void)? = nil) -> Bool {
+        guard beginRun(skipIfBusy: skipIfBusy) else { return false }
         let requestTime = CFAbsoluteTimeGetCurrent()
         
         jsQueue.async { [weak self] in
             guard let self = self else { return }
+            // Every return path below hands off to the main queue; release the run there so
+            // the next frame only starts once this one has fully landed.
+            var mainWork: () -> Void = {}
+            defer {
+                let work = mainWork
+                DispatchQueue.main.async {
+                    work()
+                    self.endRun()
+                }
+            }
             
             let startTime = CFAbsoluteTimeGetCurrent()
             let queueLatency = startTime - requestTime
@@ -303,7 +366,7 @@ class JSEngineManager: ObservableObject {
             }
             
             guard let context = self.context else {
-                DispatchQueue.main.async {
+                mainWork = {
                     self.errorMessage = "JS context not available"
                 }
                 return
@@ -413,6 +476,16 @@ class JSEngineManager: ObservableObject {
                 }
             }
             context.setObject(jsInputState, forKeyedSubscript: "inputState" as NSString)
+
+            // Inject the scene's base (authored initial) state. Rebuilt every run so scripts
+            // can freely mutate or reuse it as a starting point for outputState.
+            let jsBaseState = JSValue(newObjectIn: context)
+            for (key, stateVal) in baseState {
+                if let jsVal = stateVal.toJSValue(in: context) {
+                    jsBaseState?.setValue(jsVal, forProperty: key)
+                }
+            }
+            context.setObject(jsBaseState, forKeyedSubscript: "baseState" as NSString)
             context.setObject(JSValue(undefinedIn: context), forKeyedSubscript: "outputState" as NSString)
             
             let now = ProcessInfo.processInfo.systemUptime
@@ -449,7 +522,7 @@ class JSEngineManager: ObservableObject {
                 let duration = (endTime - startTime) * 1000
                 let errorString = "Error: \(exception.toString() ?? "Unknown")"
                 
-                DispatchQueue.main.async {
+                mainWork = {
                     // Optimization: Only update if changed to avoid UI thrashing
                     if self.errorMessage != errorString {
                         self.errorMessage = errorString
@@ -488,7 +561,7 @@ class JSEngineManager: ObservableObject {
                      print("⚠️ Slow Script: Execution took \(String(format: "%.1f", duration))ms")
                 }
                 
-                DispatchQueue.main.async {
+                mainWork = {
                     self.outputState = parsedOutput
                     self.errorMessage = nil
                     self.lastExecutionTime = Date()
@@ -499,7 +572,7 @@ class JSEngineManager: ObservableObject {
             } else {
                 let endTime = CFAbsoluteTimeGetCurrent()
                 let duration = (endTime - startTime) * 1000
-                DispatchQueue.main.async {
+                mainWork = {
                     self.errorMessage = "No outputState object found or invalid format"
                     self.executionDuration = duration
                 }
