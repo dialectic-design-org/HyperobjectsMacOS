@@ -14,7 +14,21 @@ enum GeometryTriggerMode: Equatable {
     case onInputChange          // only when refreshSceneInputSnapshot is called
 }
 
+/// Where the live-code overlay is drawn.
+enum CodeOverlayOutput: String, CaseIterable, Identifiable {
+    /// SwiftUI layer on top of the MTKView: visible in the window (and on a projector
+    /// showing the window), NOT in Syphon.
+    case screen = "Screen only"
+    /// Rasterized and composited into the Metal frame before the Syphon publish.
+    case burnedIn = "Burned into frame (Syphon)"
+    var id: String { rawValue }
+}
+
 class RenderConfigurations: ObservableObject {
+    /// Camera/projection overrides from the running script (not @Published: read per frame
+    /// by the renderer, not by views).
+    let scriptRenderOverrides = ScriptRenderOverrides()
+
     @Published var pipeline: String = "default"
 
     @Published var geometryTriggerMode: GeometryTriggerMode = .onRenderRequest
@@ -32,6 +46,20 @@ class RenderConfigurations: ObservableObject {
     @Published var showOverlay: Bool = true
 
     @Published var showSquareBounds: Bool = false
+
+    // MARK: Live code overlay (not per-scene overridable: these are performance settings)
+    @Published var showCodeOverlay: Bool = false
+    @Published var codeOverlayOutput: CodeOverlayOutput = .screen
+    /// Cmd+Return evaluates the buffer and then writes it to the attached file.
+    @Published var codeEvaluateAlsoSaves: Bool = false
+    /// Line-number gutter next to the code.
+    @Published var showCodeLineNumbers: Bool = false
+    /// Last `console.log` lines under the code.
+    @Published var showCodeConsole: Bool = false
+    /// Live readout of selected inputState values.
+    @Published var showCodeInputReadout: Bool = false
+    /// Comma-separated inputState keys for the readout; dotted paths reach into objects (midi.knobs).
+    @Published var codeInputReadoutKeys: String = "time, audioAmplitude"
     
     @Published var runScriptOnFrameChange: Bool = false
     
@@ -538,6 +566,12 @@ struct RenderConfigurationOverrides {
     var previousColorVisibility: Float?
     var lineColorStrength: Float?
 
+    // Camera / projection
+    var projectionMix: Float?
+    var cameraDistance: Float?
+    var orthographicProjectionHeight: Float?
+    var fovDivision: Float?
+
     static let none = RenderConfigurationOverrides()
 
     /// Merges with another, preferring values from `other` when non-nil
@@ -559,6 +593,61 @@ struct RenderConfigurationOverrides {
         result.blendIntensity = other.blendIntensity ?? self.blendIntensity
         result.previousColorVisibility = other.previousColorVisibility ?? self.previousColorVisibility
         result.lineColorStrength = other.lineColorStrength ?? self.lineColorStrength
+        result.projectionMix = other.projectionMix ?? self.projectionMix
+        result.cameraDistance = other.cameraDistance ?? self.cameraDistance
+        result.orthographicProjectionHeight = other.orthographicProjectionHeight ?? self.orthographicProjectionHeight
+        result.fovDivision = other.fovDivision ?? self.fovDivision
         return result
+    }
+}
+
+/// Render overrides set from a script's `outputState`:
+///
+///     outputState.projectionMix = 0.5;                // 0 (ortho) ... 1 (perspective), clamped
+///     outputState.cameraDistance = 3.0;
+///     outputState.orthographicProjectionHeight = 2.5; // > 0
+///     outputState.FOVDivision = 4.0;                  // > 0, field of view = pi / FOVDivision
+///
+/// Replaced as a whole after every successful script run, so a key that a run no longer
+/// returns falls back to the Render Configurations value. Invalid values (non-numeric,
+/// NaN/Inf, out of the allowed range) are ignored and also fall back. Written on main,
+/// read on the render thread.
+final class ScriptRenderOverrides {
+    static let projectionMixKey = "projectionMix"
+    static let cameraDistanceKey = "cameraDistance"
+    static let orthographicProjectionHeightKey = "orthographicProjectionHeight"
+    static let fovDivisionKey = "FOVDivision"
+    static let keys: Set<String> = [projectionMixKey, cameraDistanceKey, orthographicProjectionHeightKey, fovDivisionKey]
+
+    private let lock = NSLock()
+    private var overrides = RenderConfigurationOverrides.none
+
+    func apply(from outputState: [String: StateValue]) {
+        let next = Self.parse(outputState)
+        lock.lock(); overrides = next; lock.unlock()
+    }
+
+    func clear() {
+        lock.lock(); overrides = .none; lock.unlock()
+    }
+
+    func current() -> RenderConfigurationOverrides {
+        lock.lock(); defer { lock.unlock() }
+        return overrides
+    }
+
+    static func parse(_ output: [String: StateValue]) -> RenderConfigurationOverrides {
+        var result = RenderConfigurationOverrides()
+        result.projectionMix = number(output[projectionMixKey]).map { min(max($0, 0), 1) }
+        result.cameraDistance = number(output[cameraDistanceKey])
+        result.orthographicProjectionHeight = number(output[orthographicProjectionHeightKey]).flatMap { $0 > 0 ? $0 : nil }
+        result.fovDivision = number(output[fovDivisionKey]).flatMap { $0 > 0 ? $0 : nil }
+        return result
+    }
+
+    private static func number(_ value: StateValue?) -> Float? {
+        guard case .float(let d)? = value?.value, d.isFinite,
+              abs(d) <= Double(Float.greatestFiniteMagnitude) else { return nil }
+        return Float(d)
     }
 }

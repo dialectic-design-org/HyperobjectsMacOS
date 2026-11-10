@@ -18,7 +18,7 @@ let secondaryRenderWindowConfig = WindowInfo(
     id: "secondary_render_view",
     title: "Secondary Render View",
     showOnLoad: false,
-    content: AnyView(RenderView())
+    content: AnyView(RenderView(codeOverlayRole: .mirror))
 )
 
 let sceneInputsWindowConfig = WindowInfo(

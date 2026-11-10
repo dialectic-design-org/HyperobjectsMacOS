@@ -57,6 +57,11 @@ extension MetalRenderer {
             combined = combined.merged(with: renderTimeClosure(context))
         }
 
+        // Script (outputState) overrides win over scene overrides.
+        if let scriptOverrides = renderConfigs?.scriptRenderOverrides.current() {
+            combined = combined.merged(with: scriptOverrides)
+        }
+
         return combined
     }
 }
@@ -131,6 +136,8 @@ class MetalRenderer {
     var renderPSO: MTLComputePipelineState?
     var renderPipelineState: MTLRenderPipelineState?
     var computeToRenderPipelineState: MTLRenderPipelineState?
+    /// Premultiplied-alpha composite of the live-code overlay texture (burned-in mode).
+    private var codeOverlayPipelineState: MTLRenderPipelineState?
     var renderBandFieldPSO: MTLComputePipelineState?
     var currentScene: GeometriesSceneBase?
     var renderConfigs: RenderConfigurations?
@@ -169,6 +176,10 @@ class MetalRenderer {
 
     // Video streaming (Syphon / NDI)
     var videoStreamManager: VideoStreamManager?
+
+    // Live-code overlay (burned-in mode): snapshot written on main, read here.
+    var liveCodeOverlayState: LiveCodeOverlayState?
+    private lazy var codeOverlayRasterizer = LiveCodeOverlayRasterizer(device: device)
     
     init?(rendererState: RendererState, currentScene: GeometriesSceneBase, renderConfigs: RenderConfigurations, bandFieldManager: BandFieldManager) {
         self.rendererState = rendererState
@@ -365,6 +376,26 @@ class MetalRenderer {
             computeToRenderPipelineState = try device.makeRenderPipelineState(descriptor: computeRenderPipelineDescriptor)
         } catch {
             print("Error creating render pipeline state: \(error)")
+        }
+
+        // Live-code overlay composite: full-screen quad, premultiplied alpha blending.
+        let overlayDescriptor = MTLRenderPipelineDescriptor()
+        overlayDescriptor.vertexFunction = computeVertexFunction
+        overlayDescriptor.fragmentFunction = library?.makeFunction(name: "code_overlay_fragment")
+        if let attachment = overlayDescriptor.colorAttachments[0] {
+            attachment.pixelFormat = .bgra8Unorm
+            attachment.isBlendingEnabled = true
+            attachment.rgbBlendOperation = .add
+            attachment.alphaBlendOperation = .add
+            attachment.sourceRGBBlendFactor = .one
+            attachment.sourceAlphaBlendFactor = .one
+            attachment.destinationRGBBlendFactor = .oneMinusSourceAlpha
+            attachment.destinationAlphaBlendFactor = .oneMinusSourceAlpha
+        }
+        do {
+            codeOverlayPipelineState = try device.makeRenderPipelineState(descriptor: overlayDescriptor)
+        } catch {
+            print("Error creating code overlay pipeline state: \(error)")
         }
         
         
@@ -617,11 +648,11 @@ class MetalRenderer {
         
         let time = CACurrentMediaTime()
         var transitionFactor = Float(0.5 + 0.5 * sin(time))
-        transitionFactor = renderConfigs?.projectionMix ?? transitionFactor
+        transitionFactor = resolve(overrides.projectionMix, renderConfigs?.projectionMix ?? transitionFactor)
         
-        let cameraDistance = renderConfigs?.cameraDistance ?? 5.0
+        let cameraDistance = resolve(overrides.cameraDistance, renderConfigs?.cameraDistance ?? 5.0)
         
-        let FOVDivision: Float = renderConfigs?.FOVDivision ?? 3
+        let FOVDivision: Float = resolve(overrides.fovDivision, renderConfigs?.FOVDivision ?? 3)
         let fovY: Float = .pi / FOVDivision
         let nearZ: Float = 0.1
         let farZ:  Float = 100.0
@@ -634,7 +665,7 @@ class MetalRenderer {
         let P = matrix_perspective_metal_rh(fovY: fovY, aspect: aspectRatio, nearZ: nearZ, farZ: farZ)
 
         //  // * focalDistance * tan((Float.pi / 3) / 2.0)
-        let orthoHeight: Float = renderConfigs?.orthographicProjectionHeight ?? 2.0
+        let orthoHeight: Float = resolve(overrides.orthographicProjectionHeight, renderConfigs?.orthographicProjectionHeight ?? 2.0)
         let orthoWidth = orthoHeight * aspectRatio
         
         let orthographicMatrix = matrix_orthographic(left: -orthoWidth / 2.0,
@@ -989,6 +1020,21 @@ class MetalRenderer {
                                          vertexCount: testPoints.count)
         }
         
+        // Live-code overlay (burned-in): composited into the drawable before the Syphon
+        // publish, so the code is part of both the on-screen frame and the Syphon feed.
+        if renderConfigs?.showCodeOverlay == true,
+           renderConfigs?.codeOverlayOutput == .burnedIn,
+           let overlayState = liveCodeOverlayState,
+           let overlayPipeline = codeOverlayPipelineState,
+           let overlayTexture = codeOverlayRasterizer.texture(
+               for: overlayState,
+               width: drawable.texture.width,
+               height: drawable.texture.height) {
+            renderEncoder.setRenderPipelineState(overlayPipeline)
+            renderEncoder.setFragmentTexture(overlayTexture, index: 0)
+            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        }
+
         renderEncoder.endEncoding()
 
         // Publish frame to Syphon/NDI before presenting

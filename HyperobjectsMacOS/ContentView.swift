@@ -13,7 +13,7 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     var body: some View {
         VStack {
-            RenderView()
+            RenderView(codeOverlayRole: .editor)
         }.font(myFont)
         
     }

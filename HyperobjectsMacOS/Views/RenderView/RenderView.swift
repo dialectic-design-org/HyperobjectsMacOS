@@ -8,10 +8,16 @@
 import SwiftUI
 
 struct RenderView: View {
+    /// Which live-code overlay this render view shows (editable in the main window, a
+    /// read-only mirror in the secondary window).
+    var codeOverlayRole: CodeOverlayRole = .none
     @EnvironmentObject var currentScene: GeometriesSceneBase
     @EnvironmentObject var renderConfigs: RenderConfigurations
     @EnvironmentObject var videoStreamManager: VideoStreamManager
     @EnvironmentObject var bandFieldManager: BandFieldManager
+    // Plain environment reference (not @EnvironmentObject), so keystrokes in the editor don't
+    // re-run RenderView.body; only LiveCodeOverlay observes the session. nil = no overlay.
+    @Environment(\.liveCodeSession) private var liveCodeSession
     @StateObject private var rendererState = RendererState()
     @StateObject private var geometryVM = SceneGeometryViewModel()
     @State private var resolutionMode: ResolutionMode = .fixed
@@ -26,6 +32,7 @@ struct RenderView: View {
                 renderConfigs: renderConfigs,
                 videoStreamManager: videoStreamManager,
                 bandFieldManager: bandFieldManager,
+                liveCodeOverlayState: liveCodeSession?.overlayState,
                 resolutionMode: $resolutionMode,
                 resolution: $resolution
             ).frame(minWidth: 300, minHeight: 300)
@@ -41,7 +48,7 @@ struct RenderView: View {
                 }
             }
 
-            if renderConfigs.showOverlay {
+            if renderConfigs.showOverlay && !(renderConfigs.showCodeOverlay && codeOverlayRole == .editor) {
                 VStack(alignment: .leading) {
                     Text("RENDER VIEW").fontWeight(.bold)
                     HStack {
@@ -57,6 +64,21 @@ struct RenderView: View {
                     RenderStageMetricsView(rendererState: rendererState)
 
                 }.padding(8)
+            }
+
+            // In burned-in mode the mirror's own renderer draws the code, so no SwiftUI layer.
+            if let liveCodeSession, renderConfigs.showCodeOverlay && codeOverlayRole != .none
+                && !(renderConfigs.codeOverlayOutput == .burnedIn && codeOverlayRole == .mirror) {
+                LiveCodeOverlay(
+                    session: liveCodeSession,
+                    role: codeOverlayRole,
+                    output: renderConfigs.codeOverlayOutput,
+                    features: LiveCodeOverlayFeatures(
+                        lineNumbers: renderConfigs.showCodeLineNumbers,
+                        console: renderConfigs.showCodeConsole,
+                        inputReadout: renderConfigs.showCodeInputReadout
+                    )
+                )
             }
         }
         .font(myFont)

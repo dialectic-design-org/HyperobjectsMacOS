@@ -19,51 +19,62 @@ struct RenderConfigurationsView: View {
     var body: some View {
         VStack(alignment: .leading) {
             ScrollView {
-                Toggle(
-                    "Render Points",
-                    isOn: $renderConfigurations.renderPoints
-                )
-                
-                Toggle(
-                    "Render SDF Lines",
-                    isOn: $renderConfigurations.renderSDFLines
-                )
-                
-                Toggle(
-                    "Render Lines Overlay",
-                    isOn: $renderConfigurations.renderLinesOverlay
-                )
-                
-                Toggle(
-                    "Show overlay",
-                    isOn: $renderConfigurations.showOverlay
-                )
+                Form {
+                    Toggle(
+                        "Render Points",
+                        isOn: $renderConfigurations.renderPoints
+                    )
+                    
+                    Toggle(
+                        "Render SDF Lines",
+                        isOn: $renderConfigurations.renderSDFLines
+                    )
+                    
+                    Toggle(
+                        "Render Lines Overlay",
+                        isOn: $renderConfigurations.renderLinesOverlay
+                    )
+                    
+                    Toggle(
+                        "Show overlay",
+                        isOn: $renderConfigurations.showOverlay
+                    )
+                    
+                    Toggle(
+                        "Show square bounds",
+                        isOn: $renderConfigurations.showSquareBounds
+                    )
+                    
+                    Toggle(
+                        "Run script on timer",
+                        isOn: $renderConfigurations.runScriptOnFrameChange
+                    )
+                    
+                    Toggle(
+                        "Show audio controls",
+                        isOn: $renderConfigurations.showAudioControls
+                    )
+                }
 
-                Toggle(
-                    "Show square bounds",
-                    isOn: $renderConfigurations.showSquareBounds
-                )
+                Divider()
+                LiveCodeSettingsView()
+                Divider()
                 
-                Toggle(
-                    "Run script on timer",
-                    isOn: $renderConfigurations.runScriptOnFrameChange
-                )
                 
-                Toggle(
-                    "Show audio controls",
-                    isOn: $renderConfigurations.showAudioControls
-                )
                 
-                Text("Projection mix")
+                SliderHeader(title: "Projection mix", key: ScriptRenderOverrides.projectionMixKey)
                 Slider(value: $renderConfigurations.projectionMix, in: 0...1.0)
                 
-                Text("Camera Distance: \(String(format: "%.1f", renderConfigurations.cameraDistance))")
+                SliderHeader(title: "Camera Distance: \(String(format: "%.1f", renderConfigurations.cameraDistance))",
+                             key: ScriptRenderOverrides.cameraDistanceKey)
                 Slider(value: $renderConfigurations.cameraDistance, in: 0...50.0)
                 
-                Text("Orthographic projection height: \(String(format: "%.1f", renderConfigurations.orthographicProjectionHeight))")
+                SliderHeader(title: "Orthographic projection height: \(String(format: "%.1f", renderConfigurations.orthographicProjectionHeight))",
+                             key: ScriptRenderOverrides.orthographicProjectionHeightKey)
                 Slider(value: $renderConfigurations.orthographicProjectionHeight, in: 0...10.0)
                 
-                Text("FOV Division: \(String(format: "%.1f", renderConfigurations.FOVDivision))")
+                SliderHeader(title: "FOV Division: \(String(format: "%.1f", renderConfigurations.FOVDivision))",
+                             key: ScriptRenderOverrides.fovDivisionKey)
                 Slider(value: $renderConfigurations.FOVDivision, in: 0...10.0)
                 
                 Text("Previous color visibility: \(String(format: "%.2f", renderConfigurations.previousColorVisibility))")
@@ -252,5 +263,32 @@ struct RenderConfigurationsView: View {
         renderConfigurations.chromaticAberrationReferenceWavelength = refWavelength
         renderConfigurations.chromaticAberrationRadialPower = power
         renderConfigurations.chromaticAberrationUseRadialMode = true
+    }
+}
+
+/// Slider title on the left, the outputState key that overrides it on the right.
+private struct SliderHeader: View {
+    let title: String
+    let key: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+            Spacer(minLength: 8)
+            OutputStateKeyLabel(key: key)
+        }
+    }
+}
+
+/// Caption naming the outputState key that overrides a slider from a script.
+private struct OutputStateKeyLabel: View {
+    let key: String
+
+    var body: some View {
+        Text("outputState.\(key)")
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+            .help("Set this key in a script's outputState to override the slider; remove it to fall back.")
     }
 }

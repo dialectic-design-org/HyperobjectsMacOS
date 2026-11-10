@@ -231,6 +231,10 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             SceneInput(name: "Rotation Z Offset", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
             SceneInput(name: "Rotation Z Offset Delay", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
             
+            
+            
+            
+            
             SceneInput(name:"Stateful Rotation X", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: -0.1...0.1),
             SceneInput(name:"Stateful Rotation Y", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: -0.1...0.1),
             SceneInput(name:"Stateful Rotation Z", type: .statefulFloat, inputGroupName: "Rotation", tickValueAdjustmentRange: -0.1...0.1),
@@ -256,6 +260,8 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             SceneInput(name: "Color end", type: .colorInput, inputGroupName: "Shading", value: Color.white),
             
             SceneInput(name: "Stateful Color Shift", type: .statefulFloat, inputGroupName: "Shading", tickValueAdjustmentRange: 0.0...0.1),
+            
+            SceneInput(name: "Color wave repeat", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...10.0),
             
             SceneInput(name: "Brightness", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),
             SceneInput(name: "Brightness delay", type: .float, inputGroupName: "Shading", value: 1.0, range: 0.0...3),

@@ -86,6 +86,7 @@ struct HyperobjectsMacOSApp: App {
     @StateObject private var videoStreamManager = VideoStreamManager()
     @StateObject private var midiManager = MIDIManager()
     @StateObject private var bandFieldManager = BandFieldManager()
+    @StateObject private var liveCodeSession = LiveCodeSession()
     @State private var selectedFile: URL?
     @State private var isFilePickerPresented = false
     @State private var jsTimer: DispatchSourceTimer?
@@ -112,6 +113,20 @@ struct HyperobjectsMacOSApp: App {
                 .environmentObject(videoStreamManager)
                 .environmentObject(audioMonitor)
                 .environmentObject(bandFieldManager)
+                .environment(\.liveCodeSession, liveCodeSession)
+                .modifier(LiveCodeAppBindings(
+                    session: liveCodeSession,
+                    jsEngine: jsEngine,
+                    renderConfigs: renderConfigurations,
+                    readoutSource: { [weak midiManager] in
+                        var state = scriptInputCache.snapshot()
+                        state["time"] = StateValue(value: .float(timeBox.value))
+                        if let midiManager {
+                            state["midi"] = midiManager.controls.javascriptStateValue()
+                        }
+                        return state
+                    }
+                ))
                 .onChange(of: audioMonitor.smoothedVolume) { _, _ in
                     let snap = AudioSnapshot(
                         raw: audioMonitor.volume,
@@ -143,6 +158,8 @@ struct HyperobjectsMacOSApp: App {
                 }
                 .onChange(of: fileMonitor.unloadToken) { _, _ in
                     latestScript = ""
+                    liveCodeSession.detach()
+                    renderConfigurations.scriptRenderOverrides.clear()
                     jsEngine.reset()
                     bandFieldManager.disable()
                     scriptInputCache.update(prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
@@ -151,7 +168,9 @@ struct HyperobjectsMacOSApp: App {
                 .onAppear {
                     print("Main content view onappear")
                     audioMonitor.startMonitoring()
-                    fileMonitor.setCallback { [weak sceneManager, weak jsEngine, weak midiManager] script in
+                    // Single path for running a script, used by the editor overlay and (through the
+                    // session) by FileMonitor. Calls `done(nil)` on success or `done(error)`.
+                    let runScript: (String, @escaping (LiveCodeError?) -> Void) -> Void = { [weak sceneManager, weak jsEngine, weak midiManager] script, done in
                         guard let sceneManager = sceneManager, let jsEngine = jsEngine, let midiManager = midiManager else { return }
                         
                         let targetScene = sceneManager.currentScene
@@ -159,12 +178,29 @@ struct HyperobjectsMacOSApp: App {
                         
                         let baseState = scriptBaseStateCache.baseState(for: targetScene)
 
-                        _ = jsEngine.executeScript(script, inputState: inputState, baseState: baseState) { outputState in
-                            latestScript = script
-                            applyScriptOutput(inputState: inputState, outputState: outputState, baseState: baseState, scene: targetScene, bandFieldManager: bandFieldManager, warningCache: scriptOutputWarningCache)
-                            targetScene.refreshSceneInputSnapshot()
-                            scriptInputCache.update(prepareScriptInput(scene: targetScene, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
-                        }
+                        _ = jsEngine.executeScript(
+                            script,
+                            inputState: inputState,
+                            baseState: baseState,
+                            completion: { outputState in
+                                latestScript = script
+                                applyScriptOutput(inputState: inputState, outputState: outputState, baseState: baseState, scene: targetScene, bandFieldManager: bandFieldManager, scriptRenderOverrides: renderConfigurations.scriptRenderOverrides, warningCache: scriptOutputWarningCache)
+                                targetScene.refreshSceneInputSnapshot()
+                                scriptInputCache.update(prepareScriptInput(scene: targetScene, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
+                                done(nil)
+                            },
+                            failure: { message in
+                                // errorLine is set in the same main-thread hand-off, before this runs.
+                                done(LiveCodeError(message: message, line: jsEngine.errorLine))
+                            }
+                        )
+                    }
+
+                    liveCodeSession.evaluator = runScript
+                    // File changes go through the session: it adopts the text (or flags a
+                    // conflict with unsaved overlay edits) and evaluates via runScript.
+                    fileMonitor.setCallback { [weak liveCodeSession] content in
+                        liveCodeSession?.fileDidChangeOnDisk(content)
                     }
                     
                     
@@ -184,7 +220,7 @@ struct HyperobjectsMacOSApp: App {
                                 let targetScene = sceneManager.currentScene
                                 let baseState = scriptBaseStateCache.baseState(for: targetScene)
                                 _ = jsEngine.executeScript(latestScript, inputState: inputState, baseState: baseState, skipIfBusy: true) { outputState in
-                                    applyScriptOutput(inputState: inputState, outputState: outputState, baseState: baseState, scene: targetScene, bandFieldManager: bandFieldManager, warningCache: scriptOutputWarningCache)
+                                    applyScriptOutput(inputState: inputState, outputState: outputState, baseState: baseState, scene: targetScene, bandFieldManager: bandFieldManager, scriptRenderOverrides: renderConfigurations.scriptRenderOverrides, warningCache: scriptOutputWarningCache)
                                     targetScene.refreshSceneInputSnapshot()
                                     scriptInputCache.update(prepareScriptInput(scene: targetScene, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
                                 }
@@ -206,6 +242,7 @@ struct HyperobjectsMacOSApp: App {
         }// Open it explicitly at launch (and keep a menu command for manual reopen)
         .commands {
             OpenMainWindowCommand()
+            LiveCodeCommands(session: liveCodeSession, renderConfigs: renderConfigurations)
         }
         
         Window("\(windowsManagerWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: windowsManagerWindowConfig.id) {
@@ -217,6 +254,7 @@ struct HyperobjectsMacOSApp: App {
                                                .environmentObject(renderConfigurations)
                                                .environmentObject(videoStreamManager)
                                                .environmentObject(bandFieldManager)
+                                               .environment(\.liveCodeSession, liveCodeSession)
         }
         
         Window("\(sceneInputsWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: sceneInputsWindowConfig.id) {
@@ -225,6 +263,7 @@ struct HyperobjectsMacOSApp: App {
                 .environmentObject(jsEngine)
                 .environmentObject(fileMonitor)
                 .environmentObject(audioMonitor)
+                .environmentObject(liveCodeSession)
         }
 
         Window("\(renderConfigurationsWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: renderConfigurationsWindowConfig.id) {
@@ -232,6 +271,7 @@ struct HyperobjectsMacOSApp: App {
                                                     .environmentObject(renderConfigurations)
                                                     .environmentObject(videoStreamManager)
                                                     .environmentObject(bandFieldManager)
+                                                    .environmentObject(liveCodeSession)
         }
         
         Window("\(sceneGeometriesListWindowConfig.title) (scene: \(sceneManager.currentScene.name))", id: sceneGeometriesListWindowConfig.id) {
@@ -332,7 +372,7 @@ private func prepareScriptBaseState(scene: GeometriesSceneBase) -> [String: Stat
 }
 
 
-private func applyScriptOutput(inputState: [String: StateValue], outputState scriptOutput: [String: StateValue], baseState: [String: StateValue], scene: GeometriesSceneBase, bandFieldManager: BandFieldManager, warningCache: ScriptOutputWarningCache) {
+private func applyScriptOutput(inputState: [String: StateValue], outputState scriptOutput: [String: StateValue], baseState: [String: StateValue], scene: GeometriesSceneBase, bandFieldManager: BandFieldManager, scriptRenderOverrides: ScriptRenderOverrides, warningCache: ScriptOutputWarningCache) {
     // Compare outputState to inputState and print changes only (no scene mutation yet)
     let epsilon: Double = 1e-6
     // RESET: start this frame from the scene's base state. Any key the script did not return
@@ -347,6 +387,9 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState scr
     if outputState["bands"] == nil {
         bandFieldManager.disable()
     }
+    // Replaced as a whole each run: keys the script stopped returning fall back to the
+    // Render Configurations values.
+    scriptRenderOverrides.apply(from: outputState)
     for (key, outVal) in outputState {
         // print("Evaluating \(key)")
 
@@ -356,6 +399,11 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState scr
         }
 
         if key == "RESET" {
+            continue
+        }
+
+        // Camera/projection overrides: handled as a whole by scriptRenderOverrides.apply above.
+        if ScriptRenderOverrides.keys.contains(key) {
             continue
         }
         

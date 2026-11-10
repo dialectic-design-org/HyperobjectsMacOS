@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 struct CodeFileSelector: View {
     @EnvironmentObject var fileMonitor: FileMonitor
     @EnvironmentObject var jsEngine: JSEngineManager
+    @EnvironmentObject var liveCodeSession: LiveCodeSession
     @State private var selectedFile: URL?
     @State private var isFilePickerPresented = false
     @State private var appTime: Double = 0
@@ -30,6 +31,18 @@ struct CodeFileSelector: View {
                         Label("Unload Script", systemImage: "xmark.circle")
                     }
                     .disabled(selectedFile == nil && !fileMonitor.isMonitoring && jsEngine.outputState.isEmpty && jsEngine.errorMessage == nil)
+
+                    Button {
+                        // Unloading stops monitoring and resets the engine (via unloadToken);
+                        // the session then starts an in-memory buffer for the overlay.
+                        selectedFile = nil
+                        fileMonitor.unloadScript()
+                        DispatchQueue.main.async {
+                            liveCodeSession.startScratch("outputState = {};\n")
+                        }
+                    } label: {
+                        Label("New Scratch", systemImage: "square.and.pencil")
+                    }
                     
                     Button {
                         jsEngine.resetInternalState()
@@ -125,6 +138,8 @@ struct CodeFileSelector: View {
                     }
                     
                     selectedFile = url
+                    // Attach before monitoring: the monitor's initial load fills the buffer.
+                    liveCodeSession.attach(url: url)
                     print("starting fileMonitor.startMonitoring")
                     fileMonitor.startMonitoring(url: url)
                 }

@@ -15,6 +15,8 @@ struct MetalView: NSViewRepresentable {
     let renderConfigs: RenderConfigurations
     @ObservedObject var videoStreamManager: VideoStreamManager
     @ObservedObject var bandFieldManager: BandFieldManager
+    /// Live-code overlay snapshot, composited by the renderer in burned-in mode.
+    let liveCodeOverlayState: LiveCodeOverlayState?
     @Binding var resolutionMode: ResolutionMode
     @Binding var resolution: CGSize // Bind the resolution to a parent view
     
@@ -30,6 +32,7 @@ struct MetalView: NSViewRepresentable {
         }
 
         renderer.videoStreamManager = videoStreamManager
+        renderer.liveCodeOverlayState = liveCodeOverlayState
         
         view.device = renderer.device
         view.colorPixelFormat = .bgra8Unorm

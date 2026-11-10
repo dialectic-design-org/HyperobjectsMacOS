@@ -1585,6 +1585,17 @@ fragment float4 compute_fragment(
     return mix(original, aberrated, ca.intensity);
 }
 
+// Composites the pre-rasterized live-code overlay (premultiplied BGRA) over the frame.
+// compute_vertex maps NDC bottom-left to uv (0,0); CGBitmapContext rows are stored top-down,
+// so v is flipped.
+fragment float4 code_overlay_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> overlay [[texture(0)]]
+) {
+    constexpr sampler s(coord::normalized, address::clamp_to_edge, filter::linear);
+    return overlay.sample(s, float2(in.uv.x, 1.0 - in.uv.y));
+}
+
 // Vertex shader
 vertex VertexOut vertex_main(const device float3* vertices [[ buffer(0) ]],
                           constant VertexUniforms& uniforms [[ buffer(1) ]],

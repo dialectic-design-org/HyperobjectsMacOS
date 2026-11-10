@@ -233,7 +233,14 @@ class JSEngineManager: ObservableObject {
     @Published var lastExecutionTime: Date?
     @Published var executionDuration: Double = 0
     @Published var internalStateDescription: String?
-    
+    /// 1-based line in the *user* script of the current error, nil if unknown or no error.
+    @Published var errorLine: Int?
+    /// Last few `console.log` lines (main thread), only filled while `consoleCaptureEnabled`.
+    @Published var consoleTail: [String] = []
+    /// Set from the App when the "Show console output" render configuration changes.
+    /// Written on main, read on jsQueue.
+    let consoleCaptureEnabled = Atomic<Bool>(value: false)
+
     private var context: JSContext?
     private var currentScript: String = ""
     private var consecutiveErrors: Int = 0
@@ -244,6 +251,9 @@ class JSEngineManager: ObservableObject {
     private var lastRunUptime: TimeInterval?
     
     private let jsQueue = DispatchQueue(label: "JSEngineManager.JSQueue")
+    private var pendingConsole: [String] = []           // jsQueue only
+    private var lastConsoleFlush: CFAbsoluteTime = 0    // jsQueue only
+    private static let consoleTailLength = 8
 
     // True from the moment a run is queued until its results have been handled on the main
     // thread. Lets the per-frame timer skip a tick instead of piling up runs (and main-thread
@@ -276,6 +286,8 @@ class JSEngineManager: ObservableObject {
             DispatchQueue.main.async {
                 self.outputState = [:]
                 self.errorMessage = nil
+                self.errorLine = nil
+                self.consoleTail = []
                 self.warningMessage = nil
                 self.lastExecutionTime = nil
                 self.executionDuration = 0
@@ -316,8 +328,22 @@ class JSEngineManager: ObservableObject {
         lastRunUptime = nil
         
         // Setup console.log for debugging
-        let consoleLog: @convention(block) (String) -> Void = { message in
+        let consoleLog: @convention(block) (String) -> Void = { [weak self] message in
             print("JS Console: \(message)")
+            // Runs on jsQueue (JSC calls it during evaluateScript/call). Buffered and flushed to
+            // main at most 10x/s so a per-frame console.log cannot flood the main thread.
+            guard let self, self.consoleCaptureEnabled.get() else { return }
+            self.pendingConsole.append(message)
+            if self.pendingConsole.count > 50 {
+                self.pendingConsole.removeFirst(self.pendingConsole.count - 50)
+            }
+            let now = CFAbsoluteTimeGetCurrent()
+            guard now - self.lastConsoleFlush > 0.1 else { return }
+            self.lastConsoleFlush = now
+            let tail = Array(self.pendingConsole.suffix(Self.consoleTailLength))
+            DispatchQueue.main.async {
+                if self.consoleTail != tail { self.consoleTail = tail }
+            }
         }
         context?.setObject(consoleLog, forKeyedSubscript: "consoleLog" as NSString)
         
@@ -335,7 +361,7 @@ class JSEngineManager: ObservableObject {
     
     /// Returns false (and does nothing) when `skipIfBusy` is set and the previous run has not
     /// finished yet, including its main-thread completion.
-    func executeScript(_ script: String, inputState: [String: StateValue], baseState: [String: StateValue] = [:], skipIfBusy: Bool = false, completion: (([String: StateValue]) -> Void)? = nil) -> Bool {
+    func executeScript(_ script: String, inputState: [String: StateValue], baseState: [String: StateValue] = [:], skipIfBusy: Bool = false, completion: (([String: StateValue]) -> Void)? = nil, failure: ((String) -> Void)? = nil) -> Bool {
         guard beginRun(skipIfBusy: skipIfBusy) else { return false }
         let requestTime = CFAbsoluteTimeGetCurrent()
         
@@ -368,103 +394,34 @@ class JSEngineManager: ObservableObject {
             guard let context = self.context else {
                 mainWork = {
                     self.errorMessage = "JS context not available"
+                    failure?("JS context not available")
                 }
                 return
             }
             
             let scriptChanged = script != self.currentScript
             if scriptChanged {
-                // Wrap user script in a function to avoid re-parsing overhead
-                // and to allow repeated execution.
-                // We also try to return outputState if it exists, to support 'var outputState = ...'
-                let wrappedScript = """
-                var __optimizeOutput = function(output) {
-                    if (!output || typeof output !== 'object') return output;
-                    if (output.lineSegments && Array.isArray(output.lineSegments) && output.lineSegments.length > 0) {
-                        var segs = output.lineSegments;
-                        var count = segs.length;
-                        var starts = new Float64Array(count * 3);
-                        var ends = new Float64Array(count * 3);
-                        var widths = new Float64Array(count * 2);
-                        var colors = new Float64Array(count * 8); // 4 for start, 4 for end
-                        
-                        for (var i = 0; i < count; i++) {
-                            var s = segs[i];
-                            var i3 = i * 3;
-                            var i2 = i * 2;
-                            var i8 = i * 8;
-                            
-                            // Start
-                            if (s.start) {
-                                starts[i3] = s.start.x || 0;
-                                starts[i3+1] = s.start.y || 0;
-                                starts[i3+2] = s.start.z || 0;
-                            }
-                            
-                            // End
-                            if (s.end) {
-                                ends[i3] = s.end.x || 0;
-                                ends[i3+1] = s.end.y || 0;
-                                ends[i3+2] = s.end.z || 0;
-                            }
-                            
-                            // Widths
-                            widths[i2] = s.lineWidthStart || 1;
-                            widths[i2+1] = s.lineWidthEnd || 1;
-                            
-                            // Colors
-                            if (s.colorStart) {
-                                if (Array.isArray(s.colorStart)) {
-                                    colors[i8] = s.colorStart[0];
-                                    colors[i8+1] = s.colorStart[1];
-                                    colors[i8+2] = s.colorStart[2];
-                                    colors[i8+3] = s.colorStart[3];
-                                } else {
-                                    colors[i8] = s.colorStart.x || 0;
-                                    colors[i8+1] = s.colorStart.y || 0;
-                                    colors[i8+2] = s.colorStart.z || 0;
-                                    colors[i8+3] = s.colorStart.w || 1;
-                                }
-                            } else {
-                                colors[i8] = 1; colors[i8+1] = 1; colors[i8+2] = 1; colors[i8+3] = 1;
-                            }
-                            
-                            if (s.colorEnd) {
-                                if (Array.isArray(s.colorEnd)) {
-                                    colors[i8+4] = s.colorEnd[0];
-                                    colors[i8+5] = s.colorEnd[1];
-                                    colors[i8+6] = s.colorEnd[2];
-                                    colors[i8+7] = s.colorEnd[3];
-                                } else {
-                                    colors[i8+4] = s.colorEnd.x || 0;
-                                    colors[i8+5] = s.colorEnd.y || 0;
-                                    colors[i8+6] = s.colorEnd.z || 0;
-                                    colors[i8+7] = s.colorEnd.w || 1;
-                                }
-                            } else {
-                                colors[i8+4] = 1; colors[i8+5] = 1; colors[i8+6] = 1; colors[i8+7] = 1;
-                            }
-                        }
-                        
-                        output.lineSegments_packed = {
-                            count: count,
-                            starts: starts,
-                            ends: ends,
-                            widths: widths,
-                            colors: colors
-                        };
-                        // Optional: remove original to save bridging time, though strictly not needed if we just ignore it in Swift
-                        // delete output.lineSegments; 
-                    }
-                    return output;
-                };
+                // Wrap the user script in a function to avoid re-parsing overhead and to allow
+                // repeated execution. Concatenated (not interpolated) so the user's line numbers
+                // stay at a fixed offset (see userScriptLineOffset).
+                let wrappedScript = Self.wrapperPrefix + script + Self.wrapperSuffix
+                context.evaluateScript(wrappedScript, withSourceURL: Self.userScriptSourceURL)
 
-                var userMain = function() {
-                    \(script)
-                    if (typeof outputState !== 'undefined') { return __optimizeOutput(outputState); }
-                };
-                """
-                context.evaluateScript(wrappedScript)
+                if let syntaxError = context.exception {
+                    context.exception = nil
+                    let (message, line) = Self.describe(syntaxError)
+                    let duration = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                    let text = "SyntaxError: \(message)"
+                    mainWork = {
+                        if self.errorMessage != text { self.errorMessage = text }
+                        if self.errorLine != line { self.errorLine = line }
+                        self.executionDuration = duration
+                        failure?(text)
+                    }
+                    // Deliberately do NOT touch currentScript: the previous userMain is still
+                    // defined and keeps running from the 120 Hz loop (which uses latestScript).
+                    return
+                }
                 self.currentScript = script
             }
             
@@ -520,14 +477,17 @@ class JSEngineManager: ObservableObject {
                 
                 let endTime = CFAbsoluteTimeGetCurrent()
                 let duration = (endTime - startTime) * 1000
-                let errorString = "Error: \(exception.toString() ?? "Unknown")"
+                let (message, line) = Self.describe(exception)
+                let errorString = "Error: \(message)"
                 
                 mainWork = {
                     // Optimization: Only update if changed to avoid UI thrashing
                     if self.errorMessage != errorString {
                         self.errorMessage = errorString
                     }
+                    if self.errorLine != line { self.errorLine = line }
                     self.executionDuration = duration
+                    failure?(errorString)
                 }
                 // Clear exception for next run
                 context.exception = nil
@@ -563,7 +523,8 @@ class JSEngineManager: ObservableObject {
                 
                 mainWork = {
                     self.outputState = parsedOutput
-                    self.errorMessage = nil
+                    if self.errorMessage != nil { self.errorMessage = nil }
+                    if self.errorLine != nil { self.errorLine = nil }
                     self.lastExecutionTime = Date()
                     self.executionDuration = duration
                     completion?(parsedOutput)
@@ -573,8 +534,11 @@ class JSEngineManager: ObservableObject {
                 let endTime = CFAbsoluteTimeGetCurrent()
                 let duration = (endTime - startTime) * 1000
                 mainWork = {
-                    self.errorMessage = "No outputState object found or invalid format"
+                    let text = "No outputState object found or invalid format"
+                    if self.errorMessage != text { self.errorMessage = text }
+                    if self.errorLine != nil { self.errorLine = nil }
                     self.executionDuration = duration
+                    failure?(text)
                 }
                 return
             }
@@ -603,6 +567,120 @@ class JSEngineManager: ObservableObject {
             }
         }
         return value
+    }
+}
+
+extension JSEngineManager {
+    static let userScriptSourceURL = URL(string: "hyperobjects://live/main.js")!
+
+    /// Everything up to and including the line that opens `userMain`. Ends in a newline, so the
+    /// user's first line is line (userScriptLineOffset + 1) of the evaluated source.
+    static let wrapperPrefix: String = """
+    var __optimizeOutput = function(output) {
+        if (!output || typeof output !== 'object') return output;
+        if (output.lineSegments && Array.isArray(output.lineSegments) && output.lineSegments.length > 0) {
+            var segs = output.lineSegments;
+            var count = segs.length;
+            var starts = new Float64Array(count * 3);
+            var ends = new Float64Array(count * 3);
+            var widths = new Float64Array(count * 2);
+            var colors = new Float64Array(count * 8); // 4 for start, 4 for end
+
+            for (var i = 0; i < count; i++) {
+                var s = segs[i];
+                var i3 = i * 3;
+                var i2 = i * 2;
+                var i8 = i * 8;
+
+                // Start
+                if (s.start) {
+                    starts[i3] = s.start.x || 0;
+                    starts[i3+1] = s.start.y || 0;
+                    starts[i3+2] = s.start.z || 0;
+                }
+
+                // End
+                if (s.end) {
+                    ends[i3] = s.end.x || 0;
+                    ends[i3+1] = s.end.y || 0;
+                    ends[i3+2] = s.end.z || 0;
+                }
+
+                // Widths
+                widths[i2] = s.lineWidthStart || 1;
+                widths[i2+1] = s.lineWidthEnd || 1;
+
+                // Colors
+                if (s.colorStart) {
+                    if (Array.isArray(s.colorStart)) {
+                        colors[i8] = s.colorStart[0];
+                        colors[i8+1] = s.colorStart[1];
+                        colors[i8+2] = s.colorStart[2];
+                        colors[i8+3] = s.colorStart[3];
+                    } else {
+                        colors[i8] = s.colorStart.x || 0;
+                        colors[i8+1] = s.colorStart.y || 0;
+                        colors[i8+2] = s.colorStart.z || 0;
+                        colors[i8+3] = s.colorStart.w || 1;
+                    }
+                } else {
+                    colors[i8] = 1; colors[i8+1] = 1; colors[i8+2] = 1; colors[i8+3] = 1;
+                }
+
+                if (s.colorEnd) {
+                    if (Array.isArray(s.colorEnd)) {
+                        colors[i8+4] = s.colorEnd[0];
+                        colors[i8+5] = s.colorEnd[1];
+                        colors[i8+6] = s.colorEnd[2];
+                        colors[i8+7] = s.colorEnd[3];
+                    } else {
+                        colors[i8+4] = s.colorEnd.x || 0;
+                        colors[i8+5] = s.colorEnd.y || 0;
+                        colors[i8+6] = s.colorEnd.z || 0;
+                        colors[i8+7] = s.colorEnd.w || 1;
+                    }
+                } else {
+                    colors[i8+4] = 1; colors[i8+5] = 1; colors[i8+6] = 1; colors[i8+7] = 1;
+                }
+            }
+
+            output.lineSegments_packed = {
+                count: count,
+                starts: starts,
+                ends: ends,
+                widths: widths,
+                colors: colors
+            };
+            // Optional: remove original to save bridging time, though strictly not needed if we just ignore it in Swift
+            // delete output.lineSegments; 
+        }
+        return output;
+    };
+
+    var userMain = function() {
+
+    """
+
+    static let wrapperSuffix: String = """
+
+        if (typeof outputState !== 'undefined') { return __optimizeOutput(outputState); }
+    };
+    """
+
+    /// Number of newline characters before the user's first line.
+    static let userScriptLineOffset: Int = wrapperPrefix.reduce(0) { $1 == "\n" ? $0 + 1 : $0 }
+
+    /// Extracts a readable message and, when the exception originates from the user script,
+    /// a 1-based line number in user coordinates.
+    static func describe(_ exception: JSValue) -> (message: String, line: Int?) {
+        let message = exception.toString() ?? "Unknown error"
+        let source = exception.objectForKeyedSubscript("sourceURL")?.toString()
+        guard source == userScriptSourceURL.absoluteString,
+              let raw = exception.objectForKeyedSubscript("line"), raw.isNumber else {
+            return (message, nil)
+        }
+        let userLine = Int(raw.toInt32()) - userScriptLineOffset
+        return (message, userLine >= 1 ? userLine : nil)
     }
 }
 
