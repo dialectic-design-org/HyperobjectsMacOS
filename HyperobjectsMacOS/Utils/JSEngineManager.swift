@@ -348,7 +348,24 @@ class JSEngineManager: ObservableObject {
         context?.setObject(consoleLog, forKeyedSubscript: "consoleLog" as NSString)
         
         
-        var scriptToEvaluate = JSHelperClasses + JSInternalStateRuntime + """
+        // Parameter names and defaults of the objects a script can instantiate (`new Cube()`).
+        // Set as a global because a top-level `class` is not a property of the global object,
+        // so the defaults cannot be attached to the class from here.
+        if let context {
+            let schemas = JSValue(newObjectIn: context)
+            for kind in ScriptedObjectKind.allCases {
+                let defaults = JSValue(newObjectIn: context)
+                for (name, value) in kind.parameterDefaults {
+                    if let jsValue = value.toJSValue(in: context) {
+                        defaults?.setValue(jsValue, forProperty: name)
+                    }
+                }
+                schemas?.setValue(defaults, forProperty: kind.rawValue)
+            }
+            context.setObject(schemas, forKeyedSubscript: "__sceneObjectSchemas" as NSString)
+        }
+
+        let scriptToEvaluate = JSHelperClasses + JSInternalStateRuntime + JSSceneObjectClasses + """
         var console = {
             log: function() {
                 var args = Array.prototype.slice.call(arguments);
@@ -675,12 +692,32 @@ extension JSEngineManager {
     static func describe(_ exception: JSValue) -> (message: String, line: Int?) {
         let message = exception.toString() ?? "Unknown error"
         let source = exception.objectForKeyedSubscript("sourceURL")?.toString()
-        guard source == userScriptSourceURL.absoluteString,
-              let raw = exception.objectForKeyedSubscript("line"), raw.isNumber else {
-            return (message, nil)
+        if source == userScriptSourceURL.absoluteString,
+           let raw = exception.objectForKeyedSubscript("line"), raw.isNumber {
+            let userLine = Int(raw.toInt32()) - userScriptLineOffset
+            return (message, userLine >= 1 ? userLine : nil)
         }
-        let userLine = Int(raw.toInt32()) - userScriptLineOffset
-        return (message, userLine >= 1 ? userLine : nil)
+        // Thrown inside a helper (for example the parameter check of `Cube`): the error itself
+        // points at the helper, so take the innermost stack frame that is in the user script.
+        if exception.isObject,
+           let stack = exception.objectForKeyedSubscript("stack"), stack.isString,
+           let evaluatedLine = userScriptLine(inStack: stack.toString() ?? "") {
+            let userLine = evaluatedLine - userScriptLineOffset
+            return (message, userLine >= 1 ? userLine : nil)
+        }
+        return (message, nil)
+    }
+
+    /// Line (in the evaluated source) of the first frame of a JavaScriptCore stack trace that
+    /// lies in the user script. Frames look like "userMain@hyperobjects://live/main.js:12:25".
+    static func userScriptLine(inStack stack: String) -> Int? {
+        let marker = userScriptSourceURL.absoluteString + ":"
+        for frame in stack.split(separator: "\n") {
+            guard let range = frame.range(of: marker) else { continue }
+            let digits = frame[range.upperBound...].prefix { $0.isNumber }
+            if let line = Int(digits) { return line }
+        }
+        return nil
     }
 }
 

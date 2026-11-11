@@ -14,6 +14,14 @@ class LiveCodingGenerator: CachedGeometryGenerator {
             lines = linesInput
         }
 
+        // Scripted `Cube` objects: the Cube scene's generator, run once per object against
+        // the object's own inputs.
+        if let cubes = inputs["Cubes"] as? [ScriptedObjectInputs] {
+            for cube in cubes {
+                lines += CubeGenerator.generateLines(inputs: cube.inputs, inputSource: cube.source)
+            }
+        }
+
         return lines
     }
 }

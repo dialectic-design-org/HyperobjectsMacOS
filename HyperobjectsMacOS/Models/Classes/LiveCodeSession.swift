@@ -115,6 +115,10 @@ final class LiveCodeSession: ObservableObject {
     /// 10 Hz updates never re-render the editor, which observes the session.
     let info = LiveCodeInfoModel()
 
+    /// Parameter search panel (performer only). Also a separate ObservableObject, so typing
+    /// in the search field does not re-render the editor.
+    let parameterSearch = LiveCodeParameterSearchModel()
+
     /// Injected by the App. Runs `script` through the regular JSEngineManager path and calls
     /// `done(nil)` on success or `done(error)` on a syntax/runtime error.
     var evaluator: ((_ script: String, _ done: @escaping (LiveCodeError?) -> Void) -> Void)?
@@ -287,6 +291,81 @@ final class LiveCodeInfoModel: ObservableObject {
 
     func updateInputReadout(_ rows: [LiveCodeReadoutRow]) {
         if inputReadout != rows { inputReadout = rows }
+    }
+}
+
+/// State of the parameter search panel in the code overlay: a query, the matching script
+/// parameters and the selected row. Main thread only.
+final class LiveCodeParameterSearchModel: ObservableObject {
+    /// Number of result rows shown at once; the selection scrolls through the rest.
+    static let pageSize = 10
+
+    @Published private(set) var isPresented = false
+    @Published var query = "" {
+        didSet { if query != oldValue { refresh() } }
+    }
+    @Published private(set) var results: [ScriptParameterMatch] = []
+    @Published private(set) var selectedIndex = 0
+    /// Index of the first visible result row.
+    @Published private(set) var windowStart = 0
+    /// Number of parameters that can be searched.
+    @Published private(set) var catalogCount = 0
+
+    /// Injected by the App: the parameters a script can set in the current scene.
+    var catalogProvider: (() -> [ScriptParameter])?
+    private var catalog: [ScriptParameter] = []
+
+    var selected: ScriptParameterMatch? {
+        results.indices.contains(selectedIndex) ? results[selectedIndex] : nil
+    }
+
+    /// The result rows currently shown, with their index in `results`.
+    var visibleResults: [(index: Int, match: ScriptParameterMatch)] {
+        let end = min(windowStart + Self.pageSize, results.count)
+        guard windowStart < end else { return [] }
+        return (windowStart..<end).map { ($0, results[$0]) }
+    }
+
+    /// True when the catalog holds parameters of more than one owner (e.g. Cube and the scene).
+    var showsOwner: Bool {
+        guard let first = catalog.first else { return false }
+        return catalog.contains { $0.owner != first.owner }
+    }
+
+    func present(seed: String = "") {
+        catalog = catalogProvider?() ?? []
+        catalogCount = catalog.count
+        isPresented = true
+        if query == seed {
+            refresh()
+        } else {
+            query = seed
+        }
+    }
+
+    func dismiss() {
+        if isPresented { isPresented = false }
+    }
+
+    func moveSelection(by delta: Int) {
+        guard !results.isEmpty else { return }
+        select(min(max(selectedIndex + delta, 0), results.count - 1))
+    }
+
+    func select(_ index: Int) {
+        guard results.indices.contains(index) else { return }
+        selectedIndex = index
+        if index < windowStart {
+            windowStart = index
+        } else if index >= windowStart + Self.pageSize {
+            windowStart = index - Self.pageSize + 1
+        }
+    }
+
+    private func refresh() {
+        results = ScriptParameterCatalog.search(query, in: catalog)
+        selectedIndex = 0
+        windowStart = 0
     }
 }
 

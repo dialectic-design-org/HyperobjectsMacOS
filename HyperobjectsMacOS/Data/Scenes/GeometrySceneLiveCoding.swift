@@ -23,6 +23,8 @@ func generateGeometrySceneLiveCoding() -> GeometriesSceneBase {
         ],
         geometryGenerators: [
             LiveCodingGenerator()
-        ]
+        ],
+        // `"Cubes": [new Cube({...}), ...]` in outputState: one cube construct per object.
+        objectCollections: ["Cubes": .cube]
     )
 }

@@ -80,6 +80,17 @@ struct RenderView: View {
                     )
                 )
             }
+
+            // Audio envelope preview, top right. Main window only: the mirror window is what
+            // the audience sees. Drawn by layers on a timer, so it adds no SwiftUI updates.
+            if renderConfigs.showAudioEnvelopePreview && codeOverlayRole != .mirror {
+                AudioEnvelopePreview(scene: currentScene)
+                    .frame(width: AudioEnvelopePreviewView.preferredSize.width,
+                           height: AudioEnvelopePreviewView.preferredSize.height)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .allowsHitTesting(false)
+            }
         }
         .font(myFont)
         .onAppear { geometryVM.bind(to: currentScene) }

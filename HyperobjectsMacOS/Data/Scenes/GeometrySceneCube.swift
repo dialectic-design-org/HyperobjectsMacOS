@@ -11,7 +11,17 @@ import SwiftUI
 func generateGeometrySceneCube() -> GeometriesSceneBase {
     return GeometriesSceneBase(
         name: "Cube Scene",
-        inputs: [
+        inputs: makeCubeSceneInputs(),
+        geometryGenerators: [
+            CubeGenerator()
+        ]
+    )
+}
+
+/// The inputs of one cube construct. Shared by the Cube scene and by scripted `Cube` objects
+/// (`ScriptedObjectKind.cube`), so a name added or renamed here changes both.
+func makeCubeSceneInputs() -> [SceneInput] {
+    return [
             SceneInput(name: "LineWidth", type: .float, value: 1.0, range: 0.0...40.0),
             SceneInput(name: "LineWidth delay", type: .float, value: 0.0, range: 0.0...3.0),
             SceneInput(name: "LineWidth Outer Loop delay", type: .float, value: 0.0, range: 0.0...3.0),
@@ -216,6 +226,18 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             
             
             
+            // Position of the whole construct, applied after the scene rotation. The delay
+            // lets the loop cubes follow the position one after the other.
+            SceneInput(name: "Position X", type: .float, inputGroupName: "Position", value: 0.0, range: -3.0...3.0,
+                       audioAmplificationAdditionRange: -2.0...2.0),
+            SceneInput(name: "Position X delay", type: .float, inputGroupName: "Position", value: 0.0, range: 0.0...3.0),
+            SceneInput(name: "Position Y", type: .float, inputGroupName: "Position", value: 0.0, range: -3.0...3.0,
+                       audioAmplificationAdditionRange: -2.0...2.0),
+            SceneInput(name: "Position Y delay", type: .float, inputGroupName: "Position", value: 0.0, range: 0.0...3.0),
+            SceneInput(name: "Position Z", type: .float, inputGroupName: "Position", value: 0.0, range: -3.0...3.0,
+                       audioAmplificationAdditionRange: -2.0...2.0),
+            SceneInput(name: "Position Z delay", type: .float, inputGroupName: "Position", value: 0.0, range: 0.0...3.0),
+            
             SceneInput(name: "Rotation X", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
             SceneInput(name: "Rotation X Delay", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
             SceneInput(name: "Rotation X Offset", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
@@ -230,6 +252,15 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             SceneInput(name: "Rotation Z Delay", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
             SceneInput(name: "Rotation Z Offset", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
             SceneInput(name: "Rotation Z Offset Delay", type: .float, inputGroupName: "Rotation", value: 0.0, range: 0.0...2 * .pi),
+            
+            // Pivot of the cube's own rotation (Rotation X/Y/Z, stateful rotation, offsets), as
+            // an offset from the centre of each loop cube. 0 rotates around the centre.
+            SceneInput(name: "Rotation Origin X", type: .float, inputGroupName: "Rotation", value: 0.0, range: -2.0...2.0,
+                       audioAmplificationAdditionRange: -2.0...2.0),
+            SceneInput(name: "Rotation Origin Y", type: .float, inputGroupName: "Rotation", value: 0.0, range: -2.0...2.0,
+                       audioAmplificationAdditionRange: -2.0...2.0),
+            SceneInput(name: "Rotation Origin Z", type: .float, inputGroupName: "Rotation", value: 0.0, range: -2.0...2.0,
+                       audioAmplificationAdditionRange: -2.0...2.0),
             
             
             
@@ -287,11 +318,5 @@ func generateGeometrySceneCube() -> GeometriesSceneBase {
             
             SceneInput(name: "Blue end", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...1),
             SceneInput(name: "Blue end delay", type: .float, inputGroupName: "Shading", value: 0.0, range: 0.0...3),
-            
-
-        ],
-        geometryGenerators: [
-            CubeGenerator()
-        ]
-    )
+    ]
 }

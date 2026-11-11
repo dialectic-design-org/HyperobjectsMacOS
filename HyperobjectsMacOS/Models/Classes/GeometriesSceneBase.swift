@@ -73,6 +73,10 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     var cachedRenderOverrides: RenderConfigurationOverrides = .none
 
     let renderBuffer = DoubleBuffer<RenderSnapshot>(RenderSnapshot())
+
+    /// Objects instantiated by a live-coding script (e.g. `Cube`s). nil for scenes that do not
+    /// declare any object collection. Main thread only.
+    let objectStore: ScriptedObjectStore?
     
     private let geometryQueue = DispatchQueue(label: "io.hyperobjects.geometry", qos: .userInteractive)
     private let sceneInputSnapshot = Atomic<SceneInputSnapshot>(value: SceneInputSnapshot())
@@ -139,9 +143,15 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     
     
     
-    init(name: String, inputs: [SceneInput], inputGroups: [SceneInputGroup] = [], geometryGenerators: [any GeometryGenerator]) {
+    /// `objectCollections` maps an outputState key to the kind of scripted object it holds,
+    /// e.g. `["Cubes": .cube]`. The generators then find `[ScriptedObjectInputs]` under that key.
+    init(name: String, inputs: [SceneInput], inputGroups: [SceneInputGroup] = [], geometryGenerators: [any GeometryGenerator], objectCollections: [String: ScriptedObjectKind] = [:]) {
         self.name = name
         self.inputs = inputs
+        // Collections and inputs share the generators' `inputs` dictionary.
+        assert(objectCollections.keys.allSatisfy { key in !inputs.contains { $0.name == key } },
+               "An object collection key must not equal an input name in scene \(name)")
+        self.objectStore = objectCollections.isEmpty ? nil : ScriptedObjectStore(collections: objectCollections)
         
         // Check if there are any inputs with an inputGroupName not in inputGroups, then add an input group for that.
         var allInputGroupNames: Set<String> = []
@@ -192,17 +202,20 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         // which keeps `as! Float` force-casts in user code working.
         let liveInputs = inputMap
 
-        let inputDict: [String: Any] = Dictionary(uniqueKeysWithValues: snap.entries.map { view -> (String, Any) in
-            switch view.type {
-            case .float:
-                let historicAudio = Self.extractHistoricAudioValue(for: view, in: snap)
-                let combined = Self.combinedValueAsFloat(view, audioSignal: Float(historicAudio))
-                liveInputs[view.name]?.addValueChange(value: combined)
-                return (view.name, combined)
-            default:
-                return (view.name, view.value.asAny())
+        var inputDict = Self.resolveInputs(snap.entries, snap: snap, liveInput: { liveInputs[$0] })
+
+        // Scripted objects: each one gets its own resolved inputs, with the audio combination
+        // and history recording done against the object's private inputs.
+        for (key, objects) in snap.objectCollections {
+            inputDict[key] = objects.map { object in
+                ScriptedObjectInputs(
+                    id: object.id,
+                    kind: object.kind,
+                    inputs: Self.resolveInputs(object.entries, snap: snap, liveInput: { object.bank.inputsByName[$0] }),
+                    source: object.bank
+                )
             }
-        })
+        }
 
         let geometries = snap.generators.flatMap { generator -> [any Geometry] in
             if generator.needsRecalculation(changedInputs: snap.changedInputs) {
@@ -216,6 +229,23 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
         // Records are now empty — kept in the return tuple for source compatibility
         // with the GeometriesScene protocol; the eager replay above superseded them.
         return (geometries, [])
+    }
+
+    /// Turns captured input views into the dictionary a generator receives. Float inputs are
+    /// combined with the audio signal, and the combined value is recorded in the live input's
+    /// history (found through `liveInput`), which is what delayed lookups read.
+    static func resolveInputs(_ entries: [SceneInputView], snap: SceneInputSnapshot, liveInput: (String) -> SceneInput?) -> [String: Any] {
+        return Dictionary(uniqueKeysWithValues: entries.map { view -> (String, Any) in
+            switch view.type {
+            case .float:
+                let historicAudio = Self.extractHistoricAudioValue(for: view, in: snap)
+                let combined = Self.combinedValueAsFloat(view, audioSignal: Float(historicAudio))
+                liveInput(view.name)?.addValueChange(value: combined)
+                return (view.name, combined)
+            default:
+                return (view.name, view.value.asAny())
+            }
+        })
     }
 
     private static func combinedValueAsFloat(_ v: SceneInputView, audioSignal: Float) -> Float {
@@ -366,21 +396,10 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
     /// Main-thread only. Captures the current `inputs`, `changedInputs`, audio history,
     /// and override-context state into an atomic snapshot for the geometry queue to read.
     func refreshSceneInputSnapshot() {
-        let views = inputs.map { input in
-            SceneInputView(
-                id: input.id,
-                name: input.name,
-                type: input.type,
-                value: Self.captureValue(input.value, type: input.type),
-                audioDelay: input.audioDelay,
-                audioSmoothedSource: input.audioSmoothedSource,
-                audioAmplificationMultiplication: input.audioAmplificationMultiplication,
-                audioAmplificationAddition: input.audioAmplificationAddition,
-                audioAmplificationMultiplicationOffset: input.audioAmplificationMultiplicationOffset
-            )
-        }
+        let views = inputs.map { SceneInputView(capturing: $0) }
         sceneInputSnapshot.set(SceneInputSnapshot(
             entries: views,
+            objectCollections: objectStore?.captureSnapshot() ?? [:],
             changedInputs: changedInputs,
             generators: geometryGenerators,
             audioHistorySuffix120: audioHistory.suffix(120),
@@ -402,27 +421,6 @@ class GeometriesSceneBase: ObservableObject, GeometriesScene {
                 self.setWrappedGeometries()
                 self._geometryGenerationRequested.set(false)
             }
-        }
-    }
-    
-    private static func captureValue(_ any: Any, type: InputType) -> SceneInputValue {
-        // For .integer-typed inputs we must preserve Int identity — `intFromInputs`
-        // does `as? Int` and would fail against a Double.
-        // For .float / .statefulFloat we collapse Int/Float/Double to .float(Double).
-        if type == .integer {
-            if let v = any as? Int    { return .integer(v) }
-            if let v = any as? Double { return .integer(Int(v)) }
-            if let v = any as? Float  { return .integer(Int(v)) }
-        }
-        switch any {
-        case let v as Float:  return .float(Double(v))
-        case let v as Double: return .float(v)
-        case let v as Int:    return .float(Double(v))
-        case let v as Bool:   return .bool(v)
-        case let v as String: return .string(v)
-        case let v as Color:  return .color(v)
-        case let v as [Line]: return .lines(v)
-        default:              return .unsupported
         }
     }
 }
@@ -453,21 +451,9 @@ extension GeometriesSceneBase {
         // Update statefulFloat inputs with audio-driven accumulation.
         // We read audio history directly here — this runs on main, so we can.
         let historySuffix = audioHistory.suffix(120)
-        for i in 0..<inputs.count {
-            if inputs[i].type == .statefulFloat {
-                let historicalAudioSignal = Self.historicAudioValue(
-                    audioDelay: inputs[i].audioDelay,
-                    audioSmoothedSource: inputs[i].audioSmoothedSource,
-                    history: historySuffix,
-                    fallback: audioSignalProcessed
-                )
-                if let floatValue = inputs[i].value as? Double {
-                    inputs[i].value = floatValue +
-                        inputs[i].tickValueAdjustment +
-                        inputs[i].tickValueAudioAdjustment *
-                        (historicalAudioSignal + inputs[i].tickValueAudioAdjustmentOffset)
-                }
-            }
+        tickStatefulInputs(inputs, historySuffix: historySuffix)
+        if let objectStore {
+            tickStatefulInputs(objectStore.statefulInputs, historySuffix: historySuffix)
         }
 
         // Mark changed inputs + record audio history
@@ -477,6 +463,25 @@ extension GeometriesSceneBase {
 
         // Rebuild the snapshot so the geometry queue sees fresh inputs/audio state.
         refreshSceneInputSnapshot()
+    }
+
+    /// Advances every stateful float in `inputs` by its tick and audio-driven adjustment.
+    /// Main thread only.
+    func tickStatefulInputs(_ inputs: [SceneInput], historySuffix: [AudioDataPoint]) {
+        for input in inputs where input.type == .statefulFloat {
+            let historicalAudioSignal = Self.historicAudioValue(
+                audioDelay: input.audioDelay,
+                audioSmoothedSource: input.audioSmoothedSource,
+                history: historySuffix,
+                fallback: audioSignalProcessed
+            )
+            if let floatValue = input.value as? Double {
+                input.value = floatValue +
+                    input.tickValueAdjustment +
+                    input.tickValueAudioAdjustment *
+                    (historicalAudioSignal + input.tickValueAudioAdjustmentOffset)
+            }
+        }
     }
 
     /// Shared lookup logic between the static (snapshot-based) and instance (live)

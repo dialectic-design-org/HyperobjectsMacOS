@@ -9,6 +9,19 @@ import Combine
 
 extension Notification.Name {
     static let liveCodeFocusEditor = Notification.Name("liveCodeFocusEditor")
+    /// Posted by the parameter search. `object` is the session's
+    /// `LiveCodeParameterSearchModel`, so only that session's editor reacts; the
+    /// `LiveCodeParameterInsertion` is in `userInfo` under `LiveCodeParameterInsertion.userInfoKey`.
+    static let liveCodeInsertParameter = Notification.Name("liveCodeInsertParameter")
+}
+
+/// A parameter picked in the search panel, to be written at the editor's caret.
+struct LiveCodeParameterInsertion {
+    static let userInfoKey = "insertion"
+
+    let match: ScriptParameterMatch
+    /// Also write the default value: `"Width": 0.5`.
+    let withDefault: Bool
 }
 
 /// NSTextView subclass: tab inserts spaces. Cmd+Return / Cmd+S are menu key equivalents
@@ -31,6 +44,33 @@ final class LiveCodeTextView: NSTextView {
         didChangeText()
         undoManager?.setActionName("Toggle Comment")
         setSelectedRange(edit.selection)
+    }
+
+    /// Writes a script parameter name at the caret (parameter search). Inside a string literal
+    /// that is still open, the name replaces what was typed of it so far and gets no quotes.
+    /// One undoable edit, and it updates the session like normal typing.
+    func insertParameter(_ insertion: LiveCodeParameterInsertion) {
+        guard isEditable else { return }
+        let ns = string as NSString
+        let selection = selectedRange()
+        guard selection.location != NSNotFound, NSMaxRange(selection) <= ns.length else { return }
+        let lineStart = ns.lineRange(for: NSRange(location: selection.location, length: 0)).location
+        let linePrefix = ns.substring(with: NSRange(location: lineStart, length: selection.location - lineStart))
+
+        var range = selection
+        var insideString = false
+        if let contentStart = LiveCodeParameterSnippet.openStringContentStart(in: linePrefix) {
+            insideString = true
+            let start = lineStart + contentStart
+            range = NSRange(location: start, length: NSMaxRange(selection) - start)
+        }
+        let snippet = LiveCodeParameterSnippet.text(for: insertion.match, withDefault: insertion.withDefault, insideString: insideString)
+
+        guard shouldChangeText(in: range, replacementString: snippet) else { return }
+        textStorage?.replaceCharacters(in: range, with: snippet)
+        didChangeText()
+        undoManager?.setActionName("Insert Parameter")
+        setSelectedRange(NSRange(location: range.location + (snippet as NSString).length, length: 0))
     }
 }
 
@@ -163,6 +203,13 @@ struct LiveCodeEditorView: NSViewRepresentable {
                 guard let tv = self?.textView, tv.isEditable else { return }
                 tv.window?.makeKeyAndOrderFront(nil)
                 tv.window?.makeFirstResponder(tv)
+            })
+
+            observers.append(center.addObserver(forName: .liveCodeInsertParameter, object: session.parameterSearch, queue: .main) { [weak self] note in
+                guard let tv = self?.textView as? LiveCodeTextView, tv.isEditable,
+                      let insertion = note.userInfo?[LiveCodeParameterInsertion.userInfoKey] as? LiveCodeParameterInsertion else { return }
+                tv.window?.makeFirstResponder(tv)
+                tv.insertParameter(insertion)
             })
 
             // Scrolling and resizing move the text inside the overlay: republish for Metal.

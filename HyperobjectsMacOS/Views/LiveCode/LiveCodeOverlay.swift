@@ -49,6 +49,13 @@ struct LiveCodeOverlay: View {
                     features: features
                 )
                 .frame(maxHeight: .infinity)
+                // Performer only: an overlay, so the editor keeps its size and the burned-in
+                // snapshot (which the audience sees) is not affected.
+                .overlay(alignment: .top) {
+                    if role == .editor {
+                        LiveCodeParameterSearchPanel(search: session.parameterSearch, style: session.style)
+                    }
+                }
 
                 if output == .screen {
                     if let message = session.errorMessage {

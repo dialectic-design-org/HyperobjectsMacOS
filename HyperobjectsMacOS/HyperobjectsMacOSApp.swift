@@ -44,38 +44,6 @@ private final class ScriptBaseStateCache {
     }
 }
 
-private final class ScriptOutputWarningCache {
-    private var boolTypeMismatchKeys: Set<String> = []
-    private let lock = NSLock()
-
-    private var intCoercionFailureKeys: Set<String> = []
-
-    func warnIntCoercionFailureOnce(key: String, output: StateValue) {
-        lock.lock()
-        let isNew = intCoercionFailureKeys.insert(key).inserted
-        lock.unlock()
-        if isNew {
-            print("[State Change] Could not convert output for integer input \(key) to an Int: \(output)")
-        }
-    }
-
-    func warnBoolTypeMismatchOnce(key: String, input: StateValue, output: StateValue) {
-        lock.lock()
-        let isNew = boolTypeMismatchKeys.insert(key).inserted
-        lock.unlock()
-        if isNew {
-            print("[State Change] Ignoring bool output for numeric key \(key): \(input) -> \(output)")
-        }
-    }
-}
-
-private func safeInt(_ value: Double) -> Int? {
-    guard value.isFinite else { return nil }
-    if value >= Double(Int.max) { return Int.max }
-    if value <= Double(Int.min) { return Int.min }
-    return Int(value)
-}
-
 @main
 struct HyperobjectsMacOSApp: App {
     @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneSwarm())
@@ -162,6 +130,7 @@ struct HyperobjectsMacOSApp: App {
                     renderConfigurations.scriptRenderOverrides.clear()
                     jsEngine.reset()
                     bandFieldManager.disable()
+                    sceneManager.currentScene.objectStore?.removeAll()
                     scriptInputCache.update(prepareScriptInput(sceneManager: sceneManager, timeBox: timeBox, audioMonitor: audioMonitor, midiControls: midiManager.controls))
                     sceneManager.currentScene.refreshSceneInputSnapshot()
                 }
@@ -197,6 +166,11 @@ struct HyperobjectsMacOSApp: App {
                     }
 
                     liveCodeSession.evaluator = runScript
+                    // Parameter search in the code overlay: what a script can set in the current scene.
+                    liveCodeSession.parameterSearch.catalogProvider = { [weak sceneManager] in
+                        guard let scene = sceneManager?.currentScene else { return [] }
+                        return ScriptParameterCatalog.parameters(for: scene)
+                    }
                     // File changes go through the session: it adopts the text (or flags a
                     // conflict with unsaved overlay edits) and evaluates via runScript.
                     fileMonitor.setCallback { [weak liveCodeSession] content in
@@ -372,7 +346,9 @@ private func prepareScriptBaseState(scene: GeometriesSceneBase) -> [String: Stat
 }
 
 
-private func applyScriptOutput(inputState: [String: StateValue], outputState scriptOutput: [String: StateValue], baseState: [String: StateValue], scene: GeometriesSceneBase, bandFieldManager: BandFieldManager, scriptRenderOverrides: ScriptRenderOverrides, warningCache: ScriptOutputWarningCache) {
+/// Applies one script run's outputState to the scene. Main thread. (Internal rather than
+/// private so the unit tests can exercise it.)
+func applyScriptOutput(inputState: [String: StateValue], outputState scriptOutput: [String: StateValue], baseState: [String: StateValue], scene: GeometriesSceneBase, bandFieldManager: BandFieldManager, scriptRenderOverrides: ScriptRenderOverrides, warningCache: ScriptOutputWarningCache) {
     // Compare outputState to inputState and print changes only (no scene mutation yet)
     let epsilon: Double = 1e-6
     // RESET: start this frame from the scene's base state. Any key the script did not return
@@ -390,6 +366,9 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState scr
     // Replaced as a whole each run: keys the script stopped returning fall back to the
     // Render Configurations values.
     scriptRenderOverrides.apply(from: outputState)
+    // Scripted objects (e.g. "Cubes"): also replaced as a whole each run. A missing collection
+    // key removes its objects.
+    scene.objectStore?.apply(from: outputState, warningCache: warningCache)
     for (key, outVal) in outputState {
         // print("Evaluating \(key)")
 
@@ -406,6 +385,11 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState scr
         if ScriptRenderOverrides.keys.contains(key) {
             continue
         }
+
+        // Object collections: handled as a whole by scene.objectStore.apply above.
+        if scene.objectStore?.handles(key) == true {
+            continue
+        }
         
         guard let inVal = inputState[key] else {
             // print("[State Change] New key in output not present in input: \(key) => \(outVal)")
@@ -420,122 +404,7 @@ private func applyScriptOutput(inputState: [String: StateValue], outputState scr
             continue
         }
         
-        // Integer scene inputs accept any output that can reasonably be read as an Int.
-        if let input = inputsByName[key], input.type == .integer {
-            if let intVal = outVal.coercedToInt() {
-                input.value = intVal
-            } else {
-                warningCache.warnIntCoercionFailureOnce(key: key, output: outVal)
-            }
-            continue
-        }
-
-        switch (inVal.value, outVal.value) {
-        case (.float, .bool):
-            warningCache.warnBoolTypeMismatchOnce(key: key, input: inVal, output: outVal)
-            continue
-        case (.float(let a), .float(let b)):
-            // Only apply state change above certain difference
-            // if abs(Double(a) - Double(b)) > epsilon {
-                // print("[State Change] \(key): \(a) -> \(b)")
-                // if prefixed with audio_add
-                if key.isEmpty == false, key.hasPrefix("audio_add_") {
-                    // print("Audio add prefix")
-                    // get key without prefix
-                    let audioKey = String(key.dropFirst("audio_add_".count))
-                    if let input = inputsByName[audioKey] {
-                        input.audioAmplificationAddition = Float(b)
-                    }
-                } else if  key.isEmpty == false, key.hasPrefix("audio_multiply_offset_") {
-                    // get key without prefix
-                    let audioKey = String(key.dropFirst("audio_multiply_offset_".count))
-                    if let input = inputsByName[audioKey] {
-                        input.audioAmplificationMultiplicationOffset = Float(b)
-                    }
-                } else if  key.isEmpty == false, key.hasPrefix("audio_multiply_") {
-                    // get key without prefix
-                    let audioKey = String(key.dropFirst("audio_multiply_".count))
-                    if let input = inputsByName[audioKey] {
-                        input.audioAmplificationMultiplication = Float(b)
-                    }
-                }else if  key.isEmpty == false, key.hasPrefix("audio_delay_") {
-                    // get key without prefix
-                    let audioKey = String(key.dropFirst("audio_delay_".count))
-                    if let input = inputsByName[audioKey] {
-                        input.audioDelay = Float(b)
-                    }
-                } else if key.isEmpty == false, key.hasPrefix("frame_tick_") {
-                    let audioKey = String(key.dropFirst("frame_tick_".count))
-                    if let input = inputsByName[audioKey] {
-                        input.tickValueAdjustment = Double(b)
-                    }
-                } else if key.isEmpty == false, key.hasPrefix("audio_smoothed_source_") {
-                    let audioKey = String(key.dropFirst("audio_smoothed_source_".count))
-                    if let input = inputsByName[audioKey] {
-                        if let intVal = safeInt(b) {
-                            input.audioSmoothedSource = intVal
-                        } else {
-                            print("[Script Output] Ignoring non-finite value for \(key): \(b)")
-                        }
-                    }
-                } else {
-                    // Update the matching input safely by name, avoiding optional-call and enum ambiguity
-                    if let input = inputsByName[key] {
-                        
-                        if input.type == .float {
-                            input.value = Double(b)
-                        } else if input.type == .statefulFloat {
-                            input.value = Double(b)
-                        }
-                    }
-                }
-        case (.vector4(let a), .vector4(let b)):
-            if let input = inputsByName[key] {
-                if input.type == .colorInput {
-                    let nsColor = NSColor(deviceRed: b[0], green: b[1], blue: b[2], alpha: b[3])
-                    input.value = Color(nsColor: nsColor)
-                }
-            }
-        case (.string(_), .string(let b)):
-            if let input = inputsByName[key] {
-                if input.type == .string {
-                    input.value = b
-                }
-            }
-        case (.lineSegments(let a), .lineSegments(let b)):
-            if let input = inputsByName[key] {
-                var newLines: [Line] = []
-                for scriptLine in b {
-                    let start = SIMD3<Float>(Float(scriptLine.start.x), Float(scriptLine.start.y), Float(scriptLine.start.z))
-                    let end = SIMD3<Float>(Float(scriptLine.end.x), Float(scriptLine.end.y), Float(scriptLine.end.z))
-                    var newLine = Line(
-                        startPoint: start,
-                        endPoint: end,
-                        lineWidthStart: Float(scriptLine.lineWidthStart),
-                        lineWidthEnd: Float(scriptLine.lineWidthEnd)
-                    )
-                    newLine = newLine.setBasicEndPointColors(
-                        startColor: SIMD4<Float>(
-                            Float(scriptLine.colorStart.x),
-                            Float(scriptLine.colorStart.y),
-                            Float(scriptLine.colorStart.z),
-                            Float(scriptLine.colorStart.w)
-                        ),
-                        endColor: SIMD4<Float>(
-                            Float(scriptLine.colorEnd.x),
-                            Float(scriptLine.colorEnd.y),
-                            Float(scriptLine.colorEnd.z),
-                            Float(scriptLine.colorEnd.w)
-                        )
-                    )
-                    newLines.append(newLine)
-                }
-                input.value = newLines
-            }
-        default:
-            // Different types or unhandled types
-            print("[State Change] Type or value changed unhandled for key \(key): \(inVal) -> \(outVal)")
-        }
+        ScriptInputApplier.apply(key: key, value: outVal, current: inVal, inputsByName: inputsByName, warningCache: warningCache)
     }
 }
 

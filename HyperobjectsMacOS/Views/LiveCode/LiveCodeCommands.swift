@@ -26,6 +26,11 @@ struct LiveCodeCommands: Commands {
             }
             .keyboardShortcut("/", modifiers: [.command])
 
+            Button("Find Parameter…") {
+                LiveCodeActions.toggleParameterSearch(session: session, renderConfigs: renderConfigs)
+            }
+            .keyboardShortcut("p", modifiers: [.command, .shift])
+
             Button("Save") { LiveCodeActions.save(session) }
                 .keyboardShortcut("s", modifiers: [.command])
                 .disabled(session.fileURL == nil)
@@ -57,6 +62,19 @@ enum LiveCodeActions {
         if alsoSave, session.fileURL != nil {
             save(session)
         }
+    }
+
+    /// Cmd+Shift+P. Opens the parameter search over the editor, seeded with the selected text
+    /// or with what was typed of a string literal at the caret. Closes it when it is open.
+    static func toggleParameterSearch(session: LiveCodeSession, renderConfigs: RenderConfigurations) {
+        let search = session.parameterSearch
+        if search.isPresented {
+            search.dismiss()
+            NotificationCenter.default.post(name: .liveCodeFocusEditor, object: nil)
+            return
+        }
+        renderConfigs.showCodeOverlay = true
+        search.present(seed: LiveCodeParameterSnippet.seed(text: session.text, selection: session.selectedRange))
     }
 
     static func save(_ session: LiveCodeSession) {

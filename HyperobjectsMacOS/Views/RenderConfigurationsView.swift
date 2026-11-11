@@ -54,6 +54,11 @@ struct RenderConfigurationsView: View {
                         "Show audio controls",
                         isOn: $renderConfigurations.showAudioControls
                     )
+                    
+                    Toggle(
+                        "Show audio envelope preview",
+                        isOn: $renderConfigurations.showAudioEnvelopePreview
+                    )
                 }
 
                 Divider()

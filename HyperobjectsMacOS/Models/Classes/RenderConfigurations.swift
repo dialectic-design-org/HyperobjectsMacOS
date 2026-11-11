@@ -47,6 +47,10 @@ class RenderConfigurations: ObservableObject {
 
     @Published var showSquareBounds: Bool = false
 
+    /// Small white plot in the top right corner of the main render view: the audio envelope
+    /// curve with the live input -> output level. Screen only, not part of the Syphon output.
+    @Published var showAudioEnvelopePreview: Bool = false
+
     // MARK: Live code overlay (not per-scene overridable: these are performance settings)
     @Published var showCodeOverlay: Bool = false
     @Published var codeOverlayOutput: CodeOverlayOutput = .screen

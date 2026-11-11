@@ -9,6 +9,8 @@ import Foundation
 
 struct SceneInputSnapshot {
     var entries: [SceneInputView] = []
+    /// Scripted objects per collection key (e.g. "Cubes"), each with its own captured inputs.
+    var objectCollections: [String: [ScriptedObjectSnapshot]] = [:]
     var changedInputs: Set<String> = []
     var generators: [any GeometryGenerator] = []
 

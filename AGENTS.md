@@ -10,6 +10,8 @@ Scenes are assembled as `GeometriesSceneBase(name:inputs:geometryGenerators:)`. 
 
 Geometry generation runs off the main thread from `SceneInputSnapshot`; avoid reading mutable UI state directly inside generators unless using scene APIs designed for history or audio state. Use `inputDependencies` narrowly when possible; use `CachedGeometryGenerator.allSceneInputsSentinel` only when every input can affect output.
 
+Live-coding scripts can instantiate objects and return them in `outputState`, for example `"Cubes": [new Cube({ "Width": 0.3 })]`. A scene opts in with `objectCollections: ["Cubes": .cube]`; its generators then find `[ScriptedObjectInputs]` under that key. Each object owns a `SceneInputBank` (`Models/Classes/ScriptedObjectStore.swift`): a private copy of the inputs returned by `ScriptedObjectKind.makeInputs()`, with its own history, audio settings and stateful values. A `Cube` uses `makeCubeSceneInputs()`, the same list as the Cube scene, so adding or renaming a Cube scene input also adds or renames a `Cube` parameter, and `CubeGenerator.generateLines` serves both. Script keys are applied to scene inputs and object inputs by the same code (`Utils/ScriptInputApplier.swift`). The JavaScript classes live in `Utils/JSSceneObjects.swift` and reject unknown parameter names.
+
 The Metal path renderer transforms linear, quadratic, and cubic segments into screen-space bins before compositing. Keep `definitions.h`, Swift buffer structs, and `Shaders.metal` layouts synchronized. Changes to `BIN_SIZE`, segment structs, band-field uniforms, chromatic aberration, or line capacity can affect memory use and GPU correctness.
 
 ## Build, Test, and Development Commands

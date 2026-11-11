@@ -8,6 +8,7 @@
 import Testing
 import Foundation
 import AppKit
+import QuartzCore
 @testable import HyperobjectsMacOS
 
 struct HyperobjectsMacOSTests {
@@ -52,6 +53,80 @@ struct HyperobjectsMacOSTests {
         input.value = 12
         #expect(try float(input.toStateValue().value) == 12.0)
         #expect(try float(input.initialStateValue().value) == 80.0)
+    }
+
+    @Test func inputHistoryStaysBoundedForConstantValues() {
+        let input = SceneInput(name: "Width", type: .float, value: 0.5)
+        let start = CACurrentMediaTime()
+        // 1000 seconds of geometry passes at 10 Hz with a value that never changes.
+        for i in 0..<10_000 {
+            input.addValueChange(value: Float(0.5), at: start + Double(i) * 0.1)
+        }
+        // 30 s window plus 5 s of trim slack.
+        #expect(input.historyCount <= 352)
+        #expect(input.historyCount >= 300)
+
+        input.setHistoryWindow(10)
+        for i in 10_000..<10_200 {
+            input.addValueChange(value: Float(0.5), at: start + Double(i) * 0.1)
+        }
+        #expect(input.historyCount <= 152)
+    }
+
+    @Test func collapsedHistoryReturnsCurrentValueForDelayedLookups() {
+        let input = SceneInput(name: "Width", type: .float, value: 0.5)
+        input.value = 0.3
+        #expect(input.historyCount == 2)
+        input.collapseHistoryToCurrentValue()
+        #expect(input.historyCount == 1)
+        #expect(input.getHistoryValue(millisecondsAgo: 5000) as? Float == 0.3)
+    }
+
+    @Test func scriptKeyResolvesInputNameAndPrefixes() throws {
+        let width = SceneInput(name: "Width", type: .float, value: 0.5)
+        let spin = SceneInput(name: "Stateful Rotation X", type: .statefulFloat)
+        let byName = ["Width": width, "Stateful Rotation X": spin]
+
+        let plain = try #require(ScriptInputApplier.resolve("Width", in: byName))
+        #expect(plain.input === width && plain.target == .value)
+        let offset = try #require(ScriptInputApplier.resolve("audio_multiply_offset_Width", in: byName))
+        #expect(offset.input === width && offset.target == .audioMultiplyOffset)
+        let multiply = try #require(ScriptInputApplier.resolve("audio_multiply_Width", in: byName))
+        #expect(multiply.target == .audioMultiply)
+        let tick = try #require(ScriptInputApplier.resolve("frame_tick_Stateful Rotation X", in: byName))
+        #expect(tick.input === spin && tick.target == .frameTick)
+        #expect(ScriptInputApplier.resolve("Widht", in: byName) == nil)
+        #expect(ScriptInputApplier.resolve("audio_add_Widht", in: byName) == nil)
+
+        // A stateful value has no base to fall back to; its settings do.
+        #expect(ScriptInputApplier.baseValue(of: spin, target: .value) == nil)
+        #expect(ScriptInputApplier.baseValue(of: spin, target: .frameTick) != nil)
+    }
+
+    @Test func scriptInputApplierWritesEachTargetField() {
+        let width = SceneInput(name: "Width", type: .float, value: 0.5)
+        let byName = ["Width": width]
+        let warnings = ScriptOutputWarningCache()
+        func apply(_ key: String, _ number: Double) {
+            let (input, target) = ScriptInputApplier.resolve(key, in: byName)!
+            ScriptInputApplier.apply(key: key, value: StateValue(value: .float(number)),
+                                     current: ScriptInputApplier.currentValue(of: input, target: target),
+                                     inputsByName: byName, warningCache: warnings)
+        }
+        apply("Width", 0.8)
+        apply("audio_add_Width", 0.1)
+        apply("audio_multiply_Width", 0.2)
+        apply("audio_multiply_offset_Width", 0.3)
+        apply("audio_delay_Width", 0.4)
+        apply("audio_smoothed_source_Width", 2)
+        apply("frame_tick_Width", 0.05)
+        #expect(width.value as? Double == 0.8)
+        #expect(width.audioAmplificationAddition == 0.1)
+        #expect(width.audioAmplificationMultiplication == 0.2)
+        #expect(width.audioAmplificationMultiplicationOffset == 0.3)
+        #expect(width.audioDelay == 0.4)
+        #expect(width.audioSmoothedSource == 2)
+        #expect(width.tickValueAdjustment == 0.05)
     }
 
     @Test func midiSnapshotDefaultsExposeKnobsAndPads() throws {

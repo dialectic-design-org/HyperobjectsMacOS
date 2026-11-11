@@ -15,6 +15,13 @@ class CubeGenerator: CachedGeometryGenerator {
     }
     
     override func generateGeometriesFromInputs(inputs: [String : Any], withScene scene: GeometriesSceneBase) -> [any Geometry] {
+        return Self.generateLines(inputs: inputs, inputSource: scene)
+    }
+
+    /// Generates one cube construct. `inputs` holds the current (audio-combined) values;
+    /// `inputSource` provides the inputs themselves for history lookups (delays). The source is
+    /// the Cube scene, or the `SceneInputBank` of a scripted `Cube` object.
+    static func generateLines(inputs: [String: Any], inputSource: SceneInputProviding) -> [Line] {
         var lines: [Line] = []
         
         
@@ -30,165 +37,177 @@ class CubeGenerator: CachedGeometryGenerator {
         let isRGBColorMode = (colorMode == "RGB")
         
         let size = floatFromInputs(inputs, name: "Size")
-        let facesOffsetInput = scene.getInputWithName(name: "Face offset")
-        let facesOffsetInputDelay = scene.getInputWithName(name: "Face offset delay")
-        let facesOffsetInputOuterLoopDelay = scene.getInputWithName(name: "Face offset Outer Loop delay")
-        let facesOffsetInputInnerLoopDelay = scene.getInputWithName(name: "Face offset Inner Loop delay")
+        let facesOffsetInput = inputSource.getInputWithName(name: "Face offset")
+        let facesOffsetInputDelay = inputSource.getInputWithName(name: "Face offset delay")
+        let facesOffsetInputOuterLoopDelay = inputSource.getInputWithName(name: "Face offset Outer Loop delay")
+        let facesOffsetInputInnerLoopDelay = inputSource.getInputWithName(name: "Face offset Inner Loop delay")
         
         let outerLoopCubesCount: Int = intFromInputs(inputs, name: "Outer Loop Cubes Count")// 1 to 100
         let innerLoopCubesCount: Int = intFromInputs(inputs, name: "Inner Loop Cubes Count")
         
         
-        let innerCubesScalingInput = scene.getInputWithName(name: "InnerCubesScaling")
-        let innerCubesScalingInputOuterLoop = scene.getInputWithName(name: "InnerCubesScaling Outer Loop")
-        let innerCubesScalingInputInnerLoop = scene.getInputWithName(name: "InnerCubesScaling Inner Loop")
-        let innerCubesScalingDelay = scene.getInputWithName(name: "InnerCubesScaling delay")
-        let innerCubesScalingOuterLoopDelay = scene.getInputWithName(name: "InnerCubesScaling Outer Loop delay")
-        let innerCubesScalingInnerLoopDelay = scene.getInputWithName(name: "InnerCubesScaling Inner Loop delay")
+        let innerCubesScalingInput = inputSource.getInputWithName(name: "InnerCubesScaling")
+        let innerCubesScalingInputOuterLoop = inputSource.getInputWithName(name: "InnerCubesScaling Outer Loop")
+        let innerCubesScalingInputInnerLoop = inputSource.getInputWithName(name: "InnerCubesScaling Inner Loop")
+        let innerCubesScalingDelay = inputSource.getInputWithName(name: "InnerCubesScaling delay")
+        let innerCubesScalingOuterLoopDelay = inputSource.getInputWithName(name: "InnerCubesScaling Outer Loop delay")
+        let innerCubesScalingInnerLoopDelay = inputSource.getInputWithName(name: "InnerCubesScaling Inner Loop delay")
         
-        let rotationXInput = scene.getInputWithName(name: "Rotation X")
-        let rotationXInputDelay = scene.getInputWithName(name: "Rotation X Delay")
-        let rotationXOffsetInput = scene.getInputWithName(name: "Rotation X Offset")
-        let rotationXOffsetInputDelay = scene.getInputWithName(name: "Rotation X Offset Delay")
+        let rotationXInput = inputSource.getInputWithName(name: "Rotation X")
+        let rotationXInputDelay = inputSource.getInputWithName(name: "Rotation X Delay")
+        let rotationXOffsetInput = inputSource.getInputWithName(name: "Rotation X Offset")
+        let rotationXOffsetInputDelay = inputSource.getInputWithName(name: "Rotation X Offset Delay")
         
-        let rotationYInput = scene.getInputWithName(name: "Rotation Y")
-        let rotationYInputDelay = scene.getInputWithName(name: "Rotation Y Delay")
-        let rotationYOffsetInput = scene.getInputWithName(name: "Rotation Y Offset")
-        let rotationYOffsetInputDelay = scene.getInputWithName(name: "Rotation Y Offset Delay")
+        let rotationYInput = inputSource.getInputWithName(name: "Rotation Y")
+        let rotationYInputDelay = inputSource.getInputWithName(name: "Rotation Y Delay")
+        let rotationYOffsetInput = inputSource.getInputWithName(name: "Rotation Y Offset")
+        let rotationYOffsetInputDelay = inputSource.getInputWithName(name: "Rotation Y Offset Delay")
         
-        let rotationZInput = scene.getInputWithName(name: "Rotation Z")
-        let rotationZInputDelay = scene.getInputWithName(name: "Rotation Z Delay")
-        let rotationZOffsetInput = scene.getInputWithName(name: "Rotation Z Offset")
-        let rotationZOffsetInputDelay = scene.getInputWithName(name: "Rotation Z Offset Delay")
+        let rotationZInput = inputSource.getInputWithName(name: "Rotation Z")
+        let rotationZInputDelay = inputSource.getInputWithName(name: "Rotation Z Delay")
+        let rotationZOffsetInput = inputSource.getInputWithName(name: "Rotation Z Offset")
+        let rotationZOffsetInputDelay = inputSource.getInputWithName(name: "Rotation Z Offset Delay")
         
         
-        let lineWidthInput = scene.getInputWithName(name: "LineWidth")
-        let lineWidthInputDelay = scene.getInputWithName(name: "LineWidth delay")
-        let lineWidthInputOuterLoopDelay = scene.getInputWithName(name: "LineWidth Outer Loop delay")
-        let lineWidthInputInnerLoopDelay = scene.getInputWithName(name: "LineWidth Inner Loop delay")
+        let positionXInput = inputSource.getInputWithName(name: "Position X")
+        let positionYInput = inputSource.getInputWithName(name: "Position Y")
+        let positionZInput = inputSource.getInputWithName(name: "Position Z")
+        let positionXDelay = floatFromInputs(inputs, name: "Position X delay")
+        let positionYDelay = floatFromInputs(inputs, name: "Position Y delay")
+        let positionZDelay = floatFromInputs(inputs, name: "Position Z delay")
         
-        let widthInput = scene.getInputWithName(name: "Width")
-        let widthInputDelay = scene.getInputWithName(name: "Width delay")
-        let widthInputOuterLoopDelay = scene.getInputWithName(name: "Width Outer Loop delay")
-        let widthInputInnerLoopDelay = scene.getInputWithName(name: "Width Inner Loop delay")
+        // Pivot of the cube's own rotation, relative to the centre of each loop cube.
+        let rotationOrigin = SIMD3<Float>(floatFromInputs(inputs, name: "Rotation Origin X"),
+                                          floatFromInputs(inputs, name: "Rotation Origin Y"),
+                                          floatFromInputs(inputs, name: "Rotation Origin Z"))
         
-        let heightInput = scene.getInputWithName(name: "Height")
-        let heightInputDelay = scene.getInputWithName(name: "Height delay")
-        let heightInputOuterLoopDelay = scene.getInputWithName(name: "Height Outer Loop delay")
-        let heightInputInnerLoopDelay = scene.getInputWithName(name: "Height Inner Loop delay")
+        let lineWidthInput = inputSource.getInputWithName(name: "LineWidth")
+        let lineWidthInputDelay = inputSource.getInputWithName(name: "LineWidth delay")
+        let lineWidthInputOuterLoopDelay = inputSource.getInputWithName(name: "LineWidth Outer Loop delay")
+        let lineWidthInputInnerLoopDelay = inputSource.getInputWithName(name: "LineWidth Inner Loop delay")
         
-        let depthInput = scene.getInputWithName(name: "Depth")
-        let depthInputDelay = scene.getInputWithName(name: "Depth delay")
-        let depthInputOuterLoopDelay = scene.getInputWithName(name: "Depth Outer Loop delay")
-        let depthInputInnerLoopDelay = scene.getInputWithName(name: "Depth Inner Loop delay")
+        let widthInput = inputSource.getInputWithName(name: "Width")
+        let widthInputDelay = inputSource.getInputWithName(name: "Width delay")
+        let widthInputOuterLoopDelay = inputSource.getInputWithName(name: "Width Outer Loop delay")
+        let widthInputInnerLoopDelay = inputSource.getInputWithName(name: "Width Inner Loop delay")
+        
+        let heightInput = inputSource.getInputWithName(name: "Height")
+        let heightInputDelay = inputSource.getInputWithName(name: "Height delay")
+        let heightInputOuterLoopDelay = inputSource.getInputWithName(name: "Height Outer Loop delay")
+        let heightInputInnerLoopDelay = inputSource.getInputWithName(name: "Height Inner Loop delay")
+        
+        let depthInput = inputSource.getInputWithName(name: "Depth")
+        let depthInputDelay = inputSource.getInputWithName(name: "Depth delay")
+        let depthInputOuterLoopDelay = inputSource.getInputWithName(name: "Depth Outer Loop delay")
+        let depthInputInnerLoopDelay = inputSource.getInputWithName(name: "Depth Inner Loop delay")
         
         
         // Outer loop cubes
-        let outerLoopCubesSpreadXInput = scene.getInputWithName(name: "Outer Loop Cubes spread x")
-        let outerLoopCubesSpreadXInputDelay = scene.getInputWithName(name: "Outer Loop Cubes spread x delay")
-        let outerLoopCubesSpreadXInputOuterLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread x Outer Loop delay")
-        let outerLoopCubesSpreadXInputInnerLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread x Inner Loop delay")
+        let outerLoopCubesSpreadXInput = inputSource.getInputWithName(name: "Outer Loop Cubes spread x")
+        let outerLoopCubesSpreadXInputDelay = inputSource.getInputWithName(name: "Outer Loop Cubes spread x delay")
+        let outerLoopCubesSpreadXInputOuterLoopDelay = inputSource.getInputWithName(name: "Outer Loop Cubes spread x Outer Loop delay")
+        let outerLoopCubesSpreadXInputInnerLoopDelay = inputSource.getInputWithName(name: "Outer Loop Cubes spread x Inner Loop delay")
         
-        let outerLoopCubesSpreadYInput = scene.getInputWithName(name: "Outer Loop Cubes spread y")
-        let outerLoopCubesSpreadYInputDelay = scene.getInputWithName(name: "Outer Loop Cubes spread y delay")
-        let outerLoopCubesSpreadYInputOuterLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread y Outer Loop delay")
-        let outerLoopCubesSpreadYInputInnerLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread y Inner Loop delay")
+        let outerLoopCubesSpreadYInput = inputSource.getInputWithName(name: "Outer Loop Cubes spread y")
+        let outerLoopCubesSpreadYInputDelay = inputSource.getInputWithName(name: "Outer Loop Cubes spread y delay")
+        let outerLoopCubesSpreadYInputOuterLoopDelay = inputSource.getInputWithName(name: "Outer Loop Cubes spread y Outer Loop delay")
+        let outerLoopCubesSpreadYInputInnerLoopDelay = inputSource.getInputWithName(name: "Outer Loop Cubes spread y Inner Loop delay")
         
-        let outerLoopCubesSpreadZInput = scene.getInputWithName(name: "Outer Loop Cubes spread z")
-        let outerLoopCubesSpreadZInputDelay = scene.getInputWithName(name: "Outer Loop Cubes spread z delay")
-        let outerLoopCubesSpreadZInputOuterLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread z Outer Loop delay")
-        let outerLoopCubesSpreadZInputInnerLoopDelay = scene.getInputWithName(name: "Outer Loop Cubes spread z Inner Loop delay")
+        let outerLoopCubesSpreadZInput = inputSource.getInputWithName(name: "Outer Loop Cubes spread z")
+        let outerLoopCubesSpreadZInputDelay = inputSource.getInputWithName(name: "Outer Loop Cubes spread z delay")
+        let outerLoopCubesSpreadZInputOuterLoopDelay = inputSource.getInputWithName(name: "Outer Loop Cubes spread z Outer Loop delay")
+        let outerLoopCubesSpreadZInputInnerLoopDelay = inputSource.getInputWithName(name: "Outer Loop Cubes spread z Inner Loop delay")
         
         
         // Inner loop cubes
-        let innerLoopCubesSpreadXInput = scene.getInputWithName(name: "Inner Loop Cubes spread x")
-        let innerLoopCubesSpreadXInputDelay = scene.getInputWithName(name: "Inner Loop Cubes spread x delay")
-        let innerLoopCubesSpreadXInputOuterLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread x Outer Loop delay")
-        let innerLoopCubesSpreadXInputInnerLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread x Inner Loop delay")
+        let innerLoopCubesSpreadXInput = inputSource.getInputWithName(name: "Inner Loop Cubes spread x")
+        let innerLoopCubesSpreadXInputDelay = inputSource.getInputWithName(name: "Inner Loop Cubes spread x delay")
+        let innerLoopCubesSpreadXInputOuterLoopDelay = inputSource.getInputWithName(name: "Inner Loop Cubes spread x Outer Loop delay")
+        let innerLoopCubesSpreadXInputInnerLoopDelay = inputSource.getInputWithName(name: "Inner Loop Cubes spread x Inner Loop delay")
         
-        let innerLoopCubesSpreadYInput = scene.getInputWithName(name: "Inner Loop Cubes spread y")
-        let innerLoopCubesSpreadYInputDelay = scene.getInputWithName(name: "Inner Loop Cubes spread y delay")
-        let innerLoopCubesSpreadYInputOuterLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread y Outer Loop delay")
-        let innerLoopCubesSpreadYInputInnerLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread y Inner Loop delay")
+        let innerLoopCubesSpreadYInput = inputSource.getInputWithName(name: "Inner Loop Cubes spread y")
+        let innerLoopCubesSpreadYInputDelay = inputSource.getInputWithName(name: "Inner Loop Cubes spread y delay")
+        let innerLoopCubesSpreadYInputOuterLoopDelay = inputSource.getInputWithName(name: "Inner Loop Cubes spread y Outer Loop delay")
+        let innerLoopCubesSpreadYInputInnerLoopDelay = inputSource.getInputWithName(name: "Inner Loop Cubes spread y Inner Loop delay")
         
-        let innerLoopCubesSpreadZInput = scene.getInputWithName(name: "Inner Loop Cubes spread z")
-        let innerLoopCubesSpreadZInputDelay = scene.getInputWithName(name: "Inner Loop Cubes spread z delay")
-        let innerLoopCubesSpreadZInputOuterLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread z Outer Loop delay")
-        let innerLoopCubesSpreadZInputInnerLoopDelay = scene.getInputWithName(name: "Inner Loop Cubes spread z Inner Loop delay")
+        let innerLoopCubesSpreadZInput = inputSource.getInputWithName(name: "Inner Loop Cubes spread z")
+        let innerLoopCubesSpreadZInputDelay = inputSource.getInputWithName(name: "Inner Loop Cubes spread z delay")
+        let innerLoopCubesSpreadZInputOuterLoopDelay = inputSource.getInputWithName(name: "Inner Loop Cubes spread z Outer Loop delay")
+        let innerLoopCubesSpreadZInputInnerLoopDelay = inputSource.getInputWithName(name: "Inner Loop Cubes spread z Inner Loop delay")
         
         
         // Wave function inputs
-        let waveAmplituteOuterLoopTranslateXInput = scene.getInputWithName(name: "Wave Amplitude Outer Loop translate x")
-        let waveFrequencyOuterLoopTranslateXInput = scene.getInputWithName(name: "Wave Frequency Outer Loop translate x")
-        let waveOffsetOuterLoopTranslateXInput = scene.getInputWithName(name: "Wave Offset Outer Loop translate x")
+        let waveAmplituteOuterLoopTranslateXInput = inputSource.getInputWithName(name: "Wave Amplitude Outer Loop translate x")
+        let waveFrequencyOuterLoopTranslateXInput = inputSource.getInputWithName(name: "Wave Frequency Outer Loop translate x")
+        let waveOffsetOuterLoopTranslateXInput = inputSource.getInputWithName(name: "Wave Offset Outer Loop translate x")
 
-        let waveAmplituteOuterLoopTranslateYInput = scene.getInputWithName(name: "Wave Amplitude Outer Loop translate y")
-        let waveFrequencyOuterLoopTranslateYInput = scene.getInputWithName(name: "Wave Frequency Outer Loop translate y")
-        let waveOffsetOuterLoopTranslateYInput = scene.getInputWithName(name: "Wave Offset Outer Loop translate y")
+        let waveAmplituteOuterLoopTranslateYInput = inputSource.getInputWithName(name: "Wave Amplitude Outer Loop translate y")
+        let waveFrequencyOuterLoopTranslateYInput = inputSource.getInputWithName(name: "Wave Frequency Outer Loop translate y")
+        let waveOffsetOuterLoopTranslateYInput = inputSource.getInputWithName(name: "Wave Offset Outer Loop translate y")
 
-        let waveAmplituteOuterLoopTranslateZInput = scene.getInputWithName(name: "Wave Amplitude Outer Loop translate z")
-        let waveFrequencyOuterLoopTranslateZInput = scene.getInputWithName(name: "Wave Frequency Outer Loop translate z")
-        let waveOffsetOuterLoopTranslateZInput = scene.getInputWithName(name: "Wave Offset Outer Loop translate z")
+        let waveAmplituteOuterLoopTranslateZInput = inputSource.getInputWithName(name: "Wave Amplitude Outer Loop translate z")
+        let waveFrequencyOuterLoopTranslateZInput = inputSource.getInputWithName(name: "Wave Frequency Outer Loop translate z")
+        let waveOffsetOuterLoopTranslateZInput = inputSource.getInputWithName(name: "Wave Offset Outer Loop translate z")
 
-        let waveAmplituteInnerLoopTranslateXInput = scene.getInputWithName(name: "Wave Amplitude Inner Loop translate x")
-        let waveFrequencyInnerLoopTranslateXInput = scene.getInputWithName(name: "Wave Frequency Inner Loop translate x")
-        let waveOffsetInnerLoopTranslateXInput = scene.getInputWithName(name: "Wave Offset Inner Loop translate x")
+        let waveAmplituteInnerLoopTranslateXInput = inputSource.getInputWithName(name: "Wave Amplitude Inner Loop translate x")
+        let waveFrequencyInnerLoopTranslateXInput = inputSource.getInputWithName(name: "Wave Frequency Inner Loop translate x")
+        let waveOffsetInnerLoopTranslateXInput = inputSource.getInputWithName(name: "Wave Offset Inner Loop translate x")
 
-        let waveAmplituteInnerLoopTranslateYInput = scene.getInputWithName(name: "Wave Amplitude Inner Loop translate y")
-        let waveFrequencyInnerLoopTranslateYInput = scene.getInputWithName(name: "Wave Frequency Inner Loop translate y")
-        let waveOffsetInnerLoopTranslateYInput = scene.getInputWithName(name: "Wave Offset Inner Loop translate y")
+        let waveAmplituteInnerLoopTranslateYInput = inputSource.getInputWithName(name: "Wave Amplitude Inner Loop translate y")
+        let waveFrequencyInnerLoopTranslateYInput = inputSource.getInputWithName(name: "Wave Frequency Inner Loop translate y")
+        let waveOffsetInnerLoopTranslateYInput = inputSource.getInputWithName(name: "Wave Offset Inner Loop translate y")
 
-        let waveAmplituteInnerLoopTranslateZInput = scene.getInputWithName(name: "Wave Amplitude Inner Loop translate z")
-        let waveFrequencyInnerLoopTranslateZInput = scene.getInputWithName(name: "Wave Frequency Inner Loop translate z")
-        let waveOffsetInnerLoopTranslateZInput = scene.getInputWithName(name: "Wave Offset Inner Loop translate z")
+        let waveAmplituteInnerLoopTranslateZInput = inputSource.getInputWithName(name: "Wave Amplitude Inner Loop translate z")
+        let waveFrequencyInnerLoopTranslateZInput = inputSource.getInputWithName(name: "Wave Frequency Inner Loop translate z")
+        let waveOffsetInnerLoopTranslateZInput = inputSource.getInputWithName(name: "Wave Offset Inner Loop translate z")
 
 
 
-        let waveAmlitudeOuterLoopWidth = scene.getInputWithName(name: "Wave Amplitude Outer Loop Width")
-        let waveFrequencyOuterLoopWidth = scene.getInputWithName(name: "Wave Frequency Outer Loop Width")
-        let waveOffsetOuterLoopWidth = scene.getInputWithName(name: "Wave Offset Outer Loop Width")
+        let waveAmlitudeOuterLoopWidth = inputSource.getInputWithName(name: "Wave Amplitude Outer Loop Width")
+        let waveFrequencyOuterLoopWidth = inputSource.getInputWithName(name: "Wave Frequency Outer Loop Width")
+        let waveOffsetOuterLoopWidth = inputSource.getInputWithName(name: "Wave Offset Outer Loop Width")
 
-        let waveAmlitudeInnerLoopWidth = scene.getInputWithName(name: "Wave Amplitude Inner Loop Width")
-        let waveFrequencyInnerLoopWidth = scene.getInputWithName(name: "Wave Frequency Inner Loop Width")
-        let waveOffsetInnerLoopWidth = scene.getInputWithName(name: "Wave Offset Inner Loop Width")
+        let waveAmlitudeInnerLoopWidth = inputSource.getInputWithName(name: "Wave Amplitude Inner Loop Width")
+        let waveFrequencyInnerLoopWidth = inputSource.getInputWithName(name: "Wave Frequency Inner Loop Width")
+        let waveOffsetInnerLoopWidth = inputSource.getInputWithName(name: "Wave Offset Inner Loop Width")
 
-        let waveAmplitudeOuterLoopHeight = scene.getInputWithName(name: "Wave Amplitude Outer Loop Height")
-        let waveFrequencyOuterLoopHeight = scene.getInputWithName(name: "Wave Frequency Outer Loop Height")
-        let waveOffsetOuterLoopHeight = scene.getInputWithName(name: "Wave Offset Outer Loop Height")
+        let waveAmplitudeOuterLoopHeight = inputSource.getInputWithName(name: "Wave Amplitude Outer Loop Height")
+        let waveFrequencyOuterLoopHeight = inputSource.getInputWithName(name: "Wave Frequency Outer Loop Height")
+        let waveOffsetOuterLoopHeight = inputSource.getInputWithName(name: "Wave Offset Outer Loop Height")
 
-        let waveAmplitudeInnerLoopHeight = scene.getInputWithName(name: "Wave Amplitude Inner Loop Height")
-        let waveFrequencyInnerLoopHeight = scene.getInputWithName(name: "Wave Frequency Inner Loop Height")
-        let waveOffsetInnerLoopHeight = scene.getInputWithName(name: "Wave Offset Inner Loop Height")
+        let waveAmplitudeInnerLoopHeight = inputSource.getInputWithName(name: "Wave Amplitude Inner Loop Height")
+        let waveFrequencyInnerLoopHeight = inputSource.getInputWithName(name: "Wave Frequency Inner Loop Height")
+        let waveOffsetInnerLoopHeight = inputSource.getInputWithName(name: "Wave Offset Inner Loop Height")
 
-        let waveAmplitudeOuterLoopDepth = scene.getInputWithName(name: "Wave Amplitude Outer Loop Depth")
-        let waveFrequencyOuterLoopDepth = scene.getInputWithName(name: "Wave Frequency Outer Loop Depth")
-        let waveOffsetOuterLoopDepth = scene.getInputWithName(name: "Wave Offset Outer Loop Depth")
+        let waveAmplitudeOuterLoopDepth = inputSource.getInputWithName(name: "Wave Amplitude Outer Loop Depth")
+        let waveFrequencyOuterLoopDepth = inputSource.getInputWithName(name: "Wave Frequency Outer Loop Depth")
+        let waveOffsetOuterLoopDepth = inputSource.getInputWithName(name: "Wave Offset Outer Loop Depth")
 
-        let waveAmplitudeInnerLoopDepth = scene.getInputWithName(name: "Wave Amplitude Inner Loop Depth")
-        let waveFrequencyInnerLoopDepth = scene.getInputWithName(name: "Wave Frequency Inner Loop Depth")
-        let waveOffsetInnerLoopDepth = scene.getInputWithName(name: "Wave Offset Inner Loop Depth")
+        let waveAmplitudeInnerLoopDepth = inputSource.getInputWithName(name: "Wave Amplitude Inner Loop Depth")
+        let waveFrequencyInnerLoopDepth = inputSource.getInputWithName(name: "Wave Frequency Inner Loop Depth")
+        let waveOffsetInnerLoopDepth = inputSource.getInputWithName(name: "Wave Offset Inner Loop Depth")
         
         
-        let redStartInput = scene.getInputWithName(name: "Red start")
-        let redStartDelayInput = scene.getInputWithName(name: "Red start delay")
-        let greenStartInput = scene.getInputWithName(name: "Green start")
-        let greenStartDelayInput = scene.getInputWithName(name: "Green start delay")
-        let blueStartInput = scene.getInputWithName(name: "Blue start")
-        let blueStartDelayInput = scene.getInputWithName(name: "Blue start delay")
+        let redStartInput = inputSource.getInputWithName(name: "Red start")
+        let redStartDelayInput = inputSource.getInputWithName(name: "Red start delay")
+        let greenStartInput = inputSource.getInputWithName(name: "Green start")
+        let greenStartDelayInput = inputSource.getInputWithName(name: "Green start delay")
+        let blueStartInput = inputSource.getInputWithName(name: "Blue start")
+        let blueStartDelayInput = inputSource.getInputWithName(name: "Blue start delay")
         
-        let redEndInput = scene.getInputWithName(name: "Red end")
-        let redEndDelayInput = scene.getInputWithName(name: "Red end delay")
-        let greenEndInput = scene.getInputWithName(name: "Green end")
-        let greenEndDelayInput = scene.getInputWithName(name: "Green end delay")
-        let blueEndInput = scene.getInputWithName(name: "Blue end")
-        let blueEndDelayInput = scene.getInputWithName(name: "Blue end delay")
+        let redEndInput = inputSource.getInputWithName(name: "Red end")
+        let redEndDelayInput = inputSource.getInputWithName(name: "Red end delay")
+        let greenEndInput = inputSource.getInputWithName(name: "Green end")
+        let greenEndDelayInput = inputSource.getInputWithName(name: "Green end delay")
+        let blueEndInput = inputSource.getInputWithName(name: "Blue end")
+        let blueEndDelayInput = inputSource.getInputWithName(name: "Blue end delay")
         
         
-        let brightnessInput = scene.getInputWithName(name: "Brightness")
-        let brightnessInputDelay = scene.getInputWithName(name: "Brightness delay")
+        let brightnessInput = inputSource.getInputWithName(name: "Brightness")
+        let brightnessInputDelay = inputSource.getInputWithName(name: "Brightness delay")
         
-        let saturationInput = scene.getInputWithName(name: "Saturation")
-        let saturationInputDelay = scene.getInputWithName(name: "Saturation delay")
+        let saturationInput = inputSource.getInputWithName(name: "Saturation")
+        let saturationInputDelay = inputSource.getInputWithName(name: "Saturation delay")
         
         
         let statefulRotationX = floatFromInputs(inputs, name: "Stateful Rotation X")
@@ -216,6 +235,19 @@ class CubeGenerator: CachedGeometryGenerator {
             let angle = Double((time * frequency) + phaseOffset) * 2.0 * Double.pi
             return amplitude * Float(sin(angle))
         }
+        
+        
+        // The scene rotation is the same for every loop cube. It is applied per cube inside
+        // the loop, so that the position can be added after it.
+        let totalSceneRotationX = sceneRotationX + sceneStatefulRotationX
+        let totalSceneRotationY = sceneRotationY + sceneStatefulRotationY
+        let totalSceneRotationZ = sceneRotationZ + sceneStatefulRotationZ
+        
+        let sceneRotationMatrixX = matrix_rotation(angle: totalSceneRotationX, axis: SIMD3<Float>(1.0, 0.0, 0.0))
+        let sceneRotationMatrixY = matrix_rotation(angle: totalSceneRotationY, axis: SIMD3<Float>(0.0, 1.0, 0.0))
+        let sceneRotationMatrixZ = matrix_rotation(angle: totalSceneRotationZ, axis: SIMD3<Float>(0.0, 0.0, 1.0))
+        
+        let combinedSceneRotationMatrix = sceneRotationMatrixX * sceneRotationMatrixY * sceneRotationMatrixZ
         
         
         lines = []
@@ -349,8 +381,13 @@ class CubeGenerator: CachedGeometryGenerator {
                     //                for i in 0..<cube.count {
                     //                    cube[i] = cube[i].applyMatrix(rotationMatrixZ)
                     //                }
+                    // Rotate around the rotation origin: p' = R * (p - origin) + origin.
                     for i in 0..<cube.count {
+                        cube[i].startPoint -= rotationOrigin
+                        cube[i].endPoint -= rotationOrigin
                         cube[i] = cube[i].applyMatrix(combinedRotationMatrix)
+                        cube[i].startPoint += rotationOrigin
+                        cube[i].endPoint += rotationOrigin
                     }
                     
                     
@@ -596,23 +633,22 @@ class CubeGenerator: CachedGeometryGenerator {
                         )
                     }
                     
+                    // Scene rotation first, then the position, so the construct turns in place
+                    // wherever it is positioned. The position is delayed per loop cube.
+                    let position = SIMD3<Float>(
+                        ensureValueIsFloat(positionXInput.getHistoryValue(millisecondsAgo: Double(positionXDelay * cubeTime) * 1000)),
+                        ensureValueIsFloat(positionYInput.getHistoryValue(millisecondsAgo: Double(positionYDelay * cubeTime) * 1000)),
+                        ensureValueIsFloat(positionZInput.getHistoryValue(millisecondsAgo: Double(positionZDelay * cubeTime) * 1000))
+                    )
+                    for i in 0..<cube.count {
+                        cube[i] = cube[i].applyMatrix(combinedSceneRotationMatrix)
+                        cube[i].startPoint += position
+                        cube[i].endPoint += position
+                    }
+                    
                     lines += cube
                 }
             }
-        }
-        
-        let totalSceneRotationX = sceneRotationX + sceneStatefulRotationX
-        let totalSceneRotationY = sceneRotationY + sceneStatefulRotationY
-        let totalSceneRotationZ = sceneRotationZ + sceneStatefulRotationZ
-        
-        let sceneRotationMatrixX = matrix_rotation(angle: totalSceneRotationX, axis: SIMD3<Float>(1.0, 0.0, 0.0))
-        let sceneRotationMatrixY = matrix_rotation(angle: totalSceneRotationY, axis: SIMD3<Float>(0.0, 1.0, 0.0))
-        let sceneRotationMatrixZ = matrix_rotation(angle: totalSceneRotationZ, axis: SIMD3<Float>(0.0, 0.0, 1.0))
-        
-        let combinedSceneRotationMatrix = sceneRotationMatrixX * sceneRotationMatrixY * sceneRotationMatrixZ
-        
-        for i in 0..<lines.count {
-            lines[i] = lines[i].applyMatrix(combinedSceneRotationMatrix)
         }
         
         return lines

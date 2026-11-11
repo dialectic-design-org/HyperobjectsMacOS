@@ -23,7 +23,11 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
     }
     
     private var history: [HistoryEntry] = []
-    private let historyWindow: CFTimeInterval = 30.0
+    /// How far back `getHistoryValue` can look. Guarded by `historyLock`.
+    private var historyWindow: CFTimeInterval = 30.0
+    /// `addValueChange` trims in batches: only once the oldest entry is this far outside the
+    /// window, so the O(n) removal does not run on every append.
+    private static let historyTrimSlack: CFTimeInterval = 5.0
 
     // Geometry generation runs on a background queue and calls getHistoryValue (binary
     // search through `history`). Main thread concurrently mutates `history` via
@@ -243,11 +247,38 @@ final class SceneInput: ObservableObject, Identifiable, Equatable {
         trimHistoryLocked(olderThan: t - historyWindow)
     }
 
-    func addValueChange(value: Any) {
+    /// Appends a history entry regardless of whether the value changed. Called for every float
+    /// input on every geometry pass, so it has to keep the history bounded itself.
+    func addValueChange(value: Any, at time: CFTimeInterval = CACurrentMediaTime()) {
+        historyLock.lock()
+        history.append(HistoryEntry(t: time, value: normalizeForHistory(value)))
+        if let first = history.first, first.t < time - historyWindow - Self.historyTrimSlack {
+            trimHistoryLocked(olderThan: time - historyWindow)
+        }
+        historyLock.unlock()
+    }
+
+    /// Drops all history and keeps only the current value, as if the input always had it.
+    /// Used for a newly created scripted object, so delayed lookups do not see the defaults.
+    func collapseHistoryToCurrentValue() {
         let t = CACurrentMediaTime()
         historyLock.lock()
+        history.removeAll(keepingCapacity: true)
         history.append(HistoryEntry(t: t, value: normalizeForHistory(value)))
         historyLock.unlock()
+    }
+
+    /// Shortens or lengthens the history window (seconds).
+    func setHistoryWindow(_ seconds: CFTimeInterval) {
+        historyLock.lock()
+        historyWindow = max(seconds, 0)
+        historyLock.unlock()
+    }
+
+    /// Number of stored history entries (diagnostics and tests).
+    var historyCount: Int {
+        historyLock.lock(); defer { historyLock.unlock() }
+        return history.count
     }
 
     /// Coerce a value to the input's canonical type before storing in history.

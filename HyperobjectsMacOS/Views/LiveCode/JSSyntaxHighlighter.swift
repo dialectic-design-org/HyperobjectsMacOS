@@ -52,8 +52,8 @@ final class JSSyntaxHighlighter: NSObject, NSTextStorageDelegate {
         try! NSRegularExpression(pattern: pattern)
     }
     private static let keyword = re(#"\b(var|let|const|function|return|if|else|for|while|do|break|continue|new|this|typeof|instanceof|in|of|true|false|null|undefined|switch|case|default|try|catch|finally|throw|class|extends)\b"#)
-    // Globals provided by JSInternalStateRuntime / JSEngineManager.
-    private static let global = re(#"\b(inputState|outputState|baseState|internalState|runtime|persist|resetInternalState|internalStateVersion|Weights|Math|console)\b"#)
+    // Globals provided by JSInternalStateRuntime / JSEngineManager / JSSceneObjects.
+    private static let global = re(#"\b(inputState|outputState|baseState|internalState|runtime|persist|resetInternalState|internalStateVersion|Weights|Math|console|Cube)\b"#)
     private static let number = re(#"\b\d+(\.\d+)?([eE][+-]?\d+)?\b"#)
     private static let string = re(#""(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`"#)
     private static let comment = re(#"//[^\n]*|/\*[\s\S]*?\*/"#)
