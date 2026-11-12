@@ -46,7 +46,7 @@ private final class ScriptBaseStateCache {
 
 @main
 struct HyperobjectsMacOSApp: App {
-    @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneSwarm())
+    @StateObject private var sceneManager = SceneManager(initialScene: generateGeometrySceneCube())
     @StateObject private var renderConfigurations = RenderConfigurations()
     @StateObject private var jsEngine = JSEngineManager()
     @StateObject private var fileMonitor = FileMonitor()
